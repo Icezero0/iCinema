@@ -1,0 +1,50 @@
+{
+  "name": "iCinema Development",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "backend",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.provider": "black",
+        "python.analysis.typeCheckingMode": "basic",
+        "sqlite.sqlite3": "/usr/bin/sqlite3",
+        "volar.completion.preferredTagNameCase": "pascal",
+        "volar.completion.preferredAttrNameCase": "kebab",
+        // "vite.buildCommand": "npm run build",
+        // "vite.devCommand": "npm run dev -- --host"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.vscode-pylance",
+        "qwtel.sqlite-viewer",
+        "Vue.volar",
+        "Vue.vscode-typescript-vue-plugin",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "ms-vscode.vscode-json-default",
+        "eamodio.gitlens",
+        "github.copilot",
+        "formulahendry.auto-rename-tag"
+      ]
+    }
+  },  "forwardPorts": [8000, 5173],
+  // "postCreateCommand": "cd /workspace/backend && pip install -r requirements.txt && cd ../frontend && npm install",
+  // "postStartCommand": {
+  //   "backend": "cd /workspace/backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+  //   "frontend": "cd /workspace/frontend && npm run dev -- --host 0.0.0.0"
+  // },
+  "remoteUser": "root",
+  "containerUser": "root",
+  "updateRemoteUserUID": false,
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/backend",
+    "FLASK_ENV": "development",
+    "NODE_ENV": "development"
+  }
+}
