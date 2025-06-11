@@ -18,7 +18,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT 相关设置
 SECRET_KEY = "c0da4f43a9a4a549d83a93a56f5d6e8257f5ed40218a9a8170705d6cfd8c9074"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 1
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -82,8 +82,10 @@ async def login(
     form_data: OAuth2EmailRequestForm = Depends(), 
     db: AsyncSession = Depends(get_db)
 ):
+    print(f"form data : {form_data}")
     user = await crud.users.get_user_by_email(db, form_data.email) 
-
+    print(f"Attempting login for user: {form_data.email}")
+    print(f"password : {form_data.password}")
     if not user or not verify_password(form_data.password, str(user.hashed_password)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,7 +154,14 @@ async def create_user(
     if db_user:
         raise HTTPException(
             status_code=400,
-            detail="Email already registered"
+            detail="邮箱地址已被注册！"
+        )
+    # 检查用户名是否已存在
+    db_user_by_username = await crud.users.get_user_by_username(db, username=user.username)
+    if db_user_by_username:
+        raise HTTPException(
+            status_code=400,
+            detail="用户名已被使用！"
         )
     # 创建新用户，密码加密处理
     user.password = get_password_hash(user.password)
@@ -197,3 +206,7 @@ async def update_avatar(
         user_id=current_user.id.value,
         icon_path=icon_path
     )
+
+@router.get("/token/check")
+async def check_access_token(current_user: models.User = Depends(get_current_user)):
+    return {"status": "valid"}

@@ -12,7 +12,7 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate) -> models.User
     db_user = models.User(
         username=user.username,
         email=user.email,
-        hashed_password=user.password  # 注意：实际使用时需要哈希处理
+        hashed_password=user.password
     )
     db.add(db_user)
     await db.commit()
@@ -104,3 +104,10 @@ async def update_user_avatar(
 ) -> Optional[models.User]:
     # 更新用户头像
     return await update_user(db, user_id, {"icon_path": icon_path})
+
+async def get_user_by_username(db: AsyncSession, username: str) -> Optional[models.User]:
+    # 根据用户名查询用户
+    result = await db.execute(
+        select(models.User).where(models.User.username == username)
+    )
+    return result.scalar_one_or_none()

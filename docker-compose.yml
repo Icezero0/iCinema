@@ -28,4 +28,7 @@
   #     - NODE_ENV=development
   #   depends_on:
   #     - backend
+  #   tty: true
   #   restart: unless-stopped
+    
+    
