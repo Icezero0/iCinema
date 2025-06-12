@@ -43,7 +43,8 @@ const handleLogin = async () => {
 <template>
   <div class="page-container">
     <div class="auth-card">
-      <h2>iCinema</h2>
+      <img src="@/assets/logo.svg" alt="logo" class="logo no-pointer" />
+      <h2 class="no-pointer">iCinema - 登录</h2>
       <form @submit.prevent="handleLogin" class="auth-form">
         <input type="email" v-model="email" placeholder="邮箱" required />
         <input type="password" v-model="password" placeholder="密码" required />
@@ -125,5 +126,16 @@ button[type="submit"]:hover {
 
 .secondary-button:hover {
   background-color: #218838;
+}
+
+.logo {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 1rem;
+}
+
+.no-pointer {
+  pointer-events: none;
+  user-select: none;
 }
 </style>

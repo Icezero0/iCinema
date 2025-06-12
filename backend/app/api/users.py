@@ -1,14 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from .. import crud, models, schemas
 from ..database import get_db
-from typing import List
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import List, Optional
+from fastapi.security import OAuth2PasswordBearer
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from typing import Optional
-from fastapi import Form
+import base64
+import os
+import random
+import string
 
 router = APIRouter()
 
@@ -18,7 +20,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT 相关设置
 SECRET_KEY = "c0da4f43a9a4a549d83a93a56f5d6e8257f5ed40218a9a8170705d6cfd8c9074"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -82,10 +84,7 @@ async def login(
     form_data: OAuth2EmailRequestForm = Depends(), 
     db: AsyncSession = Depends(get_db)
 ):
-    print(f"form data : {form_data}")
     user = await crud.users.get_user_by_email(db, form_data.email) 
-    print(f"Attempting login for user: {form_data.email}")
-    print(f"password : {form_data.password}")
     if not user or not verify_password(form_data.password, str(user.hashed_password)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -185,26 +184,60 @@ async def read_user(
 
 @router.put("/users/me", response_model=schemas.User)
 async def update_user_me(
-    user_update: schemas.UserBase,
+    email: str = Form(...),
+    username: str = Form(None),
+    avatar_base64: str = Form(None),
+    password: str = Form(None),
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    update_data = {}
+    if username is not None:
+        db_user_by_username = await crud.users.get_user_by_username(db, username=username)
+        if db_user_by_username is not None and getattr(db_user_by_username, "id", None) != current_user.id:
+            raise HTTPException(status_code=400, detail="用户名已被使用！")
+        update_data["username"] = username
+    if avatar_base64 is not None:
+        if avatar_base64.startswith('data:image/jpeg;base64,'):
+            ext = 'jpg'
+            avatar_data = avatar_base64.split('data:image/jpeg;base64,')[1]
+        elif avatar_base64.startswith('data:image/png;base64,'):
+            ext = 'png'
+            avatar_data = avatar_base64.split('data:image/png;base64,')[1]
+        elif avatar_base64.startswith('data:image/webp;base64,'):
+            ext = 'webp'
+            avatar_data = avatar_base64.split('data:image/webp;base64,')[1]
+        else:
+            raise HTTPException(status_code=400, detail="不支持的图片格式，仅支持jpg/png/webp")
+        timestamp = int(datetime.now().timestamp())
+        rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        # 文件名加上用户id作为标识
+        filename = f"{timestamp}_uid{current_user.id}_{rand_str}.{ext}"
+        avatar_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../data/upload/avatars'))
+        os.makedirs(avatar_dir, exist_ok=True)
+        file_path = os.path.join(avatar_dir, filename)
+        try:
+            with open(file_path, "wb") as f:
+                f.write(base64.b64decode(avatar_data))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"头像保存失败: {e}")
+        icon_path = f"/avatars/{filename}"
+        update_data["icon_path"] = icon_path
+    if password is not None:
+        hashed_password = get_password_hash(password)
+        update_data["hashed_password"] = hashed_password
+    db_user = await crud.users.get_user_by_email(db, email=email)
+    if db_user is not None and getattr(db_user, "id", None) != current_user.id:
+        raise HTTPException(status_code=400, detail="邮箱地址已被注册！")
+    user_id = current_user.id
+    if hasattr(user_id, 'original') or hasattr(user_id, 'expression'):
+        user_id = getattr(current_user, '__dict__', {}).get('id', None)
+    if not isinstance(user_id, int):
+        raise HTTPException(status_code=500, detail="用户ID类型错误")
     return await crud.users.update_user(
-        db=db, 
-        user_id=current_user.id.value, 
-        update_data=user_update.dict(exclude_unset=True)
-    )
-
-@router.post("/users/me/avatar")
-async def update_avatar(
-    icon_path: str,
-    current_user: models.User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    return await crud.users.update_user_avatar(
         db=db,
-        user_id=current_user.id.value,
-        icon_path=icon_path
+        user_id=user_id,
+        update_data=update_data
     )
 
 @router.get("/token/check")

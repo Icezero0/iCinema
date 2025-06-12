@@ -1,7 +1,7 @@
 <template>
   <div class="page-container">
     <div class="auth-card">
-      <h2>iCinema - 注册</h2>
+      <h2>注册</h2>
       <form @submit.prevent="handleRegister" class="auth-form">
         <input type="text" v-model="username" placeholder="用户名" required />
         <input type="email" v-model="email" placeholder="邮箱" required />

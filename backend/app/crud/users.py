@@ -60,16 +60,22 @@ async def update_user(
     user_id: int, 
     update_data: dict
 ) -> Optional[models.User]:
-    # 更新用户信息
+    # 只允许更新的字段白名单
+    ALLOWED_FIELDS = {"username", "icon_path", "hashed_password"}
     query = select(models.User).where(models.User.id == user_id)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
     
     if user:
         for key, value in update_data.items():
-            setattr(user, key, value)
-        await db.commit()
-        await db.refresh(user)
+            if key in ALLOWED_FIELDS:
+                setattr(user, key, value)
+        try:
+            await db.commit()
+            await db.refresh(user)
+        except Exception as e:
+            await db.rollback()
+            raise e
     return user
 
 async def delete_user(db: AsyncSession, user_id: int) -> bool:

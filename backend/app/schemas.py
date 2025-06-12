@@ -15,8 +15,12 @@ class User(UserBase):
     created_at: datetime
     icon_path: Optional[str] = None
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
+
+class UserUpdate(UserBase):
+    icon_path: Optional[str] = None
 
 # 房间相关的 Schema
 class RoomBase(BaseModel):
@@ -32,8 +36,9 @@ class Room(RoomBase):
     is_active: bool = True
     members: List[User] = []
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 # 消息相关的 Schema
 class MessageBase(BaseModel):
@@ -49,8 +54,9 @@ class Message(MessageBase):
     room_id: int
     user: User
     
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 # 响应模型
 class UserResponse(User):
