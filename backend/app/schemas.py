@@ -3,24 +3,28 @@ from datetime import datetime
 from typing import Optional, List
 
 # 用户相关的 Schema
-class UserBase(BaseModel):
-    username: str
+    
+class UserCreate(BaseModel):
     email: EmailStr
-
-class UserCreate(UserBase):
+    username: str
     password: str
 
-class User(UserBase):
+class User(BaseModel):
     id: int
+    username: str
+    email: EmailStr
     created_at: datetime
-    icon_path: Optional[str] = None
+    avatar_path: Optional[str] = None
 
     model_config = {
         "from_attributes": True
     }
 
-class UserUpdate(UserBase):
-    icon_path: Optional[str] = None
+class UserUpdate(BaseModel):
+    email: EmailStr
+    password: Optional[str] = None
+    username: Optional[str] = None
+    avatar_base64: Optional[str] = None
 
 # 房间相关的 Schema
 class RoomBase(BaseModel):
@@ -32,7 +36,7 @@ class RoomCreate(RoomBase):
 class Room(RoomBase):
     id: int
     created_at: datetime
-    owner_id: int
+    owner: User
     is_active: bool = True
     members: List[User] = []
 
@@ -61,8 +65,7 @@ class Message(MessageBase):
 # 响应模型
 class UserResponse(User):
     rooms_owned: List[Room] = []
-    joined_rooms: List[Room] = []
-    messages: List[Message] = []
+    rooms_joined: List[Room] = []
 
 class RoomResponse(Room):
     owner: User

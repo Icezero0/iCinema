@@ -25,8 +25,7 @@ async def get_user(db: AsyncSession, user_id: int) -> Optional[models.User]:
         select(models.User)
         .options(
             selectinload(models.User.rooms_owned),
-            selectinload(models.User.joined_rooms),
-            selectinload(models.User.messages)
+            selectinload(models.User.rooms_joined)
         )
         .where(models.User.id == user_id)
     )
@@ -38,8 +37,7 @@ async def get_user_by_email(db: AsyncSession, email: str) -> Optional[models.Use
         select(models.User)
         .options(
             selectinload(models.User.rooms_owned),
-            selectinload(models.User.joined_rooms),
-            selectinload(models.User.messages)
+            selectinload(models.User.rooms_joined)
         )
         .where(models.User.email == email)
     )
@@ -51,7 +49,7 @@ async def update_user(
     update_data: dict
 ) -> Optional[models.User]:
     # 只允许更新的字段白名单
-    ALLOWED_FIELDS = {"username", "icon_path", "hashed_password"}
+    ALLOWED_FIELDS = {"username", "avatar_path", "hashed_password"}
     query = select(models.User).where(models.User.id == user_id)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
@@ -68,38 +66,30 @@ async def update_user(
             raise e
     return user
 
-async def delete_user(db: AsyncSession, user_id: int) -> bool:
-    # 删除用户
-    query = select(models.User).where(models.User.id == user_id)
-    result = await db.execute(query)
-    user = result.scalar_one_or_none()
+# async def delete_user(db: AsyncSession, user_id: int) -> bool:
+#     # 删除用户
+#     query = select(models.User).where(models.User.id == user_id)
+#     result = await db.execute(query)
+#     user = result.scalar_one_or_none()
     
-    if user:
-        await db.delete(user)
-        await db.commit()
-        return True
-    return False
+#     if user:
+#         await db.delete(user)
+#         await db.commit()
+#         return True
+#     return False
 
 async def get_user_with_rooms(db: AsyncSession, user_id: int) -> Optional[models.User]:
     # 获取用户及其房间信息
     query = (
         select(models.User)
         .options(
-            joinedload(models.User.rooms_owned),
-            joinedload(models.User.joined_rooms)
+            selectinload(models.User.rooms_owned),
+            selectinload(models.User.rooms_joined)
         )
         .where(models.User.id == user_id)
     )
     result = await db.execute(query)
-    return result.unique().scalar_one_or_none()
-
-async def update_user_avatar(
-    db: AsyncSession, 
-    user_id: int, 
-    icon_path: str
-) -> Optional[models.User]:
-    # 更新用户头像
-    return await update_user(db, user_id, {"icon_path": icon_path})
+    return result.scalar_one_or_none()
 
 async def get_user_by_username(db: AsyncSession, username: str) -> Optional[models.User]:
     # 根据用户名查询用户

@@ -52,64 +52,49 @@ import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 import AvatarUploader from '@/components/AvatarUploader.vue';
 import CustomConfirm from '@/components/CustomConfirm.vue';
+import { useUserInfo } from '@/composables/useUserInfo.js';
 
 const router = useRouter();
-const username = ref('');
 const usernameInput = ref('');
-const avatarUrl = ref(defaultAvatar);
 const email = ref('');
 const usernameError = ref('');
 const showConfirm = ref(false); // 控制自定义弹窗显示
 let savePending = false; // 防止重复提交
 
-// 用户头像、用户名、邮箱缓存key
-const AVATAR_CACHE_KEY = 'icinema_avatar_url';
-const USERNAME_CACHE_KEY = 'icinema_username';
-const EMAIL_CACHE_KEY = 'icinema_email';
+// 用户数据缓存key
+const USER_CACHE_KEY = 'icinema_user';
 
-// 初始化时优先从localStorage读取缓存头像、用户名、邮箱
-const cachedAvatar = localStorage.getItem(AVATAR_CACHE_KEY);
-const cachedUsername = localStorage.getItem(USERNAME_CACHE_KEY);
-const cachedEmail = localStorage.getItem(EMAIL_CACHE_KEY);
-if (cachedAvatar) {
-  avatarUrl.value = cachedAvatar;
-}
-if (cachedUsername) {
-  username.value = cachedUsername;
-  usernameInput.value = cachedUsername;
-}
-if (cachedEmail) {
-  email.value = cachedEmail;
+const { username, avatarUrl, fetchUserInfo } = useUserInfo();
+
+// 初始化时优先从localStorage读取缓存用户信息
+const cachedUser = localStorage.getItem(USER_CACHE_KEY);
+if (cachedUser) {
+  try {
+    const userObj = JSON.parse(cachedUser);
+    if (userObj.avatar_path) {
+      avatarUrl.value = `http://localhost:8000${userObj.avatar_path}`;
+    } else if (userObj.avatar_path) {
+      avatarUrl.value = userObj.avatar_path;
+    }
+    if (userObj.username) {
+      username.value = userObj.username;
+      usernameInput.value = userObj.username;
+    }
+    if (userObj.email) {
+      email.value = userObj.email;
+    }
+  } catch (e) {
+    console.log('Error parsing cached user data:', e);
+    // ignore parse error
+  }
 }
 
 onMounted(async () => {
-  try {
-    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-    if (!accessToken) return;
-    const response = await fetch('http://localhost:8000/users/me', {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-    });
-    if (response.ok) {
-      const data = await response.json();
-      username.value = data.username || 'unknown_user';
-      usernameInput.value = username.value;
-      if (data.icon_path) {
-        avatarUrl.value = `http://localhost:8000${data.icon_path}`;
-      } else {
-        avatarUrl.value = data.avatar || defaultAvatar;
-      }
-      // 更新缓存
-      localStorage.setItem(AVATAR_CACHE_KEY, avatarUrl.value);
-      localStorage.setItem(USERNAME_CACHE_KEY, username.value);
-      email.value = data.email || '';
-      localStorage.setItem(EMAIL_CACHE_KEY, email.value);
-    }
-  } catch (e) {
-    alert('获取用户信息失败，请稍后再试。');
-    console.error('Error fetching user info:', e);
+  // 如果localStorage有缓存，则不请求后端
+  if (cachedUser) {
+    return;
   }
+  await fetchUserInfo();
 });
 
 function handleCancel() {
@@ -142,38 +127,43 @@ async function doSave() {
     savePending = false;
     return;
   }
-  // 构建 FormData
-  const formData = new FormData();
-  formData.append('email', email.value);
+  // 构建 JSON 数据
+  const payload = {
+    email: email.value
+  };
   if (usernameInput.value !== username.value) {
-    formData.append('username', usernameInput.value);
+    payload.username = usernameInput.value;
   }
   // 判断头像是否需要提交，仅当头像为本地base64格式（即用户刚裁剪过）时才提交
   if (avatarUrl.value.startsWith('data:image/')) {
-    formData.append('avatar_base64', avatarUrl.value);
+    payload.avatar_base64 = avatarUrl.value;
   }
   // 新密码逻辑：如有输入则加入 password 字段
   if (newPassword.value && confirmPassword.value && newPassword.value === confirmPassword.value) {
-    formData.append('password', newPassword.value);
+    payload.password = newPassword.value;
   }
   try {
     const response = await fetch('http://localhost:8000/users/me', {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
-        // 不要设置 Content-Type，浏览器会自动设置 multipart/form-data
+        'Content-Type': 'application/json',
       },
-      body: formData,
+      body: JSON.stringify(payload),
     });
     if (response.ok) {
-      // 保存成功后缓存头像、用户名、邮箱
-      localStorage.setItem(AVATAR_CACHE_KEY, avatarUrl.value);
-      localStorage.setItem(USERNAME_CACHE_KEY, usernameInput.value);
-      localStorage.setItem(EMAIL_CACHE_KEY, email.value);
-      if (formData.has('username')) {
+      const userResp = await response.json();
+      if (payload.username) {
         username.value = usernameInput.value;
       }
-      router.push('/home');
+      newPassword.value = '';
+      confirmPassword.value = '';
+      // 保存成功后再请求一次 /users/me 并刷新缓存，确保缓存与后端同步
+      console.log('avatarUrl.value:', avatarUrl.value);
+      console.log('localStorage before fetch:', localStorage.getItem(USER_CACHE_KEY));
+      await fetchUserInfo();
+      console.log('avatarUrl.value:', avatarUrl.value);
+      console.log('localStorage after fetch:', localStorage.getItem(USER_CACHE_KEY));
     } else {
       const err = await response.json().catch(() => ({}));
       alert('保存失败：' + (err.detail || response.statusText));

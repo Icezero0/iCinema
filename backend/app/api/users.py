@@ -25,12 +25,15 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+# 验证密码
 def verify_password(plain_password: str, hashed_password: str):
     return pwd_context.verify(plain_password, hashed_password)
 
+# 获取密码哈希
 def get_password_hash(password: str):
     return pwd_context.hash(password)
 
+# 创建访问令牌
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
@@ -41,6 +44,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+# 创建刷新令牌
 def create_refresh_token(data: dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
@@ -48,6 +52,7 @@ def create_refresh_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+# 验证token并解析，通过查询其中的标识获取当前用户
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
@@ -59,17 +64,17 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email = payload.get("sub")
-        if email is None:
+        uid = payload.get("sub")
+        if uid is None:
             raise credentials_exception
-    except JWTError:
+    except JWTError as e:
         raise credentials_exception
-    user = await crud.users.get_user_by_email(db, email=email)
-    if user is None:
+    db_user = await crud.users.get_user(db, user_id=uid)
+    if db_user is None:
         raise credentials_exception
-    return user
+    return db_user
 
-# 邮箱表单类
+# 登录用表单类
 class OAuth2EmailRequestForm:
     def __init__(
         self,
@@ -93,11 +98,11 @@ async def login(
         )
     # 创建访问令牌和刷新令牌
     access_token = create_access_token(
-        data={"sub": user.email},
+        data={"sub": str(user.id)},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     refresh_token = create_refresh_token(
-        data={"sub": user.email}
+        data={"sub": str(user.id)},
     )
 
     return {
@@ -113,8 +118,8 @@ async def refresh_token(
 ):
     try:
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        email = payload.get("sub")
-        if email is None:
+        uid = payload.get("sub")
+        if uid is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token"
@@ -125,7 +130,7 @@ async def refresh_token(
             detail="Invalid refresh token"
         )
         
-    user = await crud.users.get_user_by_email(db, email=email)
+    user = await crud.users.get_user(db, user_id = uid)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -134,7 +139,7 @@ async def refresh_token(
         
     # 创建新的访问令牌
     access_token = create_access_token(
-        data={"sub": user.email},
+        data={"sub": str(user.id)},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     
@@ -168,51 +173,67 @@ async def create_user(
 
 @router.get("/users/me", response_model=schemas.UserResponse)
 async def read_users_me(
-    current_user: models.User = Depends(get_current_user)
-):
-    return current_user
-
-@router.get("/users/{user_id}", response_model=schemas.UserResponse)
-async def read_user(
-    user_id: int,
+    current_user: schemas.UserResponse = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    db_user = await crud.users.get_user_with_rooms(db, user_id=user_id)
-    if db_user is None:
+    db_user_with_rooms = await crud.users.get_user_with_rooms(
+        db=db,
+        user_id=current_user.id
+    )
+    if db_user_with_rooms is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return db_user
+    return db_user_with_rooms
+
+# @router.get("/users/{user_id}", response_model=schemas.UserResponse)
+# async def read_user(
+#     user_id: int,
+#     db: AsyncSession = Depends(get_db)
+# ):
+#     db_user: schemas.UserResponse = await crud.users.get_user(db, user_id=user_id)
+#     if db_user is None:
+#         raise HTTPException(status_code=404, detail="User not found")
+#     return db_user
 
 @router.put("/users/me", response_model=schemas.User)
 async def update_user_me(
-    email: str = Form(...),
-    username: str = Form(None),
-    avatar_base64: str = Form(None),
-    password: str = Form(None),
+    user_update: schemas.UserUpdate,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     update_data = {}
-    if username is not None:
-        db_user_by_username = await crud.users.get_user_by_username(db, username=username)
-        if db_user_by_username is not None and getattr(db_user_by_username, "id", None) != current_user.id:
+
+    # 获取当前用户ID
+    user_id = current_user.id
+    if not isinstance(user_id, int):
+        raise HTTPException(status_code=500, detail="用户ID类型错误")
+    
+    # 检查邮箱是否匹配
+    if user_update.email != current_user.email:
+        raise HTTPException(status_code=400, detail="不能修改邮箱地址，请联系管理员！")
+
+    # 检查新用户名是否已存在
+    if user_update.username is not None:
+        db_user_by_username = await crud.users.get_user_by_username(db, username=user_update.username)
+        if db_user_by_username is not None and getattr(db_user_by_username, "id", None) != user_id:
             raise HTTPException(status_code=400, detail="用户名已被使用！")
-        update_data["username"] = username
-    if avatar_base64 is not None:
-        if avatar_base64.startswith('data:image/jpeg;base64,'):
+        update_data["username"] = user_update.username
+    
+    # 解析并保存头像图片
+    if user_update.avatar_base64 is not None:
+        if user_update.avatar_base64.startswith('data:image/jpeg;base64,'):
             ext = 'jpg'
-            avatar_data = avatar_base64.split('data:image/jpeg;base64,')[1]
-        elif avatar_base64.startswith('data:image/png;base64,'):
+            avatar_data = user_update.avatar_base64.split('data:image/jpeg;base64,')[1]
+        elif user_update.avatar_base64.startswith('data:image/png;base64,'):
             ext = 'png'
-            avatar_data = avatar_base64.split('data:image/png;base64,')[1]
-        elif avatar_base64.startswith('data:image/webp;base64,'):
+            avatar_data = user_update.avatar_base64.split('data:image/png;base64,')[1]
+        elif user_update.avatar_base64.startswith('data:image/webp;base64,'):
             ext = 'webp'
-            avatar_data = avatar_base64.split('data:image/webp;base64,')[1]
+            avatar_data = user_update.avatar_base64.split('data:image/webp;base64,')[1]
         else:
             raise HTTPException(status_code=400, detail="不支持的图片格式，仅支持jpg/png/webp")
         timestamp = int(datetime.now().timestamp())
         rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        # 文件名加上用户id作为标识
-        filename = f"{timestamp}_uid{current_user.id}_{rand_str}.{ext}"
+        filename = f"{timestamp}_uid{user_id}_{rand_str}.{ext}"
         avatar_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../data/upload/avatars'))
         os.makedirs(avatar_dir, exist_ok=True)
         file_path = os.path.join(avatar_dir, filename)
@@ -221,19 +242,14 @@ async def update_user_me(
                 f.write(base64.b64decode(avatar_data))
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"头像保存失败: {e}")
-        icon_path = f"/avatars/{filename}"
-        update_data["icon_path"] = icon_path
-    if password is not None:
-        hashed_password = get_password_hash(password)
+        avatar_path = f"/avatars/{filename}"
+        update_data["avatar_path"] = avatar_path
+    
+    # 保存新密码
+    if user_update.password is not None:
+        hashed_password = get_password_hash(user_update.password)
         update_data["hashed_password"] = hashed_password
-    db_user = await crud.users.get_user_by_email(db, email=email)
-    if db_user is not None and getattr(db_user, "id", None) != current_user.id:
-        raise HTTPException(status_code=400, detail="邮箱地址已被注册！")
-    user_id = current_user.id
-    if hasattr(user_id, 'original') or hasattr(user_id, 'expression'):
-        user_id = getattr(current_user, '__dict__', {}).get('id', None)
-    if not isinstance(user_id, int):
-        raise HTTPException(status_code=500, detail="用户ID类型错误")
+    
     return await crud.users.update_user(
         db=db,
         user_id=user_id,

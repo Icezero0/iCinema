@@ -20,18 +20,17 @@ def get_utc_now():
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)  # 用户名应该唯一
+    username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
-    hashed_password = Column(String, nullable=False)    # 密码不能为空
-    created_at = Column(DateTime(timezone=True), default=get_utc_now)  # 修改这行
-    icon_path = Column(String, nullable=True, default=None)  # 存储本地文件路径
+    hashed_password = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=get_utc_now)
+    avatar_path = Column(String, nullable=True, default=None)
     
-    # 添加关系
     rooms_owned = relationship("Room", back_populates="owner")
     messages = relationship("Message", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")
     
-    # 添加成员关系
-    joined_rooms = relationship(
+    rooms_joined = relationship(
         "Room",
         secondary=room_members,
         back_populates="members"
@@ -40,30 +39,37 @@ class User(Base):
 class Room(Base):
     __tablename__ = "rooms"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, index=True)   # 房间名不能为空
-    created_at = Column(DateTime(timezone=True), default=get_utc_now)  # 修改这行
+    name = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=get_utc_now)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    is_active = Column(Boolean, default=True)          # 替换 members_id
+    is_active = Column(Boolean, default=True)
     
-    # 添加关系
     owner = relationship("User", back_populates="rooms_owned")
     messages = relationship("Message", back_populates="room")
     
-    # 添加成员关系
     members = relationship(
         "User",
         secondary=room_members,
-        back_populates="joined_rooms"
+        back_populates="rooms_joined"
     )
 
 class Message(Base):
     __tablename__ = "messages"
     id = Column(Integer, primary_key=True, index=True)
     content = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=get_utc_now)  # 修改这行
+    created_at = Column(DateTime(timezone=True), default=get_utc_now)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False)
     
-    # 添加关系
     user = relationship("User", back_populates="messages")
     room = relationship("Room", back_populates="messages")
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="unread")
+    created_at = Column(DateTime(timezone=True), default=get_utc_now)
+
+    user = relationship("User", back_populates="notifications")

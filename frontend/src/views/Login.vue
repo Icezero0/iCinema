@@ -25,13 +25,9 @@ const handleLogin = async () => {
 
     const data = await response.json();
 
-    // console.log('Login successful:', data);
     document.cookie = `accesstoken=${data.access_token}; path=/; secure;`;
     document.cookie = `refreshtoken=${data.refresh_token}; path=/; secure;`;
 
-    // console.log('writing cookies:', document.cookie);
-
-    // console.log('redirecting to home page');
     router.push('/home');
   } catch (error) {
     console.error(error);

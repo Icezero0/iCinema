@@ -37,57 +37,41 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 import CustomConfirm from '@/components/CustomConfirm.vue';
+import { useUserInfo } from '@/composables/useUserInfo.js';
 
-const username = ref('');
-const avatarUrl = ref(defaultAvatar);
 const showDropdown = ref(false);
 const showLogoutConfirm = ref(false);
 const router = useRouter();
-const AVATAR_CACHE_KEY = 'icinema_avatar_url';
-const USERNAME_CACHE_KEY = 'icinema_username';
+const USER_CACHE_KEY = 'icinema_user';
+const { username, avatarUrl, email, fetchUserInfo } = useUserInfo();
 
-// 优先读取缓存
-const cachedUsername = localStorage.getItem(USERNAME_CACHE_KEY);
-const cachedAvatar = localStorage.getItem(AVATAR_CACHE_KEY);
-if (cachedUsername) {
-  username.value = cachedUsername;
-}
-if (cachedAvatar) {
-  avatarUrl.value = cachedAvatar;
-}
-
-let hasFetched = false;
-
-onMounted(async () => {
-  // 如果缓存中有用户名和头像，则不请求后端
-  if (cachedUsername && cachedAvatar) {
-    return;
-  }
+// 初始化时优先从localStorage读取缓存用户信息
+const cachedUser = localStorage.getItem(USER_CACHE_KEY);
+if (cachedUser) {
   try {
-    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-    if (!accessToken) return;
-
-    const response = await fetch('http://localhost:8000/users/me', {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-    });
-    if (response.ok) {
-      const data = await response.json();
-      username.value = data.username || 'unknown_user';
-      if (data.icon_path) {
-        avatarUrl.value = `http://localhost:8000${data.icon_path}`;
-      } else {
-        avatarUrl.value = data.avatar || defaultAvatar;
-      }
-      // 更新缓存
-      localStorage.setItem(USERNAME_CACHE_KEY, username.value);
-      localStorage.setItem(AVATAR_CACHE_KEY, avatarUrl.value);
+    const userObj = JSON.parse(cachedUser);
+    if (userObj.avatar_path) {
+      avatarUrl.value = `http://localhost:8000${userObj.avatar_path}`;
+    } else if (userObj.avatar) {
+      avatarUrl.value = userObj.avatar;
+    }
+    if (userObj.username) {
+      username.value = userObj.username;
+    }
+    if (userObj.email) {
+      email.value = userObj.email;
     }
   } catch (e) {
-    alert('获取用户信息失败，请稍后再试。');
-    console.error('Error fetching user info:', e);
+    // ignore parse error
   }
+}
+
+onMounted(async () => {
+  // 如果localStorage有缓存，则不请求后端
+  if (cachedUser) {
+    return;
+  }
+  await fetchUserInfo();
 });
 
 function goToProfile() {
