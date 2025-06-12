@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+*.egg
+*.egg-info/
+
+# Virtual environments
+venv/
+.env/
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# Node.js
+node_modules/
+
+# Database
+*.db
+
+# VS Code
+.vscode/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Git
+# .gitignore
+.git
+
+# Devcontainer
+.devcontainer/
+
+# 忽略 data 目录下的所有内容
+data/
