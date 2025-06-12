@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <div class="auth-card">
+    <div class="home-card">
       <div class="profile-header" @mouseenter="showDropdown = true" @mouseleave="showDropdown = false">
         <img :src="avatarUrl" alt="avatar" class="avatar" />
         <span class="username">{{ username }}</span>
@@ -11,10 +11,24 @@
           </div>
         </transition>
       </div>
-      <h1>欢迎来到 iCinema</h1>
-      <button class="main-button" @click="$router.push('/profile')">个人信息</button>
-      <button class="main-button" @click="$router.push('/room')">进入房间</button>
+      <div class="card-container">
+        <div class="room-card">
+          <h2>大厅房间</h2>
+          <!-- 可添加大厅房间内容或入口按钮 -->
+        </div>
+        <div class="room-card">
+          <h2>我的房间</h2>
+          <!-- 可添加我的房间内容或入口按钮 -->
+        </div>
+      </div>
     </div>
+    <CustomConfirm
+      :show="showLogoutConfirm"
+      title="确认退出登录"
+      content="确定要退出登录吗？"
+      @ok="handleLogoutConfirm"
+      @cancel="handleLogoutCancel"
+    />
   </div>
 </template>
 
@@ -22,19 +36,33 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
+import CustomConfirm from '@/components/CustomConfirm.vue';
 
 const username = ref('');
 const avatarUrl = ref(defaultAvatar);
 const showDropdown = ref(false);
+const showLogoutConfirm = ref(false);
 const router = useRouter();
 const AVATAR_CACHE_KEY = 'icinema_avatar_url';
+const USERNAME_CACHE_KEY = 'icinema_username';
 
+// 优先读取缓存
+const cachedUsername = localStorage.getItem(USERNAME_CACHE_KEY);
 const cachedAvatar = localStorage.getItem(AVATAR_CACHE_KEY);
+if (cachedUsername) {
+  username.value = cachedUsername;
+}
 if (cachedAvatar) {
   avatarUrl.value = cachedAvatar;
 }
 
+let hasFetched = false;
+
 onMounted(async () => {
+  // 如果缓存中有用户名和头像，则不请求后端
+  if (cachedUsername && cachedAvatar) {
+    return;
+  }
   try {
     const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
     if (!accessToken) return;
@@ -53,6 +81,7 @@ onMounted(async () => {
         avatarUrl.value = data.avatar || defaultAvatar;
       }
       // 更新缓存
+      localStorage.setItem(USERNAME_CACHE_KEY, username.value);
       localStorage.setItem(AVATAR_CACHE_KEY, avatarUrl.value);
     }
   } catch (e) {
@@ -66,10 +95,18 @@ function goToProfile() {
 }
 
 function logout() {
+  showLogoutConfirm.value = true;
+}
+
+function handleLogoutConfirm() {
   document.cookie = 'accesstoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
   document.cookie = 'refreshtoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
-  alert('您已退出登录');
+  showLogoutConfirm.value = false;
   router.push('/login');
+}
+
+function handleLogoutCancel() {
+  showLogoutConfirm.value = false;
 }
 </script>
 
@@ -83,15 +120,23 @@ function logout() {
   padding: 1rem;
 }
 
-.auth-card {
+.home-card {
   background: white;
   padding: 2.5rem;
   border-radius: 12px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 400px;
+  width: 80%;
+  height: 80%;
+  max-width: none;
   text-align: center;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 500px;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  margin-top: 10vh;
 }
 
 .profile-header {
@@ -154,37 +199,35 @@ function logout() {
   font-weight: 500;
 }
 
-h1 {
-  margin-top: 3.5rem;
-  margin-bottom: 2rem;
-  font-size: 2rem;
-  color: #007bff;
-}
-
-.main-button {
-  padding: 0.75rem;
-  font-size: 1rem;
-  border: none;
-  border-radius: 6px;
+.card-container {
+  display: flex;
+  flex-direction: row;
+  gap: 2rem;
+  justify-content: center;
+  align-items: flex-start;
   width: 100%;
-  margin-bottom: 1rem;
-  background-color: #007bff;
-  color: white;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
+  margin: 3rem;
+  position: relative;
+  top: 0;
 }
 
-.main-button:last-child {
-  background-color: #28a745;
-  margin-bottom: 0;
+.room-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem 2rem;
+  flex: 1 1 0;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
 }
 
-.main-button:hover {
-  background-color: #0056b3;
-}
-
-.main-button:last-child:hover {
-  background-color: #218838;
+.room-card h2 {
+  font-size: 1.5rem;
+  color: #007bff;
+  margin-bottom: 1.5rem;
 }
 
 .dropdown-fade-enter-active, .dropdown-fade-leave-active {

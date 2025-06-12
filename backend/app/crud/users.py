@@ -45,16 +45,6 @@ async def get_user_by_email(db: AsyncSession, email: str) -> Optional[models.Use
     )
     return result.scalar_one_or_none()
 
-# async def get_users(
-#     db: AsyncSession, 
-#     skip: int = 0, 
-#     limit: int = 100
-# ) -> List[models.User]:
-#     # 获取用户列表
-#     query = select(models.User).offset(skip).limit(limit)
-#     result = await db.execute(query)
-#     return result.scalars().all()
-
 async def update_user(
     db: AsyncSession, 
     user_id: int, 

@@ -2,14 +2,8 @@
   <div class="page-container">
     <form class="profile-form">
       <h2>个人资料</h2>
-      <div class="form-group">
-        <div class="avatar-upload-wrapper">
-          <label for="avatar-upload">
-            <img :src="avatarUrl" alt="avatar" class="avatar-large clickable" />
-            <input id="avatar-upload" type="file" accept="image/*" @change="onAvatarChange" style="display:none" />
-          </label>
-          <span class="avatar-tip">点击头像上传图片</span>
-        </div>
+      <div class="form-group avatar-center">
+        <AvatarUploader v-model="avatarUrl" />
       </div>
       <div class="form-group">
         <label>用户名<span v-if="usernameInput !== username">*</span></label>
@@ -25,45 +19,30 @@
         <label>邮箱</label>
         <input type="text" :value="email" readonly disabled class="email-disabled" />
       </div>
+      <div class="form-group">
+        <label>新密码</label>
+        <input type="password" v-model="newPassword" placeholder="不修改" />
+      </div>
+      <div class="form-group">
+        <label style="display: flex; align-items: center; min-height: 1.5em;">
+          确认新密码
+          <span v-if="confirmPassword && newPassword && confirmPassword !== newPassword" class="password-error-tip">*密码不一致</span>
+          <span v-else class="password-error-tip" style="visibility:hidden;">不一致</span>
+        </label>
+        <input type="password" v-model="confirmPassword" placeholder="不修改" />
+      </div>
       <div class="button-group">
         <button class="save-button" type="button" @click="handleSave" :disabled="!isModified">保存</button>
         <button class="cancel-button" type="button" @click="handleCancel">取消</button>
       </div>
     </form>
-
-    <!-- 裁剪头像的对话框 -->
-    <div v-if="showCropper" class="cropper-modal">
-      <div class="cropper-container">
-        <Cropper
-          ref="cropperRef"
-          :src="cropperImg"
-          :aspect-ratio="1"
-          :view-mode="1"
-          :auto-crop-area="1"
-          :background="false"
-          :responsive="true"
-          :rotatable="false"
-          :zoomable="true"
-          style="width:320px;height:320px;"
-        />
-        <div class="cropper-btn-group">
-          <button type="button" class="save-button" @click="handleCrop">确定</button>
-          <button type="button" class="cancel-button" @click="handleCancelCrop">取消</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 自定义确认弹窗 -->
-    <div v-if="showConfirm" class="custom-confirm-modal">
-      <div class="custom-confirm-box">
-        <div class="custom-confirm-title">确认保存</div>
-        <div class="custom-confirm-content">确定要保存更改吗？</div>
-        <div class="custom-confirm-btns">
-          <button class="save-button" @click="handleConfirmOk">确定</button>
-          <button class="cancel-button" @click="handleConfirmCancel">取消</button>
-        </div>
-      </div>
-    </div>
+    <CustomConfirm
+      :show="showConfirm"
+      title="确认保存"
+      content="确定要保存更改吗？"
+      @ok="handleConfirmOk"
+      @cancel="handleConfirmCancel"
+    />
   </div>
 </template>
 
@@ -71,28 +50,36 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
-import Cropper from 'vue-cropperjs';
-import 'cropperjs/dist/cropper.css';
+import AvatarUploader from '@/components/AvatarUploader.vue';
+import CustomConfirm from '@/components/CustomConfirm.vue';
 
 const router = useRouter();
 const username = ref('');
 const usernameInput = ref('');
 const avatarUrl = ref(defaultAvatar);
 const email = ref('');
-const showCropper = ref(false);
-const cropperImg = ref('');
-const cropperRef = ref();
 const usernameError = ref('');
 const showConfirm = ref(false); // 控制自定义弹窗显示
 let savePending = false; // 防止重复提交
 
-// 用户头像缓存key
+// 用户头像、用户名、邮箱缓存key
 const AVATAR_CACHE_KEY = 'icinema_avatar_url';
+const USERNAME_CACHE_KEY = 'icinema_username';
+const EMAIL_CACHE_KEY = 'icinema_email';
 
-// 初始化时优先从localStorage读取缓存头像
+// 初始化时优先从localStorage读取缓存头像、用户名、邮箱
 const cachedAvatar = localStorage.getItem(AVATAR_CACHE_KEY);
+const cachedUsername = localStorage.getItem(USERNAME_CACHE_KEY);
+const cachedEmail = localStorage.getItem(EMAIL_CACHE_KEY);
 if (cachedAvatar) {
   avatarUrl.value = cachedAvatar;
+}
+if (cachedUsername) {
+  username.value = cachedUsername;
+  usernameInput.value = cachedUsername;
+}
+if (cachedEmail) {
+  email.value = cachedEmail;
 }
 
 onMounted(async () => {
@@ -115,53 +102,15 @@ onMounted(async () => {
       }
       // 更新缓存
       localStorage.setItem(AVATAR_CACHE_KEY, avatarUrl.value);
+      localStorage.setItem(USERNAME_CACHE_KEY, username.value);
       email.value = data.email || '';
+      localStorage.setItem(EMAIL_CACHE_KEY, email.value);
     }
   } catch (e) {
     alert('获取用户信息失败，请稍后再试。');
     console.error('Error fetching user info:', e);
   }
 });
-
-function onAvatarChange(e) {
-  const file = e.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      cropperImg.value = event.target.result;
-      showCropper.value = true;
-    };
-    reader.readAsDataURL(file);
-  }
-}
-
-function handleCrop() {
-  // 获取裁剪后的canvas
-  let canvas = cropperRef.value.getCroppedCanvas();
-  if (canvas) {
-    let targetWidth = 512;
-    let targetHeight = 512;
-    if (canvas.width > targetWidth || canvas.height > targetHeight) {
-      const tmpCanvas = document.createElement('canvas');
-      tmpCanvas.width = targetWidth;
-      tmpCanvas.height = targetHeight;
-      const ctx = tmpCanvas.getContext('2d');
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, targetWidth, targetHeight);
-      ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
-      avatarUrl.value = tmpCanvas.toDataURL('image/jpeg');
-    } else {
-      avatarUrl.value = canvas.toDataURL('image/jpeg');
-    }
-    // 裁剪后立即缓存
-    localStorage.setItem(AVATAR_CACHE_KEY, avatarUrl.value);
-    showCropper.value = false;
-  }
-}
-
-function handleCancelCrop() {
-  showCropper.value = false;
-}
 
 function handleCancel() {
   router.push('/home');
@@ -203,6 +152,10 @@ async function doSave() {
   if (avatarUrl.value.startsWith('data:image/')) {
     formData.append('avatar_base64', avatarUrl.value);
   }
+  // 新密码逻辑：如有输入则加入 password 字段
+  if (newPassword.value && confirmPassword.value && newPassword.value === confirmPassword.value) {
+    formData.append('password', newPassword.value);
+  }
   try {
     const response = await fetch('http://localhost:8000/users/me', {
       method: 'PUT',
@@ -213,8 +166,10 @@ async function doSave() {
       body: formData,
     });
     if (response.ok) {
-      // 保存成功后缓存头像
+      // 保存成功后缓存头像、用户名、邮箱
       localStorage.setItem(AVATAR_CACHE_KEY, avatarUrl.value);
+      localStorage.setItem(USERNAME_CACHE_KEY, usernameInput.value);
+      localStorage.setItem(EMAIL_CACHE_KEY, email.value);
       if (formData.has('username')) {
         username.value = usernameInput.value;
       }
@@ -244,8 +199,20 @@ const isModified = computed(() => {
   if (usernameInput.value !== username.value) return true;
   // 头像变动：与 doSave 逻辑保持一致，仅当头像为本地 base64（即裁剪过）才算变动
   if (avatarUrl.value.startsWith('data:image/')) return true;
+  // 新密码逻辑：新密码和确认新密码都不为空且一致时可保存
+  if (
+    newPassword.value &&
+    confirmPassword.value &&
+    newPassword.value === confirmPassword.value
+  ) {
+    return true;
+  }
   return false;
 });
+
+const oldPassword = ref("");
+const newPassword = ref("");
+const confirmPassword = ref("");
 </script>
 
 <style scoped>
@@ -259,22 +226,27 @@ const isModified = computed(() => {
 }
 
 .profile-form {
-  background: white;
+  background: linear-gradient(120deg, #fbeee6 0%, #e6eaf5 100%);
+  /* 参考主页用户卡片的渐变色 */
   padding: 2.5rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0, 80, 180, 0.10), 0 1.5px 8px rgba(0,0,0,0.06);
   width: 100%;
   max-width: 800px;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   align-items: center;
+  border: 1.5px solid #e0eaff;
+  /* 轻微描边 */
 }
 
 h2 {
   margin-bottom: 1.5rem;
   font-size: 1.5rem;
   color: #007BFF;
+  font-weight: bold;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.10);
 }
 
 .form-group {
@@ -283,6 +255,10 @@ h2 {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.5rem;
+}
+
+.form-group.avatar-center {
+  align-items: center;
 }
 
 .form-group label {
@@ -299,39 +275,6 @@ h2 {
   width: 100%;
   background: #f8fafc;
   color: #333;
-}
-
-.avatar-upload-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-}
-
-.avatar-large {
-  width: 256px;
-  height: 256px;
-  border-radius: 12px;
-  object-fit: cover;
-  border: 2px solid #eee;
-  background: #fff;
-  margin: 0.5rem 0;
-  display: block;
-  transition: box-shadow 0.2s;
-}
-
-.avatar-large.clickable {
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-.avatar-large.clickable:hover {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-
-.avatar-tip {
-  font-size: 0.9rem;
-  color: #888;
-  margin-top: 0.25rem;
 }
 
 .button-group {
@@ -385,37 +328,6 @@ h2 {
   cursor: not-allowed;
 }
 
-.cropper-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  opacity: 1;
-}
-
-.cropper-container {
-  background: #fff;
-  border-radius: 10px;
-  padding: 2rem 2rem 1rem 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.cropper-btn-group {
-  display: flex;
-  gap: 1.5rem;
-  margin-top: 1.5rem;
-  justify-content: center;
-}
-
 .input-error-border {
   border-color: red !important;
   color: red;
@@ -427,39 +339,11 @@ h2 {
   color: red;
 }
 
-.custom-confirm-modal {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-.custom-confirm-box {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-  padding: 2rem 2.5rem 1.5rem 2.5rem;
-  min-width: 320px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.custom-confirm-title {
-  font-size: 1.2rem;
-  color: #007bff;
-  font-weight: bold;
-  margin-bottom: 1rem;
-}
-.custom-confirm-content {
-  font-size: 1rem;
-  color: #444;
-  margin-bottom: 1.5rem;
-}
-.custom-confirm-btns {
-  display: flex;
-  gap: 2rem;
-  justify-content: center;
+.password-error-tip {
+  color: #e53935;
+  font-size: 0.85em;
+  margin-left: 10px;
+  font-weight: normal;
+  vertical-align: middle;
 }
 </style>

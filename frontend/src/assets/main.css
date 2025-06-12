@@ -1,10 +1,19 @@
 @import './base.css';
 
+html, body, #app {
+  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  box-sizing: border-box;
+}
+
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  font-weight: normal;
+  max-width: none !important;
+  margin: 0 !important;
+  display: block !important;
+  padding: 0 !important;
 }
 
 a,
