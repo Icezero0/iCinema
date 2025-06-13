@@ -56,7 +56,6 @@ import { useUserInfo } from '@/composables/useUserInfo.js';
 
 const router = useRouter();
 const usernameInput = ref('');
-const email = ref('');
 const usernameError = ref('');
 const showConfirm = ref(false); // 控制自定义弹窗显示
 let savePending = false; // 防止重复提交
@@ -64,10 +63,10 @@ let savePending = false; // 防止重复提交
 // 用户数据缓存key
 const USER_CACHE_KEY = 'icinema_user';
 
-const { username, avatarUrl, fetchUserInfo } = useUserInfo();
+const { username, avatarUrl, email, fetchUserInfo } = useUserInfo();
 
-// 初始化时优先从localStorage读取缓存用户信息
-const cachedUser = localStorage.getItem(USER_CACHE_KEY);
+// 初始化时优先从sessionStorage读取缓存用户信息
+const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
 if (cachedUser) {
   try {
     const userObj = JSON.parse(cachedUser);
@@ -90,7 +89,7 @@ if (cachedUser) {
 }
 
 onMounted(async () => {
-  // 如果localStorage有缓存，则不请求后端
+  // 如果sessionStorage有缓存，则不请求后端
   if (cachedUser) {
     return;
   }
@@ -160,10 +159,10 @@ async function doSave() {
       confirmPassword.value = '';
       // 保存成功后再请求一次 /users/me 并刷新缓存，确保缓存与后端同步
       console.log('avatarUrl.value:', avatarUrl.value);
-      console.log('localStorage before fetch:', localStorage.getItem(USER_CACHE_KEY));
+      console.log('sessionStorage before fetch:', sessionStorage.getItem(USER_CACHE_KEY));
       await fetchUserInfo();
       console.log('avatarUrl.value:', avatarUrl.value);
-      console.log('localStorage after fetch:', localStorage.getItem(USER_CACHE_KEY));
+      console.log('sessionStorage after fetch:', sessionStorage.getItem(USER_CACHE_KEY));
     } else {
       const err = await response.json().catch(() => ({}));
       alert('保存失败：' + (err.detail || response.statusText));

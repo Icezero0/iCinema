@@ -19,7 +19,10 @@ docker-compose.override.yml
 node_modules/
 
 # Database
-*.db
+.db
+
+# alembic
+backend/alembic/versions/
 
 # VS Code
 .vscode/

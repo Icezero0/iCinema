@@ -26,7 +26,7 @@ export function useUserInfo() {
         }
         email.value = data.email || '';
         // 统一缓存完整用户信息
-        localStorage.setItem('icinema_user', JSON.stringify(data));
+        sessionStorage.setItem('icinema_user', JSON.stringify(data));
       }
     } catch (e) {
       // 可选：错误处理

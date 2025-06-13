@@ -38,11 +38,13 @@ class Room(RoomBase):
     created_at: datetime
     owner: User
     is_active: bool = True
-    members: List[User] = []
-
+    
     model_config = {
         "from_attributes": True
     }
+
+class RoomUpdate(BaseModel):
+    name: Optional[str] = None
 
 # 消息相关的 Schema
 class MessageBase(BaseModel):
@@ -68,6 +70,5 @@ class UserResponse(User):
     rooms_joined: List[Room] = []
 
 class RoomResponse(Room):
-    owner: User
     messages: List[Message] = []
     members: List[User] = []

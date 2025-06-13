@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from .api import users
+from .api import users, rooms
 from contextlib import asynccontextmanager
 from app.database import engine
 from app.models import Base
@@ -33,6 +33,7 @@ app.mount("/avatars", StaticFiles(directory="../data/upload/avatars"), name="ava
 
 # 包含路由
 app.include_router(users.router, tags=["users"])
+app.include_router(rooms.router, tags=["rooms"])
 
 @app.get("/")
 async def read_root():

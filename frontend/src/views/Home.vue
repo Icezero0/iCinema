@@ -43,10 +43,10 @@ const showDropdown = ref(false);
 const showLogoutConfirm = ref(false);
 const router = useRouter();
 const USER_CACHE_KEY = 'icinema_user';
+// 初始化时优先从sessionStorage读取缓存用户信息
+const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
 const { username, avatarUrl, email, fetchUserInfo } = useUserInfo();
 
-// 初始化时优先从localStorage读取缓存用户信息
-const cachedUser = localStorage.getItem(USER_CACHE_KEY);
 if (cachedUser) {
   try {
     const userObj = JSON.parse(cachedUser);
@@ -67,7 +67,7 @@ if (cachedUser) {
 }
 
 onMounted(async () => {
-  // 如果localStorage有缓存，则不请求后端
+  // 如果sessionStorage有缓存，则不请求后端
   if (cachedUser) {
     return;
   }

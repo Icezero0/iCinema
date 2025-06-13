@@ -8,8 +8,8 @@ from datetime import timezone
 room_members = Table(
     "room_members",
     Base.metadata,
-    Column("room_id", Integer, ForeignKey("rooms.id"), primary_key=True),
-    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
+    Column("room_id", Integer, ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
     Column("joined_at", DateTime(timezone=True), default=datetime.now(timezone.utc)),
 )
 

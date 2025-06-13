@@ -1,9 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 from .. import models, schemas
 from typing import Optional, List
-from datetime import datetime
+from sqlalchemy.orm import selectinload
 
 async def create_room(
     db: AsyncSession, 
@@ -26,21 +25,44 @@ async def get_room(
     room_id: int
 ) -> Optional[models.Room]:
     # 获取房间信息
-    query = select(models.Room).where(models.Room.id == room_id)
+    query = (
+        select(models.Room)
+        .options(selectinload(models.Room.owner))
+        .where(models.Room.id == room_id)
+    )
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
-async def get_rooms(
-    db: AsyncSession, 
-    skip: int = 0, 
+async def get_rooms_by_filter(
+    db: AsyncSession,
+    name: Optional[str] = None,
+    owner_id: Optional[int] = None,
+    is_active: Optional[bool] = None,
+    skip: int = 0,
     limit: int = 100
 ) -> List[models.Room]:
-    # 获取房间列表
-    query = select(models.Room).offset(skip).limit(limit)
+    """
+    按条件筛选房间列表。所有参数均为可选，均为空时等价于无条件分页查询。
+    :param db: 数据库会话
+    :param name: 房间名（模糊匹配）
+    :param owner_id: 房主ID
+    :param is_active: 是否活跃
+    :param skip: 跳过条数
+    :param limit: 返回条数
+    :return: 房间列表
+    """
+    query = select(models.Room)
+    if name:
+        query = query.where(models.Room.name.ilike(f"%{name}%"))
+    if owner_id is not None:
+        query = query.where(models.Room.owner_id == owner_id)
+    if is_active is not None:
+        query = query.where(models.Room.is_active == is_active)
+    query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    return list(result.scalars().all())
 
-async def get_room_with_members(
+async def get_room_details(
     db: AsyncSession, 
     room_id: int
 ) -> Optional[models.Room]:
@@ -48,8 +70,9 @@ async def get_room_with_members(
     query = (
         select(models.Room)
         .options(
-            joinedload(models.Room.members),
-            joinedload(models.Room.owner)
+            selectinload(models.Room.owner),
+            selectinload(models.Room.members),
+            selectinload(models.Room.messages)
         )
         .where(models.Room.id == room_id)
     )
@@ -77,7 +100,7 @@ async def remove_room_member(
     user_id: int
 ) -> bool:
     # 移除房间成员
-    room = await get_room_with_members(db, room_id)
+    room = await get_room_details(db, room_id)
     if room:
         room.members = [m for m in room.members if m.id != user_id]
         await db.commit()
