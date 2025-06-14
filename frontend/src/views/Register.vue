@@ -18,6 +18,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { API_BASE_URL } from '@/utils/api';
 
 const username = ref('');
 const email = ref('');
@@ -34,7 +35,7 @@ const handleRegister = async () => {
   }
 
   try {
-    const response = await fetch('http://localhost:8000/users', {
+    const response = await fetch(`${API_BASE_URL}/users`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

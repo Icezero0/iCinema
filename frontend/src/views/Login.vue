@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { API_BASE_URL } from '@/utils/api';
 
 const email = ref('');
 const password = ref('');
@@ -8,7 +9,7 @@ const router = useRouter();
 
 const handleLogin = async () => {
   try {
-    const response = await fetch('http://localhost:8000/token', {
+    const response = await fetch(`${API_BASE_URL}/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -21,12 +22,10 @@ const handleLogin = async () => {
 
     if (!response.ok) {
       throw new Error('登录失败，请检查您的邮箱和密码');
-    }
-
-    const data = await response.json();
+    }    const data = await response.json();
 
     document.cookie = `accesstoken=${data.access_token}; path=/; secure;`;
-    document.cookie = `refreshtoken=${data.refresh_token}; path=/; secure;`;
+    document.cookie = `refreshtoken=${data.refresh_token}; path=/; secure; max-age=604800;`;
 
     router.push('/home');
   } catch (error) {

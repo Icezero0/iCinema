@@ -38,6 +38,7 @@ import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 import CustomConfirm from '@/components/CustomConfirm.vue';
 import { useUserInfo } from '@/composables/useUserInfo.js';
+import { getImageUrl } from '@/utils/api';
 
 const showDropdown = ref(false);
 const showLogoutConfirm = ref(false);
@@ -51,7 +52,7 @@ if (cachedUser) {
   try {
     const userObj = JSON.parse(cachedUser);
     if (userObj.avatar_path) {
-      avatarUrl.value = `http://localhost:8000${userObj.avatar_path}`;
+      avatarUrl.value = getImageUrl(userObj.avatar_path);
     } else if (userObj.avatar) {
       avatarUrl.value = userObj.avatar;
     }

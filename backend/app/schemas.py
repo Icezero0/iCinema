@@ -3,16 +3,16 @@ from datetime import datetime
 from typing import Optional, List
 
 # 用户相关的 Schema
-    
-class UserCreate(BaseModel):
+
+class UserBase(BaseModel):
     email: EmailStr
     username: str
+
+class UserCreate(UserBase):
     password: str
 
-class User(BaseModel):
+class User(UserBase):
     id: int
-    username: str
-    email: EmailStr
     created_at: datetime
     avatar_path: Optional[str] = None
 
@@ -33,11 +33,11 @@ class RoomBase(BaseModel):
 class RoomCreate(RoomBase):
     pass
 
-class Room(RoomBase):
+class Room(RoomCreate):
     id: int
+    owner_id: int
     created_at: datetime
-    owner: User
-    is_active: bool = True
+    is_active: bool
     
     model_config = {
         "from_attributes": True
@@ -46,29 +46,142 @@ class Room(RoomBase):
 class RoomUpdate(BaseModel):
     name: Optional[str] = None
 
+class RoomList(BaseModel):
+    items: List[Room]
+    total: int
+
+# 房间成员相关的 Schema
+class RoomMemberAdd(BaseModel):
+    user_id: int  # 要添加的用户ID
+    action: str
+
+# class RoomMemberGet(BaseModel):
+#     pass
+
+# class RoomLight(RoomBase):
+#     id: int
+#     created_at: datetime
+#     is_active: bool = True
+    
+#     model_config = {
+#         "from_attributes": True
+#     }
+
+
+
 # 消息相关的 Schema
-class MessageBase(BaseModel):
+# class MessageBase(BaseModel):
+#     content: str
+
+# class MessageCreate(MessageBase):
+#     room_id: int
+
+# class Message(MessageBase):
+#     id: int
+#     created_at: datetime
+#     user_id: int
+#     room_id: int
+#     user: User
+    
+#     model_config = {
+#         "from_attributes": True
+#     }
+
+# 用户通知相关的 Schema
+
+class NotificationBase(BaseModel):
     content: str
 
-class MessageCreate(MessageBase):
-    room_id: int
+class NotificationCreate(NotificationBase):
+    recipient_id: int
+    sender_id: Optional[int] = None
+    status: Optional[str] = None
 
-class Message(MessageBase):
+class Notification(NotificationCreate):
     id: int
     created_at: datetime
-    user_id: int
-    room_id: int
-    user: User
+    status: str = ""
+    is_deleted: bool = False
+
+class NotificationUpdate(BaseModel):
+    status: Optional[str] = None
+    is_deleted: Optional[bool] = None
+
+class NotificationList(BaseModel):
+    items: List[Notification]
+    total: int
+
+# 用于通知确认的请求模型
+class NotificationConfirm(BaseModel):
+    notification_id: int
+    type : str
+    token: str
+
+# 响应模型
+class UserResponse(User):
+    pass
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class UserDetailsResponse(User):
+    rooms_owned: RoomList
+    rooms_joined: RoomList
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class RoomResponse(Room):
+    pass
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class RoomDetailsResponse(Room):
+    owner : User
+    members : List[User]
+    # messages : List[]
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class RoomListResponse(RoomList):
+    pass
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class UserRoomsListResponse(BaseModel):
+    rooms_owned: List[RoomList]
+    rooms_joined: List[RoomList]
     
     model_config = {
         "from_attributes": True
     }
 
-# 响应模型
-class UserResponse(User):
-    rooms_owned: List[Room] = []
-    rooms_joined: List[Room] = []
+class NotificationResponse(Notification):
+    created_at: datetime
+    is_deleted: bool = False
+    
+    model_config = {
+        "from_attributes": True
+    }
 
-class RoomResponse(Room):
-    messages: List[Message] = []
-    members: List[User] = []
+class NotificationListResponse(NotificationList):
+    pass
+    
+    model_config = {
+        "from_attributes": True
+    }
+
+
+    
+
+

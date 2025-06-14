@@ -53,6 +53,7 @@ import defaultAvatar from '@/assets/default_avatar.jpg';
 import AvatarUploader from '@/components/AvatarUploader.vue';
 import CustomConfirm from '@/components/CustomConfirm.vue';
 import { useUserInfo } from '@/composables/useUserInfo.js';
+import { API_BASE_URL, getImageUrl } from '@/utils/api';
 
 const router = useRouter();
 const usernameInput = ref('');
@@ -71,7 +72,7 @@ if (cachedUser) {
   try {
     const userObj = JSON.parse(cachedUser);
     if (userObj.avatar_path) {
-      avatarUrl.value = `http://localhost:8000${userObj.avatar_path}`;
+      avatarUrl.value = getImageUrl(userObj.avatar_path);
     } else if (userObj.avatar_path) {
       avatarUrl.value = userObj.avatar_path;
     }
@@ -142,7 +143,7 @@ async function doSave() {
     payload.password = newPassword.value;
   }
   try {
-    const response = await fetch('http://localhost:8000/users/me', {
+    const response = await fetch(`${API_BASE_URL}/users/me`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

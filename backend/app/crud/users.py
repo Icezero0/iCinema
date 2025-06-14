@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 from .. import models, schemas
 from typing import Optional, List
@@ -23,10 +23,6 @@ async def get_user(db: AsyncSession, user_id: int) -> Optional[models.User]:
     # 获取用户信息
     result = await db.execute(
         select(models.User)
-        .options(
-            selectinload(models.User.rooms_owned),
-            selectinload(models.User.rooms_joined)
-        )
         .where(models.User.id == user_id)
     )
     return result.scalar_one_or_none()
@@ -35,13 +31,18 @@ async def get_user_by_email(db: AsyncSession, email: str) -> Optional[models.Use
     # 根据邮箱获取用户信息
     result = await db.execute(
         select(models.User)
-        .options(
-            selectinload(models.User.rooms_owned),
-            selectinload(models.User.rooms_joined)
-        )
         .where(models.User.email == email)
     )
     return result.scalar_one_or_none()
+
+async def get_user_by_username(db: AsyncSession, username: str) -> Optional[models.User]:
+    # 根据用户名查询用户
+    result = await db.execute(
+        select(models.User)
+        .where(models.User.username == username)
+    )
+    return result.scalar_one_or_none()
+
 
 async def update_user(
     db: AsyncSession, 
@@ -78,22 +79,26 @@ async def update_user(
 #         return True
 #     return False
 
-async def get_user_with_rooms(db: AsyncSession, user_id: int) -> Optional[models.User]:
-    # 获取用户及其房间信息
-    query = (
-        select(models.User)
-        .options(
-            selectinload(models.User.rooms_owned),
-            selectinload(models.User.rooms_joined)
-        )
-        .where(models.User.id == user_id)
-    )
-    result = await db.execute(query)
-    return result.scalar_one_or_none()
+# async def get_user_rooms(db: AsyncSession, user_id: int) -> Optional[models.User]:
+#     """
+#     获取用户及其房间信息（包括拥有的房间和加入的房间）
+    
+#     Args:
+#         db: 数据库会话
+#         user_id: 用户ID
+        
+#     Returns:
+#         包含房间信息的用户对象，如果用户不存在则返回None
+#     """
+#     # 获取用户关联的房间信息
+#     query = (
+#         select(models.User)
+#         .options(
+#             selectinload(models.User.rooms_owned),
+#             selectinload(models.User.rooms_joined)
+#         )
+#         .where(models.User.id == user_id)
+#     )
+#     result = await db.execute(query)
+#     return result.scalar_one_or_none()
 
-async def get_user_by_username(db: AsyncSession, username: str) -> Optional[models.User]:
-    # 根据用户名查询用户
-    result = await db.execute(
-        select(models.User).where(models.User.username == username)
-    )
-    return result.scalar_one_or_none()

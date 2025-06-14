@@ -5,8 +5,10 @@ import Profile from '../views/Profile.vue';
 import Register from '../views/Register.vue';
 import Room from '../views/Room.vue';
 import { checkAccessToken, clearTokens } from '../utils/auth';
+import { API_BASE_URL } from '../utils/api';
 
 const routes = [
+  { path: '/', redirect: '/login' }, // 根路径重定向到登录页
   { path: '/login', component: Login },
   { path: '/home', component: Home },
   { path: '/profile', component: Profile },
@@ -25,30 +27,61 @@ const VALIDATION_INTERVAL = 5 * 60 * 1000; // 验证间隔时间，5分钟
 
 router.beforeEach(async (to, from, next) => {
   const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  const refreshToken = document.cookie.split('; ').find(row => row.startsWith('refreshtoken='))?.split('=')[1];
 
   if (to.path === '/login') {
-    if (!accessToken) {
-      isTokenValid = null;
+    // 没有任何令牌，直接进入登录页
+    if (!accessToken && !refreshToken) {
+      isTokenValid = false;
       lastValidationTime = null;
-      next(); // 没有token，正常进入登录页
+      next();
       return;
     }
+    
+    // 有 accessToken 或 refreshToken，尝试验证
+    try {
+      // checkAccessToken 已经包含了刷新令牌的逻辑
+      const valid = await checkAccessToken(accessToken);
+      if (valid) {
+        // 验证成功或刷新成功，跳转到主页
+        isTokenValid = true;
+        lastValidationTime = Date.now();
+        next('/home');
+        return;
+      }
+    } catch (error) {
+      console.error('Token validation error:', error);
+    }
+    
+    // 所有验证都失败，留在登录页
+    isTokenValid = false;
+    lastValidationTime = Date.now();
+    next();
+    return;
+  }
+  
+  if (to.path === '/') {
+    // 根路径的处理
+    if (!accessToken && !refreshToken) {
+      // 没有任何令牌，重定向到登录页
+      next('/login');
+      return;
+    }
+    
+    // 有令牌，尝试验证
     try {
       const valid = await checkAccessToken(accessToken);
       if (valid) {
-        isTokenValid = true;
-        lastValidationTime = Date.now();
-        next('/home'); // token有效，跳转主页
-      } else {
-        isTokenValid = false;
-        lastValidationTime = Date.now();
-        next(); // token无效，留在登录页
+        // 令牌有效，重定向到主页
+        next('/home');
+        return;
       }
     } catch (error) {
-      isTokenValid = false;
-      lastValidationTime = Date.now();
-      next(); // 验证异常，留在登录页
+      console.error('Root path token validation error:', error);
     }
+    
+    // 验证失败，重定向到登录页
+    next('/login');
     return;
   }
 
@@ -57,47 +90,34 @@ router.beforeEach(async (to, from, next) => {
     return;
   }
 
-  if (!accessToken) {
-    isTokenValid = null;
-    lastValidationTime = null;
-    if (to.path === '/') {
-      next('/login');
-    } else {
-      next('/login');
-    }
-  } else {
-    const currentTime = Date.now();
-    if (isTokenValid === null || !lastValidationTime || currentTime - lastValidationTime > VALIDATION_INTERVAL) {
-      try {
-        const valid = await checkAccessToken(accessToken);
-        isTokenValid = valid;
-        lastValidationTime = currentTime;
-
-        if (isTokenValid) {
-          if (to.path === '/') {
-            next('/home');
-          } else {
-            next();
-          }
-        } else {
-          next('/login');
-        }
-      } catch (error) {
-        console.error('auth failed:', error);
-        isTokenValid = false;
-        next('/login');
-      }
-    } else {
-      if (isTokenValid) {
-        if (to.path === '/') {
-          next('/home');
-        } else {
-          next();
-        }
+  // 其他受保护页面的处理
+  if (!accessToken && !refreshToken) {
+    // 没有任何令牌，直接重定向到登录页
+    next('/login');
+    return;
+  }
+  
+  // 有令牌，检查有效性
+  const currentTime = Date.now();
+  if (isTokenValid === null || !lastValidationTime || currentTime - lastValidationTime > VALIDATION_INTERVAL) {
+    try {
+      const valid = await checkAccessToken(accessToken);
+      isTokenValid = valid;
+      lastValidationTime = currentTime;
+      
+      if (valid) {
+        next(); // 令牌有效，允许访问
       } else {
-        next('/login');
+        next('/login'); // 令牌无效，重定向到登录页
       }
+    } catch (error) {
+      console.error('Protected route token validation error:', error);
+      next('/login');
     }
+  } else if (isTokenValid) {
+    next(); // 使用缓存的验证结果
+  } else {
+    next('/login');
   }
 });
 

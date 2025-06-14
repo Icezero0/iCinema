@@ -1,6 +1,7 @@
 // composable: useUserInfo.js
 import { ref } from 'vue';
 import defaultAvatar from '@/assets/default_avatar.jpg';
+import { API_BASE_URL, getImageUrl } from '@/utils/api';
 
 export function useUserInfo() {
   const username = ref('');
@@ -11,7 +12,7 @@ export function useUserInfo() {
     try {
       const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
       if (!accessToken) return;
-      const response = await fetch('http://localhost:8000/users/me', {
+      const response = await fetch(`${API_BASE_URL}/users/me`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
@@ -19,8 +20,8 @@ export function useUserInfo() {
       if (response.ok) {
         const data = await response.json();
         username.value = data.username || 'unknown_user';
-        if (data.icon_path || data.avatar_path) {
-          avatarUrl.value = `http://localhost:8000${data.icon_path || data.avatar_path}`;
+        if (data.avatar_path) {
+          avatarUrl.value = getImageUrl(data.avatar_path);
         } else {
           avatarUrl.value = data.avatar || defaultAvatar;
         }

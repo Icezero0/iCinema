@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from .. import crud, models, schemas
+from .. import crud, schemas
 from ..database import get_db
 from typing import List, Optional
 from fastapi.security import OAuth2PasswordBearer
@@ -56,7 +56,7 @@ def create_refresh_token(data: dict):
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
-):
+) -> schemas.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -72,7 +72,7 @@ async def get_current_user(
     db_user = await crud.users.get_user(db, user_id=uid)
     if db_user is None:
         raise credentials_exception
-    return db_user
+    return schemas.User.model_validate(db_user)
 
 # 登录用表单类
 class OAuth2EmailRequestForm:
@@ -171,18 +171,82 @@ async def create_user(
     user.password = get_password_hash(user.password)
     return await crud.users.create_user(db=db, user=user)
 
-@router.get("/users/me", response_model=schemas.UserResponse)
+@router.get("/users/me", response_model=schemas.UserDetailsResponse)
 async def read_users_me(
-    current_user: schemas.UserResponse = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    include_room_details: bool = False,
+    current_user = Depends(get_current_user)
 ):
-    db_user_with_rooms = await crud.users.get_user_with_rooms(
+    """
+    获取当前登录用户的详细信息，包括基本信息、拥有的房间、加入的房间和通知
+    
+    参数:
+    - rooms_skip: 房间分页起始位置
+    - rooms_limit: 房间分页数量
+    - notifications_skip: 通知分页起始位置
+    - notifications_limit: 通知分页数量
+    - include_room_details: 是否包含房间详细信息
+    
+    返回:
+    - UserDetailsResponse: 包含用户基本信息、房间列表和通知列表的响应
+    """
+    if current_user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    ROOMS_DEFAULT_LIMIT = 20
+
+    # 获取用户拥有的房间
+    owned_rooms, owned_total = await crud.rooms.get_owned_rooms(
         db=db,
-        user_id=current_user.id
+        user_id=current_user.id,
+        skip=0,
+        limit=ROOMS_DEFAULT_LIMIT,
+        include_details=include_room_details
     )
-    if db_user_with_rooms is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_user_with_rooms
+    
+    # 获取用户加入的房间
+    joined_rooms, joined_total = await crud.rooms.get_joined_rooms(
+        db=db,
+        user_id=current_user.id,
+        skip=0,
+        limit=ROOMS_DEFAULT_LIMIT,
+        include_details=include_room_details
+    )
+    
+    # 将ORM模型房间列表转换为Pydantic模型房间列表
+    owned_rooms_schemas = [
+        schemas.Room.model_validate(room, from_attributes=True) 
+        for room in owned_rooms
+    ]
+    
+    joined_rooms_schemas = [
+        schemas.Room.model_validate(room, from_attributes=True) 
+        for room in joined_rooms
+    ]
+    
+    # 创建房间列表响应
+    rooms_owned_response = schemas.RoomList(
+        items=owned_rooms_schemas,
+        total=owned_total
+    )
+    
+    rooms_joined_response = schemas.RoomList(
+        items=joined_rooms_schemas,
+        total=joined_total
+    )
+    
+    # 使用model_validate将ORM模型转换为Pydantic模型
+    user_response = schemas.UserDetailsResponse(
+        id=current_user.id,
+        email=current_user.email,
+        username=current_user.username,
+        created_at=current_user.created_at,
+        avatar_path=current_user.avatar_path,
+        rooms_owned=rooms_owned_response,
+        rooms_joined=rooms_joined_response
+    )
+    
+    return user_response
 
 # @router.get("/users/{user_id}", response_model=schemas.UserResponse)
 # async def read_user(
@@ -197,7 +261,7 @@ async def read_users_me(
 @router.put("/users/me", response_model=schemas.User)
 async def update_user_me(
     user_update: schemas.UserUpdate,
-    current_user: models.User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     update_data = {}
@@ -257,5 +321,5 @@ async def update_user_me(
     )
 
 @router.get("/token/check")
-async def check_access_token(current_user: models.User = Depends(get_current_user)):
+async def check_access_token(current_user = Depends(get_current_user)):
     return {"status": "valid"}
