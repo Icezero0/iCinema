@@ -55,37 +55,22 @@ class RoomMemberAdd(BaseModel):
     user_id: int  # 要添加的用户ID
     action: str
 
-# class RoomMemberGet(BaseModel):
-#     pass
-
-# class RoomLight(RoomBase):
-#     id: int
-#     created_at: datetime
-#     is_active: bool = True
-    
-#     model_config = {
-#         "from_attributes": True
-#     }
-
-
-
 # 消息相关的 Schema
-# class MessageBase(BaseModel):
-#     content: str
+class MessageBase(BaseModel):
+    content: str
 
-# class MessageCreate(MessageBase):
-#     room_id: int
+class MessageCreate(MessageBase):
+    pass
 
-# class Message(MessageBase):
-#     id: int
-#     created_at: datetime
-#     user_id: int
-#     room_id: int
-#     user: User
+class Message(MessageBase):
+    id: int
+    created_at: datetime
+    user_id: Optional[int] = None
+    room_id: int
     
-#     model_config = {
-#         "from_attributes": True
-#     }
+    model_config = {
+        "from_attributes": True
+    }
 
 # 用户通知相关的 Schema
 
@@ -103,6 +88,10 @@ class Notification(NotificationCreate):
     status: str = ""
     is_deleted: bool = False
 
+    model_config = {
+        "from_attributes": True
+    }
+
 class NotificationUpdate(BaseModel):
     status: Optional[str] = None
     is_deleted: Optional[bool] = None
@@ -110,6 +99,10 @@ class NotificationUpdate(BaseModel):
 class NotificationList(BaseModel):
     items: List[Notification]
     total: int
+
+class NotificationAction(BaseModel):
+    action: str  # "accept" or "reject"
+    token: Optional[str] = None  # 用于验证请求的令牌
 
 # 用于通知确认的请求模型
 class NotificationConfirm(BaseModel):
@@ -181,6 +174,18 @@ class NotificationListResponse(NotificationList):
         "from_attributes": True
     }
 
+class MessageResponse(MessageBase):
+    id: int
+    created_at: datetime
+    user_id: Optional[int] = None
+    
+    model_config = {
+        "from_attributes": True
+    }
+
+class MessageListResponse(BaseModel):
+    items: List[MessageResponse]
+    total: int
 
     
 

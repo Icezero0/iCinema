@@ -67,8 +67,10 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=get_utc_now)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False)
+    # 用户删除时设置为NULL（匿名消息）
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # 房间删除时级联删除消息
+    room_id = Column(Integer, ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False)
     
     user = relationship("User", back_populates="messages")
     room = relationship("Room", back_populates="messages")
@@ -76,13 +78,12 @@ class Message(Base):
 class Notification(Base):
     __tablename__ = "notifications"
     id = Column(Integer, primary_key=True, index=True)
-    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 通知接收方
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # 通知发送方，可以为空（系统发送）
+    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     content = Column(String, nullable=False)
     status = Column(String, nullable=False, default="unread")
     created_at = Column(DateTime(timezone=True), default=get_utc_now)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
-    # 修改关系，使用不同的外键引用同一个表
     recipient = relationship("User", foreign_keys=[recipient_id], back_populates="received_notifications")
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_notifications")

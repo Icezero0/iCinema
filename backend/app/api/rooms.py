@@ -1,28 +1,15 @@
 import json
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
-import secrets
 from .. import schemas, crud
 from ..database import get_db
 from .users import get_current_user
+from ..utils.notifications import create_notification_content 
 
 router = APIRouter()
-
-def create_notification_content(
-    room_id: int, 
-    user_id: int, 
-    type: str
-):
-    token = secrets.token_urlsafe(16)
-    content_data = {
-        "room_id": room_id,
-        "user_id": user_id,
-        "type": type,
-        "token": token
-    }
-    return json.dumps(content_data)
 
 @router.post("/rooms/", response_model=schemas.RoomResponse)
 async def create_room(
@@ -220,3 +207,26 @@ async def create_room_invitation(
                 status_code=status.HTTP_400_BAD_REQUEST, 
                 detail="Unknown action"
             )
+
+@router.delete("/rooms/{room_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_room_member(
+    room_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    # 获取房间信息
+    db_room = await crud.rooms.get_room(db, room_id)
+    if not db_room:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="房间不存在")
+    # 权限校验：房主或本人
+    if current_user.id != user_id and current_user.id != db_room.owner_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限移除该成员")
+    # 不允许移除房主
+    if user_id == db_room.owner_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能移除房主")
+    # 移除成员
+    success = await crud.rooms.remove_room_member(db, room_id, user_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="移除成员失败")
+    return None

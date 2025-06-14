@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from .. import models, schemas
 from typing import Optional, List
 from sqlalchemy.orm import selectinload
@@ -81,12 +81,25 @@ async def get_room_details(
         .options(
             selectinload(models.Room.owner),
             selectinload(models.Room.members),
-            # selectinload(models.Room.messages)
+            selectinload(models.Room.messages)
         )
         .where(models.Room.id == room_id)
     )
     result = await db.execute(query)
     return result.unique().scalar_one_or_none()
+
+async def get_room_member_ids(
+    db: AsyncSession, 
+    room_id: int
+) -> List[int]:
+    # 获取房间成员信息
+    result = await db.execute(
+        select(models.room_members.c.user_id)
+        .where(models.room_members.c.room_id == room_id)
+    )
+    member_ids = result.scalars().all()
+    return list(member_ids)
+    
 
 async def add_room_member(
     db: AsyncSession, 
@@ -94,14 +107,10 @@ async def add_room_member(
     user_id: int
 ) -> bool:
     # 添加房间成员
-    room = await db.get(models.Room, room_id)
-    user = await db.get(models.User, user_id)
-    
-    if room and user:
-        room.members.append(user)
-        await db.commit()
-        return True
-    return False
+    stmt = insert(models.room_members).values(room_id=room_id, user_id=user_id, user_type=models.UserType.MEMBER)
+    await db.execute(stmt)
+    await db.commit()
+    return True
 
 async def remove_room_member(
     db: AsyncSession, 
@@ -109,12 +118,16 @@ async def remove_room_member(
     user_id: int
 ) -> bool:
     # 移除房间成员
-    db_room = await get_room_details(db, room_id)
-    if db_room:
-        db_room.members = [m for m in db_room.members if m.id != user_id]
-        await db.commit()
-        return True
-    return False
+    stmt = (
+        models.room_members.delete()
+        .where(
+            models.room_members.c.room_id == room_id,
+            models.room_members.c.user_id == user_id
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return True
 
 async def update_room(
     db: AsyncSession, 
