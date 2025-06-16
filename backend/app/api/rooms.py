@@ -1,12 +1,12 @@
 import json
 import secrets
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
-from .. import schemas, crud
+from .. import schemas, crud, models
 from ..database import get_db
-from .users import get_current_user
+from app.auth import dependencies as auth_deps
 from ..utils.notifications import create_notification_content 
 
 router = APIRouter()
@@ -15,7 +15,7 @@ router = APIRouter()
 async def create_room(
     room: schemas.RoomCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(auth_deps.get_current_user)
 ):
     print(f"Creating room with data: {room}")
     # 创建房间，房主为当前用户
@@ -37,7 +37,7 @@ async def create_room(
 async def delete_room(
     room_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(auth_deps.get_current_user)
 ):
     # 删除房间（仅房主可操作）
     db_room = await crud.rooms.get_room(db, room_id)
@@ -88,7 +88,7 @@ async def update_room(
     room_id: int,
     room_update: schemas.RoomUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(auth_deps.get_current_user)
 ):
     # 更新房间信息（仅房主可操作）
     db_room = await crud.rooms.get_room(db, room_id)
@@ -105,12 +105,10 @@ async def create_room_invitation(
     room_id: int,
     roomMemberAdd: schemas.RoomMemberAdd,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(auth_deps.get_current_user)
 ):
     """
     将用户添加为房间成员
-    - 如果邀请者是房主，直接添加用户到房间
-    - 如果邀请者不是房主，创建一条通知记录（待实现）
     """
     # 1. 获取房间信息
     db_room = await crud.rooms.get_room_details(db, room_id)
@@ -213,7 +211,7 @@ async def remove_room_member(
     room_id: int,
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(auth_deps.get_current_user)
 ):
     # 获取房间信息
     db_room = await crud.rooms.get_room(db, room_id)
@@ -225,8 +223,57 @@ async def remove_room_member(
     # 不允许移除房主
     if user_id == db_room.owner_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能移除房主")
+    
+    # 校验：该用户必须在房间内
+    is_member = await crud.rooms.is_room_member(db, room_id, user_id)
+    if not is_member:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该用户不在房间内")
     # 移除成员
     success = await crud.rooms.remove_room_member(db, room_id, user_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="移除成员失败")
     return None
+
+@router.get("/rooms", response_model=schemas.RoomList)
+async def list_rooms(
+    skip: int = Query(0, ge=0, description="分页起始位置"),
+    limit: int = Query(20, ge=1, le=100, description="分页数量"),
+    name: str = Query(None, description="房间名模糊搜索"),
+    owner_id: int = Query(None, description="房主ID"),
+    is_active: bool = Query(None, description="是否活跃"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    分页获取房间列表，支持按名称、房主、活跃状态筛选。
+    """
+    rooms, total = await crud.rooms.get_rooms_by_filter(
+        db=db,
+        name=name,
+        owner_id=owner_id,
+        is_active=is_active,
+        skip=skip,
+        limit=limit
+    )
+    items = [schemas.Room.model_validate(room, from_attributes=True) for room in rooms]
+    return schemas.RoomList(items=items, total=total)
+
+@router.get("/users/me/room_ids", response_model=List[int])
+async def get_my_room_ids(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(auth_deps.get_current_user)
+):
+    """
+    查询当前用户所在的所有房间id（包括拥有和加入的房间）
+    """
+    # 获取拥有的房间id
+    owned_query = select(models.Room.id).where(models.Room.owner_id == current_user.id)
+    owned_result = await db.execute(owned_query)
+    owned_ids = set(owned_result.scalars().all())
+
+    # 获取加入的房间id
+    joined_query = select(models.room_members.c.room_id).where(models.room_members.c.user_id == current_user.id)
+    joined_result = await db.execute(joined_query)
+    joined_ids = set(joined_result.scalars().all())
+
+    all_ids = list(owned_ids | joined_ids)
+    return all_ids

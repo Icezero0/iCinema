@@ -1,16 +1,11 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, status, Form
-from sqlalchemy.ext.asyncio import AsyncSession
-from .. import crud, schemas
-from ..database import get_db
-from .users import get_current_user
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from ..utils.notifications import create_notification_content 
-
 from .. import crud, models, schemas
+from ..database import get_db
+from ..utils.notifications import create_notification_content 
+from app.auth.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -113,6 +108,11 @@ async def respond_to_notification(
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无效的令牌")
             # 处理房主邀请的逻辑
             if response_action.action == "accept":
+                # 检查用户是否已在房间
+                is_member = await crud.rooms.is_room_member(db, target_room_id, target_user_id)
+                if is_member:
+                    await crud.notifications.update_notification(db, notification_id, status="already_in_room", is_deleted=True)
+                    return {"message": "用户已经在该房间中了"}
                 await crud.rooms.add_room_member(db, target_room_id, target_user_id)
                 await crud.notifications.update_notification(db, notification_id, status="accepted", is_deleted=True)
                 return {"message": "邀请已接受，用户已添加到房间"}
@@ -126,6 +126,10 @@ async def respond_to_notification(
         elif notification_type == "member_invitation":
             # 成员邀请用户加入房间
             if response_action.action == "accept":
+                is_member = await crud.rooms.is_room_member(db, target_room_id, target_user_id)
+                if is_member:
+                    await crud.notifications.update_notification(db, notification_id, status="already_in_room", is_deleted=True)
+                    return {"message": "用户已经在该房间中了"}
                 await crud.notifications.create_notification(db, recipient_id=target_room.owner_id,
                     sender_id=current_user.id, 
                     content=create_notification_content(
@@ -154,6 +158,10 @@ async def respond_to_notification(
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无效的令牌")
             # 处理用户申请加入的逻辑
             if response_action.action == "accept":
+                is_member = await crud.rooms.is_room_member(db, target_room_id, target_user_id)
+                if is_member:
+                    await crud.notifications.update_notification(db, notification_id, status="already_in_room", is_deleted=True)
+                    return {"message": "用户已经在该房间中了"}
                 await crud.rooms.add_room_member(db, target_room_id, target_user_id)
                 await crud.notifications.update_notification(db, notification_id, status="accepted", is_deleted=True)
                 return {"message": "邀请已接受，用户已添加到房间"}
@@ -166,5 +174,22 @@ async def respond_to_notification(
         # 未知类型，更新通知状态并返回错误
         await crud.notifications.update_notification(db, notification_id, status="error_unknown_type", is_deleted=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"未知的通知类型: {notification_type}")
+
+@router.delete("/notifications/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notification(
+    notification_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    db_notification = await crud.notifications.get_notification(db, notification_id)
+    if not db_notification or bool(db_notification.is_deleted):
+        raise HTTPException(status_code=404, detail="通知不存在")
+    # 只能删除属于自己的通知
+    if db_notification.recipient_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权限删除该通知")
+    updated = await crud.notifications.update_notification(db, notification_id, is_deleted=True)
+    if not updated:
+        raise HTTPException(status_code=400, detail="删除失败")
+    return None
 
 

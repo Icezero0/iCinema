@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+
 from .api import users, rooms, notifications, messages
+from .websocket import routes as websocket_routes
 from contextlib import asynccontextmanager
 from app.database import engine
 from app.models import Base
@@ -36,6 +38,7 @@ app.include_router(users.router, tags=["users"])
 app.include_router(rooms.router, tags=["rooms"])
 app.include_router(notifications.router, tags=["notifications"])
 app.include_router(messages.router, tags=["messages"])
+app.include_router(websocket_routes.router, tags=["websocket"])
 
 @app.get("/")
 async def read_root():

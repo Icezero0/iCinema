@@ -1,24 +1,59 @@
 <template>
   <div class="page-container">
-    <div class="home-card">
-      <div class="profile-header" @mouseenter="showDropdown = true" @mouseleave="showDropdown = false">
-        <img :src="avatarUrl" alt="avatar" class="avatar" />
-        <span class="username">{{ username }}</span>
-        <transition name="dropdown-fade">
-          <div v-if="showDropdown" class="dropdown-menu">
-            <div class="dropdown-item" @click="goToProfile">编辑个人资料</div>
-            <div class="dropdown-item" @click="logout">退出登录</div>
-          </div>
-        </transition>
-      </div>
-      <div class="card-container">
-        <div class="room-card">
-          <h2>大厅房间</h2>
-          <!-- 可添加大厅房间内容或入口按钮 -->
+    <button class="notification-btn" @click="goToNotifications">
+      通知<span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
+    </button>
+    <div class="profile-header" @mouseenter="showDropdown = true" @mouseleave="showDropdown = false">
+      <img :src="avatarUrl" alt="avatar" class="avatar" />
+      <span class="username">{{ username }}</span>
+      <transition name="dropdown-fade">
+        <div v-if="showDropdown" class="dropdown-menu">
+          <div class="dropdown-item" @click="goToProfile">编辑个人资料</div>
+          <div class="dropdown-item" @click="logout">退出登录</div>
         </div>
-        <div class="room-card">
-          <h2>我的房间</h2>
-          <!-- 可添加我的房间内容或入口按钮 -->
+      </transition>
+    </div>
+    <div class="card-container">
+      <!-- 大厅房间 -->
+      <div class="room-card">
+        <h2>大厅房间</h2>
+        <div v-if="loadingPublicRooms" class="room-hint">加载中...</div>
+        <div v-else-if="publicRooms.length === 0" class="room-hint">暂无大厅房间</div>
+        <ul v-else class="room-list">
+          <li v-for="room in publicRooms" :key="room.id" class="room-list-item">
+            <span>{{ room.name }}</span>
+            <button
+              v-if="myRoomIds.includes(room.id)"
+              @click="enterRoom(room.id)"
+            >进入</button>
+            <button
+              v-else
+              @click="applyToJoin(room.id)"
+              class="apply-btn"
+            >申请加入</button>
+          </li>
+        </ul>
+        <div class="pagination" v-if="publicTotal > pageSize">
+          <button :disabled="publicPage === 1" @click="changePublicPage(publicPage - 1)">上一页</button>
+          <span>第 {{ publicPage }} / {{ publicTotalPages }} 页</span>
+          <button :disabled="publicPage === publicTotalPages" @click="changePublicPage(publicPage + 1)">下一页</button>
+        </div>
+      </div>
+      <!-- 我的房间 -->
+      <div class="room-card">
+        <h2>我的房间</h2>
+        <div v-if="loadingMyRooms" class="room-hint">加载中...</div>
+        <div v-else-if="myRooms.length === 0" class="room-hint">暂无我的房间</div>
+        <ul v-else class="room-list">
+          <li v-for="room in myRooms" :key="room.id" class="room-list-item">
+            <span>{{ room.name }}</span>
+            <button @click="enterRoom(room.id)">进入</button>
+          </li>
+        </ul>
+        <div class="pagination" v-if="myTotal > pageSize">
+          <button :disabled="myPage === 1" @click="changeMyPage(myPage - 1)">上一页</button>
+          <span>第 {{ myPage }} / {{ myTotalPages }} 页</span>
+          <button :disabled="myPage === myTotalPages" @click="changeMyPage(myPage + 1)">下一页</button>
         </div>
       </div>
     </div>
@@ -29,24 +64,49 @@
       @ok="handleLogoutConfirm"
       @cancel="handleLogoutCancel"
     />
+    <div v-if="showJoinRequestTip" class="member-invite-tip-mask">
+      <div class="member-invite-tip">
+        <div>{{ joinRequestTipMsg }}</div>
+        <button @click="showJoinRequestTip = false">知道了</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 import CustomConfirm from '@/components/CustomConfirm.vue';
 import { useUserInfo } from '@/composables/useUserInfo.js';
-import { getImageUrl } from '@/utils/api';
+import { getImageUrl, API_BASE_URL } from '@/utils/api';
 
 const showDropdown = ref(false);
 const showLogoutConfirm = ref(false);
 const router = useRouter();
 const USER_CACHE_KEY = 'icinema_user';
-// 初始化时优先从sessionStorage读取缓存用户信息
 const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
 const { username, avatarUrl, email, fetchUserInfo } = useUserInfo();
+
+// 分页相关
+const pageSize = 10;
+// 大厅房间
+const publicRooms = ref([]);
+const publicTotal = ref(0);
+const publicPage = ref(1);
+const loadingPublicRooms = ref(false);
+const publicTotalPages = computed(() => Math.ceil(publicTotal.value / pageSize));
+// 我的房间
+const myRooms = ref([]);
+const myTotal = ref(0);
+const myPage = ref(1);
+const loadingMyRooms = ref(false);
+const myTotalPages = computed(() => Math.ceil(myTotal.value / pageSize));
+// 通知数量
+const notificationCount = ref(0);
+const showJoinRequestTip = ref(false);
+const joinRequestTipMsg = ref('');
+const myRoomIds = ref([]);
 
 if (cachedUser) {
   try {
@@ -62,36 +122,175 @@ if (cachedUser) {
     if (userObj.email) {
       email.value = userObj.email;
     }
-  } catch (e) {
-    // ignore parse error
-  }
+  } catch (e) {}
 }
 
 onMounted(async () => {
-  // 如果sessionStorage有缓存，则不请求后端
-  if (cachedUser) {
-    return;
+  if (!cachedUser) {
+    await fetchUserInfo();
   }
-  await fetchUserInfo();
+  await fetchMyRoomIds();
+  await fetchPublicRooms();
+  await fetchMyRooms();
+  await fetchNotificationCount();
 });
 
+async function fetchPublicRooms() {
+  loadingPublicRooms.value = true;
+  try {
+    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+    const skip = (publicPage.value - 1) * pageSize;
+    // 不加任何filter，直接查所有房间
+    const res = await fetch(`${API_BASE_URL}/rooms?skip=${skip}&limit=${pageSize}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      publicRooms.value = data.items || data || [];
+      publicTotal.value = data.total || (data.items ? data.items.length : 0);
+    } else {
+      publicRooms.value = [];
+      publicTotal.value = 0;
+    }
+  } catch (e) {
+    publicRooms.value = [];
+    publicTotal.value = 0;
+  } finally {
+    loadingPublicRooms.value = false;
+  }
+}
+
+async function fetchMyRooms() {
+  loadingMyRooms.value = true;
+  try {
+    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+    const skip = (myPage.value - 1) * pageSize;
+    const res = await fetch(`${API_BASE_URL}/users/me?rooms_skip=0&rooms_limit=1000`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      // 合并 owned/joined 并去重
+      const owned = (data.rooms_owned && data.rooms_owned.items) ? data.rooms_owned.items : [];
+      const joined = (data.rooms_joined && data.rooms_joined.items) ? data.rooms_joined.items : [];
+      const allRooms = [...owned, ...joined];
+      // 用 Map 去重
+      const uniqueRooms = Array.from(new Map(allRooms.map(r => [r.id, r])).values());
+      myTotal.value = uniqueRooms.length;
+      myRooms.value = uniqueRooms.slice(skip, skip + pageSize);
+    } else {
+      myRooms.value = [];
+      myTotal.value = 0;
+    }
+  } catch (e) {
+    myRooms.value = [];
+    myTotal.value = 0;
+  } finally {
+    loadingMyRooms.value = false;
+  }
+}
+
+async function fetchMyRoomIds() {
+  try {
+    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+    const res = await fetch(`${API_BASE_URL}/users/me/room_ids`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      myRoomIds.value = await res.json();
+    } else {
+      myRoomIds.value = [];
+    }
+  } catch (e) {
+    myRoomIds.value = [];
+  }
+}
+
+async function fetchNotificationCount() {
+  try {
+    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+    const res = await fetch(`${API_BASE_URL}/notifications/?skip=0&limit=1`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      notificationCount.value = data.total || 0;
+    } else {
+      notificationCount.value = 0;
+    }
+  } catch (e) {
+    notificationCount.value = 0;
+  }
+}
+
+function changePublicPage(page) {
+  if (page < 1 || page > publicTotalPages.value) return;
+  publicPage.value = page;
+  fetchPublicRooms();
+}
+function changeMyPage(page) {
+  if (page < 1 || page > myTotalPages.value) return;
+  myPage.value = page;
+  fetchMyRooms();
+}
+function enterRoom(roomId) {
+  router.push({ path: '/room', query: { id: roomId } });
+}
 function goToProfile() {
   router.push('/profile');
 }
-
 function logout() {
   showLogoutConfirm.value = true;
 }
-
 function handleLogoutConfirm() {
   document.cookie = 'accesstoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
   document.cookie = 'refreshtoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
+  sessionStorage.removeItem('icinema_user'); // 清除用户信息缓存
   showLogoutConfirm.value = false;
   router.push('/login');
 }
-
 function handleLogoutCancel() {
   showLogoutConfirm.value = false;
+}
+function goToNotifications() {
+  router.push('/notifications');
+}
+function applyToJoin(roomId) {
+  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  let userId = null;
+  const cachedUser = sessionStorage.getItem('icinema_user');
+  if (cachedUser) {
+    try {
+      const userObj = JSON.parse(cachedUser);
+      userId = userObj.id;
+    } catch (e) {}
+  }
+  if (!userId) {
+    joinRequestTipMsg.value = '无法获取用户ID，请重新登录';
+    showJoinRequestTip.value = true;
+    return;
+  }
+  fetch(`${API_BASE_URL}/rooms/${roomId}/members`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'join_request', user_id: userId }),
+  })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+      if (ok) {
+        joinRequestTipMsg.value = '已提交申请，等待房主审核';
+      } else {
+        joinRequestTipMsg.value = data.detail || '申请失败';
+      }
+      showJoinRequestTip.value = true;
+    })
+    .catch(() => {
+      joinRequestTipMsg.value = '网络错误，申请失败';
+      showJoinRequestTip.value = true;
+    });
 }
 </script>
 
@@ -103,25 +302,6 @@ function handleLogoutCancel() {
   min-height: 100vh;
   background: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
   padding: 1rem;
-}
-
-.home-card {
-  background: white;
-  padding: 2.5rem;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  width: 80%;
-  height: 80%;
-  max-width: none;
-  text-align: center;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-height: 500px;
-  box-sizing: border-box;
-  flex: 1 1 auto;
-  margin-top: 10vh;
 }
 
 .profile-header {
@@ -139,6 +319,38 @@ function handleLogoutCancel() {
   z-index: 10;
   box-sizing: border-box;
   cursor: pointer;
+}
+
+.notification-btn {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.7rem 1.5rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: background 0.2s;
+}
+.notification-btn:hover {
+  background: #0056b3;
+}
+.notification-badge {
+  display: inline-block;
+  background: #f44336;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  min-width: 1.6em;
+  height: 1.6em;
+  line-height: 1.6em;
+  text-align: center;
+  margin-left: 0.5em;
+  vertical-align: middle;
 }
 
 .dropdown-menu {
@@ -190,17 +402,19 @@ function handleLogoutCancel() {
   gap: 2rem;
   justify-content: center;
   align-items: flex-start;
+  margin: 10px 6vw 2rem 6vw; /* 上边距100px，左右6vw，底部2rem */
   width: 100%;
-  margin: 3rem;
+  height: auto;
+  min-height: 0;
   position: relative;
   top: 0;
 }
 
 .room-card {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  padding: 2.5rem 2rem;
+  background: linear-gradient(120deg, #f8fafc 0%, #e6eaf5 100%); /* 卡片淡色渐变 */
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(0, 80, 180, 0.08), 0 1.5px 8px rgba(0,0,0,0.04);
+  padding: 2.5rem 2rem 1.2rem 2rem;
   flex: 1 1 0;
   min-width: 260px;
   display: flex;
@@ -209,10 +423,95 @@ function handleLogoutCancel() {
   justify-content: flex-start;
 }
 
+.room-card:first-child {
+  margin-left: 6vw;
+}
+
+.room-card:last-child {
+  margin-right: 6vw;
+}
+
 .room-card h2 {
   font-size: 1.5rem;
   color: #007bff;
   margin-bottom: 1.5rem;
+}
+
+.room-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.room-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.room-list-item:last-child {
+  border-bottom: none;
+}
+
+.room-list-item button {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.3rem 1rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+
+.room-list-item button:hover {
+  background: #0056b3;
+}
+
+.apply-btn {
+  background: #28a745 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 0.3rem 1rem !important;
+  cursor: pointer !important;
+  font-size: 1rem !important;
+  transition: background 0.2s !important;
+}
+.apply-btn:hover {
+  background: #218838 !important;
+}
+
+.room-hint {
+  color: #888;
+  margin-bottom: 1rem;
+}
+
+.pagination {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.pagination button {
+  background: #f0f0f0;
+  border: none;
+  border-radius: 6px;
+  padding: 0.3rem 1rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+
+.pagination button:disabled {
+  background: #e0e0e0;
+  color: #aaa;
+  cursor: not-allowed;
 }
 
 .dropdown-fade-enter-active, .dropdown-fade-leave-active {
@@ -225,5 +524,42 @@ function handleLogoutCancel() {
 .dropdown-fade-enter-to, .dropdown-fade-leave-from {
   opacity: 1;
   transform: translateY(0) scaleY(1);
+}
+
+.member-invite-tip-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.18);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.member-invite-tip {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.13);
+  padding: 2.2rem 2.5rem 1.5rem 2.5rem;
+  min-width: 260px;
+  text-align: center;
+  font-size: 1.15rem;
+  color: #333;
+}
+.member-invite-tip button {
+  margin-top: 1.2rem;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.4rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.member-invite-tip button:hover {
+  background: #115293;
 }
 </style>

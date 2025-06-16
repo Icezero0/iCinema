@@ -3,76 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import crud, schemas
 from ..database import get_db
 from typing import List, Optional
-from fastapi.security import OAuth2PasswordBearer
-from datetime import datetime, timedelta, timezone
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from datetime import datetime
+from app.auth import utils as auth_utils
+from app.auth import dependencies as auth_deps
+from app.auth.config import ACCESS_TOKEN_EXPIRE_MINUTES
 import base64
 import os
 import random
 import string
 
 router = APIRouter()
-
-# 密码加密工具
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# JWT 相关设置
-SECRET_KEY = "c0da4f43a9a4a549d83a93a56f5d6e8257f5ed40218a9a8170705d6cfd8c9074"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-REFRESH_TOKEN_EXPIRE_DAYS = 7
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# 验证密码
-def verify_password(plain_password: str, hashed_password: str):
-    return pwd_context.verify(plain_password, hashed_password)
-
-# 获取密码哈希
-def get_password_hash(password: str):
-    return pwd_context.hash(password)
-
-# 创建访问令牌
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-# 创建刷新令牌
-def create_refresh_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-# 验证token并解析，通过查询其中的标识获取当前用户
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
-) -> schemas.User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        uid = payload.get("sub")
-        if uid is None:
-            raise credentials_exception
-    except JWTError as e:
-        raise credentials_exception
-    db_user = await crud.users.get_user(db, user_id=uid)
-    if db_user is None:
-        raise credentials_exception
-    return schemas.User.model_validate(db_user)
 
 # 登录用表单类
 class OAuth2EmailRequestForm:
@@ -90,18 +30,17 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     user = await crud.users.get_user_by_email(db, form_data.email) 
-    if not user or not verify_password(form_data.password, str(user.hashed_password)):
+    if not user or not auth_utils.verify_password(form_data.password, str(user.hashed_password)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     # 创建访问令牌和刷新令牌
-    access_token = create_access_token(
-        data={"sub": str(user.id)},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth_utils.create_access_token(
+        data={"sub": str(user.id)}
     )
-    refresh_token = create_refresh_token(
+    refresh_token = auth_utils.create_refresh_token(
         data={"sub": str(user.id)},
     )
 
@@ -113,24 +52,18 @@ async def login(
 
 @router.post("/token/refresh")
 async def refresh_token(
-    refresh_token: str = Depends(OAuth2PasswordBearer(tokenUrl="token/refresh")),
+    refresh_token: str = Depends(auth_deps.refresh_token_scheme),
     db: AsyncSession = Depends(get_db)
 ):
-    try:
-        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        uid = payload.get("sub")
-        if uid is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token"
-            )
-    except JWTError:
+    # 使用auth模块的verify_token函数
+    uid = auth_utils.verify_token(refresh_token)
+    if uid is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token"
         )
         
-    user = await crud.users.get_user(db, user_id = uid)
+    user = await crud.users.get_user(db, user_id=uid)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -138,9 +71,8 @@ async def refresh_token(
         )
         
     # 创建新的访问令牌
-    access_token = create_access_token(
-        data={"sub": str(user.id)},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth_utils.create_access_token(
+        data={"sub": str(user.id)}
     )
     
     return {
@@ -168,14 +100,14 @@ async def create_user(
             detail="用户名已被使用！"
         )
     # 创建新用户，密码加密处理
-    user.password = get_password_hash(user.password)
+    user.password = auth_utils.get_password_hash(user.password)
     return await crud.users.create_user(db=db, user=user)
 
 @router.get("/users/me", response_model=schemas.UserDetailsResponse)
 async def read_users_me(
     db: AsyncSession = Depends(get_db),
     include_room_details: bool = False,
-    current_user = Depends(get_current_user)
+    current_user = Depends(auth_deps.get_current_user)
 ):
     """
     获取当前登录用户的详细信息，包括基本信息、拥有的房间、加入的房间和通知
@@ -248,20 +180,20 @@ async def read_users_me(
     
     return user_response
 
-# @router.get("/users/{user_id}", response_model=schemas.UserResponse)
-# async def read_user(
-#     user_id: int,
-#     db: AsyncSession = Depends(get_db)
-# ):
-#     db_user: schemas.UserResponse = await crud.users.get_user(db, user_id=user_id)
-#     if db_user is None:
-#         raise HTTPException(status_code=404, detail="User not found")
-#     return db_user
+@router.get("/users/{user_id}", response_model=schemas.UserResponse)
+async def read_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    db_user: schemas.UserResponse = await crud.users.get_user(db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
 
 @router.put("/users/me", response_model=schemas.User)
 async def update_user_me(
     user_update: schemas.UserUpdate,
-    current_user = Depends(get_current_user),
+    current_user = Depends(auth_deps.get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     update_data = {}
@@ -311,7 +243,7 @@ async def update_user_me(
     
     # 保存新密码
     if user_update.password is not None:
-        hashed_password = get_password_hash(user_update.password)
+        hashed_password = auth_utils.get_password_hash(user_update.password)
         update_data["hashed_password"] = hashed_password
     
     return await crud.users.update_user(
@@ -321,5 +253,5 @@ async def update_user_me(
     )
 
 @router.get("/token/check")
-async def check_access_token(current_user = Depends(get_current_user)):
+async def check_access_token(current_user = Depends(auth_deps.get_current_user)):
     return {"status": "valid"}

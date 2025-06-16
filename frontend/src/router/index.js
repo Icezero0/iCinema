@@ -4,6 +4,7 @@ import Home from '../views/Home.vue';
 import Profile from '../views/Profile.vue';
 import Register from '../views/Register.vue';
 import Room from '../views/Room.vue';
+import Notifications from '../views/Notifications.vue';
 import { checkAccessToken, clearTokens } from '../utils/auth';
 import { API_BASE_URL } from '../utils/api';
 
@@ -14,6 +15,7 @@ const routes = [
   { path: '/profile', component: Profile },
   { path: '/register', component: Register },
   { path: '/room', component: Room },
+  { path: '/notifications', component: Notifications },
 ];
 
 const router = createRouter({

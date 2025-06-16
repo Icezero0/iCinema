@@ -350,3 +350,30 @@ async def get_user_rooms(
     db_rooms = list(result.scalars().all())
     
     return db_rooms, total
+
+async def update_room_active_status(
+    db: AsyncSession,
+    room_id: int,
+    is_active: bool
+) -> bool:
+    """
+    更新房间的活跃状态
+    
+    参数:
+    - db: 数据库会话
+    - room_id: 房间ID
+    - is_active: 是否活跃
+    
+    返回:
+    - 布尔值，表示是否更新成功
+    """
+    from sqlalchemy import update
+    
+    stmt = (
+        update(models.Room)
+        .where(models.Room.id == room_id)
+        .values(is_active=is_active)
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.rowcount > 0

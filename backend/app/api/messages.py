@@ -3,7 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from .. import schemas, crud
 from ..database import get_db
-from .users import get_current_user
+from app.auth.dependencies import get_current_user
+from app.websocket.manager import manager
+from datetime import datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -34,7 +39,7 @@ async def create_message(
             detail="您不是该房间的成员，无权发送消息"
         )
     
-    # 创建消息
+    # 创建消息并保存到数据库
     db_message = await crud.messages.create_message(
         db=db,
         message=message,
@@ -42,7 +47,47 @@ async def create_message(
         user_id=current_user.id
     )
     
-    return
+    # 提交数据库事务
+    await db.commit()
+    
+    # 刷新消息对象以获取数据库生成的字段
+    await db.refresh(db_message)
+    
+    # 通过 WebSocket 广播消息给房间内的其他用户
+    try:
+        # 构造 WebSocket 广播消息
+        timestamp = datetime.now(timezone.utc).isoformat()
+        ws_message = {
+            "type": "room_message",
+            "payload": {
+                "id": db_message.id,
+                "room_id": room_id,
+                "sender_id": current_user.id,
+                "sender_username": current_user.username,  # 方便前端显示
+                "content": message.content,
+                "timestamp": timestamp
+            }
+        }
+        
+        # 向房间内除发送者外的所有在线用户广播
+        sent_count = await manager.broadcast_to_room(room_id, ws_message, exclude_user=current_user.id)
+        
+        return {
+            "message": "消息发送成功",
+            "message_id": db_message.id,
+            "sent_to_online_users": sent_count,
+            "timestamp": timestamp
+        }
+        
+    except Exception as e:
+        # WebSocket 广播失败不应该影响消息保存
+        logger.error(f"Failed to broadcast message {db_message.id}: {e}")
+        return {
+            "message": "消息已保存，但广播失败",
+            "message_id": db_message.id,
+            "sent_to_online_users": 0,
+            "timestamp": timestamp
+        }
 
 @router.get("/rooms/{room_id}/messages/", response_model=schemas.MessageListResponse)
 async def get_room_messages(
