@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from .. import crud, schemas
 from ..database import get_db
@@ -255,3 +255,20 @@ async def update_user_me(
 @router.get("/token/check")
 async def check_access_token(current_user = Depends(auth_deps.get_current_user)):
     return {"status": "valid"}
+
+@router.get("/users/", response_model=schemas.UserList)
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0, description="分页起始位置"),
+    limit: int = Query(20, ge=1, le=100, description="分页数量"),
+    email: Optional[str] = Query(None, description="邮箱精确匹配"),
+    username: Optional[str] = Query(None, description="用户名模糊匹配"),
+    userid: Optional[int] = Query(None, description="用户ID精确匹配")
+):
+    """
+    分页检索用户，支持邮箱、用户名、用户ID检索
+    """
+    # print(userid)
+    users, total = await crud.users.get_users(db, skip=skip, limit=limit, email=email, username=username, userid=userid)
+    user_items = [schemas.User.model_validate(user, from_attributes=True) for user in users]
+    return schemas.UserList(items=user_items, total=total)

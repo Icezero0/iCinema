@@ -52,7 +52,7 @@ import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 import AvatarUploader from '@/components/AvatarUploader.vue';
 import CustomConfirm from '@/components/CustomConfirm.vue';
-import { useUserInfo } from '@/composables/useUserInfo.js';
+import { useMyUserInfo } from '@/composables/useUserInfo.js';
 import { API_BASE_URL, getImageUrl } from '@/utils/api';
 
 const router = useRouter();
@@ -64,7 +64,7 @@ let savePending = false; // 防止重复提交
 // 用户数据缓存key
 const USER_CACHE_KEY = 'icinema_user';
 
-const { username, avatarUrl, email, fetchUserInfo } = useUserInfo();
+const { username, avatarUrl, email, fetchUserInfo } = useMyUserInfo();
 
 // 初始化时优先从sessionStorage读取缓存用户信息
 const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);

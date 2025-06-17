@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 from .. import models, schemas
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from datetime import datetime
 from sqlalchemy.orm import selectinload
 
@@ -66,6 +66,31 @@ async def update_user(
             await db.rollback()
             raise e
     return user
+
+async def get_users(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 20,
+    email: Optional[str] = None,
+    username: Optional[str] = None,
+    userid: Optional[int] = None
+) -> Tuple[List[models.User], int]:
+    query = select(models.User)
+    if userid is not None:
+        query = query.where(models.User.id == userid)
+    if email:
+        query = query.where(models.User.email == email)
+    if username:
+        query = query.where(models.User.username.ilike(f"%{username}%"))
+    total_result = await db.execute(
+        select(func.count()).select_from(query.subquery())
+    )
+    total = total_result.scalar()
+    result = await db.execute(query.offset(skip).limit(limit))
+    users = result.scalars().all()
+    users = list(users)
+    total = total if total is not None else 0
+    return users, total
 
 # async def delete_user(db: AsyncSession, user_id: int) -> bool:
 #     # 删除用户

@@ -105,9 +105,20 @@
         <div class="room-members-label">房间成员</div>
         <div class="room-members-bar" ref="membersBarRef">
           <template v-if="roomMembers.length > 0">
-            <div v-for="member in roomMembers" :key="member.id" class="room-member-item" :class="{ owner: member.isOwner }">
+            <div v-for="(member, idx) in roomMembers" :key="member.id" class="room-member-item" :class="{ owner: member.isOwner }">
               <UserAvatar :src="member.avatarUrl" :alt="member.username" size="38" class="room-member-avatar" />
               <div class="room-member-name">{{ member.username }}</div>
+            </div>
+            <!-- 新增：添加用户按钮（加号），始终在最后一个用户后 -->
+            <div class="room-member-item add-member-btn" @click="showAddUserDialog = true" title="添加成员" style="cursor:pointer;">
+              <div class="room-member-avatar" style="display:flex;align-items:center;justify-content:center;background:#e5e6eb;border-radius:50%;width:38px;height:38px;">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="11" fill="#fff"/>
+                  <path d="M11 6V16" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M6 11H16" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="room-member-name" style="text-align:center;color:#888;font-size:13px;margin-top:2px;">添加成员</div>
             </div>
           </template>
           <template v-else>
@@ -116,10 +127,46 @@
               <div class="room-member-name">测试用户</div>
             </div>
           </template>
+          <!-- 添加成员弹窗（内容占位） -->
+          <div v-if="showAddUserDialog" class="add-user-dialog-mask">
+            <div class="add-user-dialog">
+              <div class="dialog-title">添加成员</div>
+              <div class="dialog-content">
+                <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
+                  <input v-model="userSearchQuery" @keyup.enter="fetchUserList" placeholder="输入邮箱或用户名检索" style="flex:1;padding:6px 10px;border:1px solid #ccc;border-radius:4px;" />
+                  <button @click="fetchUserList" style="padding:6px 16px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;">查询</button>
+                </div>
+                <div v-if="userListLoading" style="text-align:center;color:#888;">加载中...</div>
+                <div v-else>
+                  <div v-if="userList.length === 0" style="text-align:center;color:#888;">暂无用户</div>
+                  <ul v-else style="max-height:220px;overflow:auto;padding:0 0 8px 0;margin:0;list-style:none;">
+                    <li v-for="user in userList" :key="user.id" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+                      <UserAvatar :src="user.avatarUrl || defaultAvatar" :alt="user.username" :size="32" style="width:32px;height:32px;" />
+                      <span style="flex:1;">{{ user.username }}</span>
+                      <template v-if="roomMembers.some(m => m.id === user.id)">
+                        <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已在房间</span>
+                      </template>
+                      <template v-else-if="invitedUserIds.includes(user.id)">
+                        <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已邀请</span>
+                      </template>
+                      <template v-else>
+                        <button
+                          style="padding:3px 10px;font-size:14px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;"
+                          @click="inviteUser(user.id)"
+                        >邀请</button>
+                      </template>
+                    </li>
+                  </ul>
+                  <Pagination v-if="userTotal > userPageSize" :currentPage="userPage" :totalPages="userTotalPages" @update:currentPage="onUserPageChange" />
+                </div>
+              </div>
+              <button class="dialog-close-btn" @click="showAddUserDialog = false">关闭</button>
+            </div>
+          </div>
         </div>
         <!-- 拖动分隔条 -->
         <div class="drag-divider" @mousedown="startDragDivider"></div>
-        <div class="chat-messages" ref="chatMessagesRef">
+        <div class="chat-messages" ref="chatMessagesRef" @scroll="onChatScroll">
           <div v-for="(msg, idx) in messages" :key="idx" class="chat-message" :class="{ 'self-message': msg.isSelf }">
             <div class="chat-content-row">
               <UserAvatar :src="msg.avatar || defaultAvatar" :alt="msg.username" size="32" class="chat-avatar" />
@@ -140,23 +187,66 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, computed, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, computed, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useWebSocketStatus } from '@/composables/useWebSocketStatus';
-import { useUserInfo } from '@/composables/useUserInfo.js';
+import { useMyUserInfo, useUserInfo } from '@/composables/useUserInfo.js';
+import { connectWebSocket, isWebSocketConnected, getWebSocket } from '@/utils/ws';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 import { getImageUrl, API_BASE_URL } from '@/utils/api';
 import Hls from 'hls.js';
 import UserAvatar from '@/components/UserAvatar.vue';
+import Pagination from '@/components/Pagination.vue';
 
-const { wsStatus } = useWebSocketStatus();
-const { avatarUrl, username } = useUserInfo();
+const { avatarUrl, username, userId } = useMyUserInfo();
 const videoUrl = ref(''); // 这里可根据房间/后端接口动态设置
-const messages = ref([
-  // 示例消息
-  { username: '系统', content: '欢迎来到房间！' }
-]);
+const messages = ref([]);
 const inputMsg = ref('');
+const chatMessagesRef = ref(null);
+const messagePageSize = 30;
+let messageSkip = 0;
+let messageTotal = 0;
+let loadingHistory = false;
+
+async function fetchMessages({ append = false } = {}) {
+  const roomId = route.query.id || route.params.id;
+  if (!roomId) return;
+  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  try {
+    const resp = await fetch(`${API_BASE_URL}/rooms/${roomId}/messages/?skip=${messageSkip}&limit=${messagePageSize}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      messageTotal = data.total || 0;
+      // 新实现：异步补全消息用户信息
+      const newMsgs = await Promise.all(
+        (data.items || []).map(async msg => {
+          const userInfo = await useUserInfo(msg.user_id);
+          return {
+            content: msg.content,
+            user_id: msg.user_id,
+            username: userInfo?.username || '未知用户',
+            avatar: userInfo?.avatarUrl || defaultAvatar,
+            isSelf: msg.user_id === userId.value
+          };
+        })
+      );
+      if (append) {
+        messages.value = [...newMsgs, ...messages.value];
+      } else {
+        messages.value = newMsgs;
+        // 新增：首次加载后滚动到底部
+        nextTick(() => {
+          if (chatMessagesRef.value) {
+            chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+          }
+        });
+      }
+    }
+  } catch (e) {}
+}
+
 const router = useRouter();
 const route = useRoute();
 const isDarkMode = ref(true);
@@ -168,7 +258,19 @@ const roomName = ref("");
 const videoStatusMsg = ref("");
 const videoLoading = ref(false);
 const roomMembers = ref([]);
+const showAddUserDialog = ref(false);
+const userSearchQuery = ref('');
+const userList = ref([]);
+const userListLoading = ref(false);
+const userPage = ref(1);
+const userPageSize = 10;
+const userTotal = ref(0);
+const userTotalPages = computed(() => Math.ceil(userTotal.value / userPageSize));
+const invitedUserIds = ref([]); // 新增：已邀请用户ID列表
 // 在fetchRoomDetailsAndSetIdentity中填充成员，房主排首位
+
+const { wsStatus, wsDebugMsg, setupWebSocket, updateWsStatusAndDebug } = useWebSocketStatus();
+
 async function fetchRoomDetailsAndSetIdentity() {
   const roomId = route.query.id || route.params.id;
   if (!roomId) return;
@@ -180,10 +282,7 @@ async function fetchRoomDetailsAndSetIdentity() {
     if (resp.ok) {
       const data = await resp.json();
       // 获取当前登录用户id
-      let myId = null;
-      try {
-        myId = JSON.parse(sessionStorage.getItem('icinema_user')).id;
-      } catch (e) {}
+      let myId = userId.value;
       if (data.owner && myId && data.owner.id === myId) {
         isOwner.value = true;
       } else {
@@ -221,14 +320,37 @@ function goHome() {
   router.push('/');
 }
 
-function sendMessage() {
+async function sendMessage() {
   if (inputMsg.value.trim()) {
+    // 先本地显示
     messages.value.push({
       content: inputMsg.value,
       isSelf: true,
       avatar: avatarUrl.value,
       username: username.value
     });
+    // 滚动到底部
+    nextTick(() => {
+      if (chatMessagesRef.value) {
+        chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+      }
+    });
+    // 发送到后端
+    const roomId = route.query.id || route.params.id;
+    if (roomId) {
+      const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+      try {
+        await fetch(`${API_BASE_URL}/rooms/${roomId}/messages/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({ content: inputMsg.value })
+        });
+      } catch (e) {}
+    }
+    
     inputMsg.value = '';
   }
 }
@@ -367,11 +489,48 @@ onMounted(() => {
   });
   video.volume = volume.value;
   fetchRoomDetailsAndSetIdentity();
+  setupWebSocket();
   // 初始加载
   if (videoUrlInput.value) playVideoWithUrl(videoUrlInput.value);
   video.addEventListener('progress', updateBuffered);
   video.addEventListener('durationchange', updateBuffered);
   video.addEventListener('timeupdate', updateBuffered);
+  messageSkip = 0;
+  fetchMessages();
+  // 滚动到底部
+  nextTick(() => {
+    if (chatMessagesRef.value) {
+      chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+    }
+  });
+  // WebSocket消息处理
+  const ws = window.__icinema_ws__ || (typeof getWebSocket === 'function' ? getWebSocket() : null);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.addEventListener('message', async (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'room_message' && msg.payload) {
+          const { room_id, sender_id, content, timestamp } = msg.payload;
+          // 获取用户信息
+          const userInfo = await useUserInfo(sender_id);
+          messages.value.push({
+            content,
+            user_id: sender_id,
+            username: userInfo?.username || '未知用户',
+            avatar: userInfo?.avatarUrl || defaultAvatar,
+            isSelf: sender_id === userId.value,
+            timestamp
+          });
+          nextTick(() => {
+            if (chatMessagesRef.value) {
+              chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+            }
+          });
+        }
+        // 未来可扩展其他type
+      } catch (e) {}
+    });
+  }
 });
 watch(currentTime, (val) => {
   const video = videoRef.value;
@@ -398,7 +557,6 @@ watch(videoUrlInput, (val) => {
 });
 
 const membersBarRef = ref(null);
-const chatMessagesRef = ref(null);
 let isDragging = false;
 let startY = 0;
 let startHeight = 0;
@@ -427,6 +585,85 @@ onBeforeUnmount(() => {
   window.removeEventListener('mousemove', onDragDivider);
   window.removeEventListener('mouseup', stopDragDivider);
 });
+
+async function fetchUserList() {
+  userListLoading.value = true;
+  const params = new URLSearchParams();
+  params.append('skip', (userPage.value - 1) * userPageSize);
+  params.append('limit', userPageSize);
+  if (userSearchQuery.value) {
+    // 简单判断输入内容是邮箱还是用户名
+    if (userSearchQuery.value.includes('@')) {
+      params.append('email', userSearchQuery.value);
+    } else {
+      params.append('username', userSearchQuery.value);
+    }
+  }
+  try {
+    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+    const resp = await fetch(`${API_BASE_URL}/users?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      userList.value = (data.items || []).map(u => ({
+        ...u,
+        avatarUrl: u.avatar_path ? getImageUrl(u.avatar_path) : ''
+      }));
+      userTotal.value = data.total || 0;
+    } else {
+      userList.value = [];
+      userTotal.value = 0;
+    }
+  } catch (e) {
+    userList.value = [];
+    userTotal.value = 0;
+  } finally {
+    userListLoading.value = false;
+  }
+}
+function onUserPageChange(newPage) {
+  userPage.value = newPage;
+  fetchUserList();
+}
+const inviteUser = async (userId) => {
+  if (!invitedUserIds.value.includes(userId)) {
+    const roomId = route.query.id || route.params.id;
+    if (!roomId) return;
+    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+    const action = isOwner.value ? 'owner_invitation' : 'member_invitation';
+    try {
+      await fetch(`${API_BASE_URL}/rooms/${roomId}/members`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ user_id: userId, action })
+      });
+    } catch (e) {}
+    invitedUserIds.value.push(userId);
+  }
+}
+watch(() => showAddUserDialog.value, v => { if (v) { userPage.value = 1; userSearchQuery.value = ''; fetchUserList(); invitedUserIds.value = []; } });
+
+
+function onChatScroll() {
+  if (loadingHistory) return;
+  const el = chatMessagesRef.value;
+  if (!el) return;
+  if (el.scrollTop === 0 && messages.value.length < messageTotal) {
+    loadingHistory = true;
+    messageSkip += messagePageSize;
+    fetchMessages({ append: true }).then(() => {
+      nextTick(() => {
+        // 保持滚动位置
+        if (el) el.scrollTop = 1;
+        loadingHistory = false;
+      });
+    });
+  }
+}
 </script>
 
 <style scoped>
@@ -992,7 +1229,7 @@ onBeforeUnmount(() => {
   background: #f7fafd;
   min-height: 48px;
   /* max-height: 120px; */
-  height: 80px;
+  height: 85px;
   overflow-y: auto;
   overflow-x: hidden;
   /* transition: height 0.1s; */
@@ -1092,5 +1329,51 @@ onBeforeUnmount(() => {
 }
 .room-page.dark-mode .room-members-label {
   color: #90caf9;
+}
+.add-user-dialog-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+.add-user-dialog {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+}
+.dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #1976d2;
+}
+.dialog-content {
+  font-size: 15px;
+  color: #333;
+  margin-bottom: 24px;
+}
+.dialog-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #888;
+  transition: color 0.2s;
+}
+.dialog-close-btn:hover {
+  color: #333;
 }
 </style>

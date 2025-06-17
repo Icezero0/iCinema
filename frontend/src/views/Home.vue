@@ -88,7 +88,7 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import CustomConfirm from '@/components/CustomConfirm.vue';
-import { useUserInfo } from '@/composables/useUserInfo.js';
+import { useMyUserInfo } from '@/composables/useUserInfo.js';
 import { getImageUrl, API_BASE_URL } from '@/utils/api';
 import { connectWebSocket, isWebSocketConnected, getWebSocket } from '@/utils/ws';
 import { checkAccessToken } from '@/utils/auth';
@@ -101,8 +101,9 @@ const showLogoutConfirm = ref(false);
 const router = useRouter();
 const USER_CACHE_KEY = 'icinema_user';
 const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
-const { username, avatarUrl, email, fetchUserInfo } = useUserInfo();
+const { username, avatarUrl, email, fetchUserInfo } = useMyUserInfo();
 const { wsStatus, wsDebugMsg, setupWebSocket, updateWsStatusAndDebug } = useWebSocketStatus();
+const { userId } = useMyUserInfo();
 
 // 分页相关
 const pageSize = 10;
@@ -200,20 +201,12 @@ async function fetchMyRooms() {
   try {
     const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
     const skip = (myPage.value - 1) * pageSize;
-    const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
-    let userId = null;
-    if (cachedUser) {
-      try {
-        const userObj = JSON.parse(cachedUser);
-        userId = userObj.id;
-      } catch (e) {}
-    }
-    if (!userId) {
+    if (!userId.value) {
       myRooms.value = [];
       myTotal.value = 0;
       return;
     }
-    const res = await fetch(`${API_BASE_URL}/users/${userId}/rooms?skip=${skip}&limit=${pageSize}`, {
+    const res = await fetch(`${API_BASE_URL}/users/${userId.value}/rooms?skip=${skip}&limit=${pageSize}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
     if (res.ok) {
@@ -276,6 +269,16 @@ function changeMyPage(page) {
   fetchMyRooms();
 }
 function enterRoom(roomId) {
+  // 发送websocket消息
+  const ws = getWebSocket();
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'enter_room',
+      payload: {
+        room_id: roomId
+      }
+    }));
+  }
   router.push({ path: '/room', query: { id: roomId } });
 }
 function goToProfile() {
@@ -299,15 +302,7 @@ function goToNotifications() {
 }
 function applyToJoin(roomId) {
   const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-  let userId = null;
-  const cachedUser = sessionStorage.getItem('icinema_user');
-  if (cachedUser) {
-    try {
-      const userObj = JSON.parse(cachedUser);
-      userId = userObj.id;
-    } catch (e) {}
-  }
-  if (!userId) {
+  if (!userId.value) {
     joinRequestTipMsg.value = '无法获取用户ID，请重新登录';
     showJoinRequestTip.value = true;
     return;
@@ -318,7 +313,7 @@ function applyToJoin(roomId) {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ action: 'join_request', user_id: userId }),
+    body: JSON.stringify({ action: 'join_request', user_id: userId.value }),
   })
     .then(res => res.json().then(data => ({ ok: res.ok, data })))
     .then(({ ok, data }) => {

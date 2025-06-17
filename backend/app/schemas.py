@@ -26,6 +26,10 @@ class UserUpdate(BaseModel):
     username: Optional[str] = None
     avatar_base64: Optional[str] = None
 
+class UserList(BaseModel):
+    items: List[User]
+    total: int
+
 # 房间相关的 Schema
 class RoomBase(BaseModel):
     name: str

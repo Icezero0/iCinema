@@ -138,45 +138,29 @@ class ConnectionManager:
         logger.info(f"User {user_id} left room {room_id}")
 
     async def broadcast_to_room(self, room_id: int, message: dict, exclude_user: Optional[int] = None) -> int:
+        
         """广播消息到房间所有在线成员"""
         if room_id not in self.active_room_users:
             return 0
-        
         sent_count = 0
+        print(self.active_room_users[room_id])
         for user_id in self.active_room_users[room_id].copy():
             if user_id != exclude_user:
+                print('going to send to ',user_id)
                 if await self.send_to_user(user_id, message):
                     sent_count += 1
         
-        logger.debug(f"Broadcast to room {room_id}, sent to {sent_count} users")
+        logger.info(f"Broadcast to room {room_id}, sent to {sent_count} users")
         return sent_count
 
     async def send_room_message(self, sender_id: int, room_id: int, message_content: str) -> Optional[int]:
         """发送消息到房间（从API调用）"""
         try:
-            async with AsyncSessionLocal() as db:  # type: ignore
-                # 验证发送者权限
-                if not await crud.rooms.is_room_member(db, room_id, sender_id):
-                    logger.warning(f"User {sender_id} is not a member of room {room_id}")
-                    return None
-                
-                # 创建消息对象并保存到数据库
-                from app.schemas import MessageCreate
-                message_data = MessageCreate(content=message_content)
-                
-                db_message = await crud.messages.create_message(db, message_data, room_id, sender_id)
-                await db.commit()
-                
-                # 刷新消息对象以获取数据库生成的字段
-                await db.refresh(db_message)
-                
-                # 构造WebSocket消息
                 timestamp = datetime.now(timezone.utc).isoformat()
                 
                 ws_message = {
                     "type": "room_message",
                     "payload": {
-                        "id": db_message.id,
                         "room_id": room_id,
                         "sender_id": sender_id,
                         "content": message_content,
@@ -186,6 +170,7 @@ class ConnectionManager:
                 
                 # 向房间内除发送者外的所有在线用户推送消息
                 sent_count = await self.broadcast_to_room(room_id, ws_message, exclude_user=sender_id)
+                print('here')
                 
                 logger.info(f"Message from user {sender_id} sent to room {room_id}, reached {sent_count} users")
                 return sent_count

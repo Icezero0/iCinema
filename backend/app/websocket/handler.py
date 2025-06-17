@@ -152,7 +152,7 @@ class WebSocketHandler:
                 "type": "pong"
             })
             
-        elif message_type == "join_room":
+        elif message_type == "enter_room":
             # 加入房间（包含数据库验证）
             room_id = payload.get("room_id")
             if room_id:

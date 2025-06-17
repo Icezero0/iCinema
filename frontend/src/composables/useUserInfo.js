@@ -3,31 +3,28 @@ import { ref } from 'vue';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 import { API_BASE_URL, getImageUrl } from '@/utils/api';
 
-const USER_CACHE_KEY = 'icinema_user';
+const USER_CACHE_KEY = 'icinema_users';
 const username = ref('');
 const avatarUrl = ref(defaultAvatar);
 const email = ref('');
+const userId = ref(null);
 
 // 初始化：从 sessionStorage 读取
-const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
-if (cachedUser) {
+const cached = sessionStorage.getItem(USER_CACHE_KEY);
+if (cached) {
   try {
-    const userObj = JSON.parse(cachedUser);
-    if (userObj.avatar_path) {
-      avatarUrl.value = getImageUrl(userObj.avatar_path);
-    } else if (userObj.avatar) {
-      avatarUrl.value = userObj.avatar;
-    }
-    if (userObj.username) {
-      username.value = userObj.username;
-    }
-    if (userObj.email) {
-      email.value = userObj.email;
+    const cacheObj = JSON.parse(cached);
+    userId.value = cacheObj.my_id;
+    const userInfo = (cacheObj.user_infos || []).find(u => u.user_id === cacheObj.my_id);
+    if (userInfo) {
+      username.value = userInfo.username;
+      avatarUrl.value = userInfo.avatar_url || defaultAvatar;
+      email.value = userInfo.email || '';
     }
   } catch (e) {}
 }
 
-export function useUserInfo() {
+export function useMyUserInfo() {
   async function fetchUserInfo() {
     try {
       const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
@@ -40,21 +37,88 @@ export function useUserInfo() {
       if (response.ok) {
         const data = await response.json();
         username.value = data.username || 'unknown_user';
-        if (data.avatar_path) {
-          avatarUrl.value = getImageUrl(data.avatar_path);
-        } else {
-          avatarUrl.value = data.avatar || defaultAvatar;
-        }
+        avatarUrl.value = data.avatar_path ? getImageUrl(data.avatar_path) : (data.avatar || defaultAvatar);
         email.value = data.email || '';
-        // 统一缓存完整用户信息
-        sessionStorage.setItem('icinema_user', JSON.stringify(data));
+        userId.value = data.id || null;
+        // 组装新结构
+        const cacheObj = {
+          my_id: data.id,
+          user_infos: [
+            {
+              username: data.username || 'unknown_user',
+              avatar_url: data.avatar_path ? getImageUrl(data.avatar_path) : (data.avatar || defaultAvatar),
+              email: data.email || '',
+              user_id: data.id || null
+            }
+          ]
+        };
+        sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(cacheObj));
       }
     } catch (e) {
-      // 可选：错误处理
       alert('获取用户信息失败，请稍后再试。');
       console.error('Error fetching user info:', e);
     }
   }
 
-  return { username, avatarUrl, email, fetchUserInfo };
+  return { username, avatarUrl, email, userId, fetchUserInfo };
+}
+
+export async function useUserInfo(userId) {
+  // 1. 先查缓存
+  let cacheObj = null;
+  if (cached) {
+    try {
+      cacheObj = JSON.parse(cached);
+      const userInfo = (cacheObj.user_infos || []).find(u => u.user_id === userId);
+      if (userInfo) {
+        return {
+          username: userInfo.username,
+          avatarUrl: userInfo.avatar_url || defaultAvatar,
+          email: userInfo.email || '',
+          userId: userInfo.user_id
+        };
+      }
+    } catch (e) {}
+  }
+  // 2. 无缓存则查接口
+  let userInfo = null;
+  try {
+    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+    const resp = await fetch(`${API_BASE_URL}/users/?userid=${userId}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const item = (data.items && data.items[0]) || null;
+      if (item) {
+        userInfo = {
+          username: item.username,
+          avatarUrl: item.avatar_path ? getImageUrl(item.avatar_path) : defaultAvatar,
+          email: item.email || '',
+          userId: item.id
+        };
+        // 写入缓存
+        if (!cacheObj) cacheObj = { my_id: null, user_infos: [] };
+        // 若已存在则替换，否则push
+        const idx = cacheObj.user_infos.findIndex(u => u.user_id === item.id);
+        if (idx >= 0) {
+          cacheObj.user_infos[idx] = {
+            username: item.username,
+            avatar_url: item.avatar_path ? getImageUrl(item.avatar_path) : defaultAvatar,
+            email: item.email || '',
+            user_id: item.id
+          };
+        } else {
+          cacheObj.user_infos.push({
+            username: item.username,
+            avatar_url: item.avatar_path ? getImageUrl(item.avatar_path) : defaultAvatar,
+            email: item.email || '',
+            user_id: item.id
+          });
+        }
+        sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(cacheObj));
+      }
+    }
+  } catch (e) {}
+  return userInfo;
 }

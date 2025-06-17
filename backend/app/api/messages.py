@@ -49,8 +49,6 @@ async def create_message(
     
     # 提交数据库事务
     await db.commit()
-    
-    # 刷新消息对象以获取数据库生成的字段
     await db.refresh(db_message)
     
     # 通过 WebSocket 广播消息给房间内的其他用户
@@ -60,10 +58,8 @@ async def create_message(
         ws_message = {
             "type": "room_message",
             "payload": {
-                "id": db_message.id,
                 "room_id": room_id,
                 "sender_id": current_user.id,
-                "sender_username": current_user.username,  # 方便前端显示
                 "content": message.content,
                 "timestamp": timestamp
             }
