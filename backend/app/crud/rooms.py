@@ -18,6 +18,10 @@ async def create_room(
     db.add(db_room)
     await db.commit()
     await db.refresh(db_room)
+    # 新增：在room_members中插入房主记录
+    stmt = insert(models.room_members).values(room_id=db_room.id, user_id=owner_id, user_type=models.UserType.OWNER)
+    await db.execute(stmt)
+    await db.commit()
     return db_room
 
 async def get_room(

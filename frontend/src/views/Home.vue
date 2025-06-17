@@ -4,7 +4,7 @@
       通知<span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
     </button>
     <div class="profile-header" @mouseenter="showDropdown = true" @mouseleave="showDropdown = false">
-      <img :src="avatarUrl" alt="avatar" class="avatar" />
+      <UserAvatar :src="avatarUrl" :alt="username" size="38" class="avatar" />
       <span class="username">{{ username }}</span>
       <transition name="dropdown-fade">
         <div v-if="showDropdown" class="dropdown-menu">
@@ -12,6 +12,11 @@
           <div class="dropdown-item" @click="logout">退出登录</div>
         </div>
       </transition>
+    </div>
+    <div class="ws-status" :class="wsStatus">
+      <span v-if="wsStatus === 'connected'">🟢 已连接</span>
+      <span v-else-if="wsStatus === 'connecting'">🟡 正在连接...</span>
+      <span v-else>🔴 未连接</span>
     </div>
     <div class="card-container">
       <!-- 大厅房间 -->
@@ -21,7 +26,10 @@
         <div v-else-if="publicRooms.length === 0" class="room-hint">暂无大厅房间</div>
         <ul v-else class="room-list">
           <li v-for="room in publicRooms" :key="room.id" class="room-list-item">
-            <span>{{ room.name }}</span>
+            <span>{{ room.name }}
+              <span v-if="room.is_active === true" style="color:green;font-size:12px;margin-left:4px;">[活跃]</span>
+              <span v-else-if="room.is_active === false" style="color:gray;font-size:12px;margin-left:4px;">[关闭]</span>
+            </span>
             <button
               v-if="myRoomIds.includes(room.id)"
               @click="enterRoom(room.id)"
@@ -34,9 +42,7 @@
           </li>
         </ul>
         <div class="pagination" v-if="publicTotal > pageSize">
-          <button :disabled="publicPage === 1" @click="changePublicPage(publicPage - 1)">上一页</button>
-          <span>第 {{ publicPage }} / {{ publicTotalPages }} 页</span>
-          <button :disabled="publicPage === publicTotalPages" @click="changePublicPage(publicPage + 1)">下一页</button>
+          <Pagination :currentPage="publicPage" :totalPages="publicTotalPages" @update:currentPage="changePublicPage" />
         </div>
       </div>
       <!-- 我的房间 -->
@@ -46,14 +52,15 @@
         <div v-else-if="myRooms.length === 0" class="room-hint">暂无我的房间</div>
         <ul v-else class="room-list">
           <li v-for="room in myRooms" :key="room.id" class="room-list-item">
-            <span>{{ room.name }}</span>
+            <span>{{ room.name }}
+              <span v-if="room.is_active === true" style="color:green;font-size:12px;margin-left:4px;">[活跃]</span>
+              <span v-else-if="room.is_active === false" style="color:gray;font-size:12px;margin-left:4px;">[关闭]</span>
+            </span>
             <button @click="enterRoom(room.id)">进入</button>
           </li>
         </ul>
         <div class="pagination" v-if="myTotal > pageSize">
-          <button :disabled="myPage === 1" @click="changeMyPage(myPage - 1)">上一页</button>
-          <span>第 {{ myPage }} / {{ myTotalPages }} 页</span>
-          <button :disabled="myPage === myTotalPages" @click="changeMyPage(myPage + 1)">下一页</button>
+          <Pagination :currentPage="myPage" :totalPages="myTotalPages" @update:currentPage="changeMyPage" />
         </div>
       </div>
     </div>
@@ -70,16 +77,24 @@
         <button @click="showJoinRequestTip = false">知道了</button>
       </div>
     </div>
+    <div class="ws-debug">
+      <h4>WebSocket调试输出</h4>
+      <pre style="max-height:200px;overflow:auto;background:#f7f7f7;border-radius:6px;padding:0.5rem;">{{ wsDebugMsg }}</pre>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import defaultAvatar from '@/assets/default_avatar.jpg';
 import CustomConfirm from '@/components/CustomConfirm.vue';
 import { useUserInfo } from '@/composables/useUserInfo.js';
 import { getImageUrl, API_BASE_URL } from '@/utils/api';
+import { connectWebSocket, isWebSocketConnected, getWebSocket } from '@/utils/ws';
+import { checkAccessToken } from '@/utils/auth';
+import { useWebSocketStatus } from '@/composables/useWebSocketStatus';
+import UserAvatar from '@/components/UserAvatar.vue';
+import Pagination from '@/components/Pagination.vue';
 
 const showDropdown = ref(false);
 const showLogoutConfirm = ref(false);
@@ -87,6 +102,7 @@ const router = useRouter();
 const USER_CACHE_KEY = 'icinema_user';
 const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
 const { username, avatarUrl, email, fetchUserInfo } = useUserInfo();
+const { wsStatus, wsDebugMsg, setupWebSocket, updateWsStatusAndDebug } = useWebSocketStatus();
 
 // 分页相关
 const pageSize = 10;
@@ -107,6 +123,20 @@ const notificationCount = ref(0);
 const showJoinRequestTip = ref(false);
 const joinRequestTipMsg = ref('');
 const myRoomIds = ref([]);
+
+let heartbeatTimer = null;
+let reconnectTimer = null;
+
+function closeWebSocket() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
 
 if (cachedUser) {
   try {
@@ -133,6 +163,11 @@ onMounted(async () => {
   await fetchPublicRooms();
   await fetchMyRooms();
   await fetchNotificationCount();
+  setupWebSocket();
+});
+
+onUnmounted(() => {
+  closeWebSocket();
 });
 
 async function fetchPublicRooms() {
@@ -165,19 +200,26 @@ async function fetchMyRooms() {
   try {
     const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
     const skip = (myPage.value - 1) * pageSize;
-    const res = await fetch(`${API_BASE_URL}/users/me?rooms_skip=0&rooms_limit=1000`, {
+    const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
+    let userId = null;
+    if (cachedUser) {
+      try {
+        const userObj = JSON.parse(cachedUser);
+        userId = userObj.id;
+      } catch (e) {}
+    }
+    if (!userId) {
+      myRooms.value = [];
+      myTotal.value = 0;
+      return;
+    }
+    const res = await fetch(`${API_BASE_URL}/users/${userId}/rooms?skip=${skip}&limit=${pageSize}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
     if (res.ok) {
       const data = await res.json();
-      // 合并 owned/joined 并去重
-      const owned = (data.rooms_owned && data.rooms_owned.items) ? data.rooms_owned.items : [];
-      const joined = (data.rooms_joined && data.rooms_joined.items) ? data.rooms_joined.items : [];
-      const allRooms = [...owned, ...joined];
-      // 用 Map 去重
-      const uniqueRooms = Array.from(new Map(allRooms.map(r => [r.id, r])).values());
-      myTotal.value = uniqueRooms.length;
-      myRooms.value = uniqueRooms.slice(skip, skip + pageSize);
+      myRooms.value = data.items || [];
+      myTotal.value = data.total || 0;
     } else {
       myRooms.value = [];
       myTotal.value = 0;
@@ -561,5 +603,55 @@ function applyToJoin(roomId) {
 }
 .member-invite-tip button:hover {
   background: #115293;
+}
+
+.ws-status {
+  position: fixed;
+  top: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.ws-status {
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  text-align: left;
+  margin-left: 1.5rem;
+}
+.ws-status.connected {
+  color: #4caf50;
+}
+.ws-status.connecting {
+  color: #ff9800;
+}
+.ws-status.disconnected {
+  color: #f44336;
+}
+
+.ws-debug {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.ws-debug h4 {
+  font-size: 1.2rem;
+  color: #333;
+  margin-bottom: 0.8rem;
 }
 </style>

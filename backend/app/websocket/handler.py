@@ -149,8 +149,7 @@ class WebSocketHandler:
         if message_type == "ping":
             # 心跳响应
             await websocket.send_json({
-                "type": "pong",
-                "payload": {"timestamp": payload.get("timestamp")}
+                "type": "pong"
             })
             
         elif message_type == "join_room":

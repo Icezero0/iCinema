@@ -30,9 +30,10 @@ export async function checkAccessToken(accessToken) {
     if (!refreshResp.ok) {
       clearTokens();
       return false;
-    }    const data = await refreshResp.json();
-    document.cookie = `accesstoken=${data.access_token}; path=/; secure;`;
-    document.cookie = `refreshtoken=${data.refresh_token}; path=/; secure; max-age=604800;`;
+    }
+    const data = await refreshResp.json();
+    document.cookie = `accesstoken=${data.access_token}; path=/;`;
+    document.cookie = `refreshtoken=${data.refresh_token}; path=/; max-age=604800;`;
     const newAccessToken = data.access_token;
     const checkNewResp = await fetch(`${API_BASE_URL}/token/check`, {
       method: 'GET',

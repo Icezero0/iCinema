@@ -8,6 +8,9 @@ from contextlib import asynccontextmanager
 from app.database import engine
 from app.models import Base
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 # 生命周期配置
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -2,7 +2,7 @@ import json
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
 from .. import schemas, crud, models
 from ..database import get_db
@@ -277,3 +277,32 @@ async def get_my_room_ids(
 
     all_ids = list(owned_ids | joined_ids)
     return all_ids
+
+@router.get("/users/{user_id}/rooms", response_model=schemas.RoomList)
+async def get_user_rooms_by_member(
+    user_id: int,
+    skip: int = Query(0, ge=0, description="分页起始位置"),
+    limit: int = Query(10, ge=1, le=100, description="分页数量"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    查询用户作为成员（包括owner和member）关联的房间，支持分页
+    """
+    from ..models import room_members, Room, UserType
+    # 查找room_members表中user_id匹配的所有房间id
+    result = await db.execute(
+        select(Room)
+        .join(room_members, Room.id == room_members.c.room_id)
+        .where(room_members.c.user_id == user_id)
+        .order_by(Room.id.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    rooms = result.scalars().all()
+    # 统计总数
+    count_result = await db.execute(
+        select(func.count()).select_from(room_members).where(room_members.c.user_id == user_id)
+    )
+    total = count_result.scalar_one()
+    items = [schemas.Room.model_validate(room, from_attributes=True) for room in rooms]
+    return schemas.RoomList(items=items, total=total)

@@ -38,9 +38,7 @@
         </li>
       </ul>
       <div class="pagination" v-if="total > pageSize">
-        <button :disabled="page === 1" @click="changePage(page - 1)">上一页</button>
-        <span>第 {{ page }} / {{ totalPages }} 页</span>
-        <button :disabled="page === totalPages" @click="changePage(page + 1)">下一页</button>
+        <Pagination :currentPage="page" :totalPages="totalPages" @update:currentPage="changePage" />
       </div>
       <button class="back-btn" @click="goHome">返回主页</button>
       <div v-if="showMemberInviteTip" class="member-invite-tip-mask">
@@ -58,6 +56,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { API_BASE_URL } from '@/utils/api';
 import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
+import Pagination from '@/components/Pagination.vue';
 
 const showMemberInviteTip = ref(false);
 const router = useRouter();
