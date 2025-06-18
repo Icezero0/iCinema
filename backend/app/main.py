@@ -33,7 +33,7 @@ app.add_middleware(
 
 
 # 静态文件服务
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/avatars", StaticFiles(directory="../data/upload/avatars"), name="avatars")
 
 # 包含路由
