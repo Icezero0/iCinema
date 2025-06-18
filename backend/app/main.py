@@ -9,7 +9,12 @@ from app.database import engine
 from app.models import Base
 
 import logging
+import os
+
 logging.basicConfig(level=logging.INFO)
+
+avatars_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/upload/avatars'))
+os.makedirs(avatars_dir, exist_ok=True)
 
 # 生命周期配置
 @asynccontextmanager
