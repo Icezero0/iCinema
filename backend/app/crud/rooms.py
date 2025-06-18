@@ -381,3 +381,8 @@ async def update_room_active_status(
     result = await db.execute(stmt)
     await db.commit()
     return result.rowcount > 0
+
+async def get_room_message_count(db: AsyncSession, room_id: int) -> int:
+    count_query = select(func.count()).select_from(models.Message).where(models.Message.room_id == room_id)
+    result = await db.execute(count_query)
+    return result.scalar_one() or 0

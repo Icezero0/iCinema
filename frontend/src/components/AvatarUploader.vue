@@ -17,7 +17,7 @@
           :responsive="true"
           :rotatable="false"
           :zoomable="true"
-          style="width:320px;height:320px;"
+          style="width:512px;height:512px;"
         />
         <div class="cropper-btn-group">
           <button type="button" class="save-button" @click="handleCrop">确定</button>
@@ -55,7 +55,7 @@ function onAvatarChange(e) {
 }
 
 function handleCrop() {
-  const canvas = cropperRef.value.getCroppedCanvas({ width: 200, height: 200 });
+  const canvas = cropperRef.value.getCroppedCanvas({ width: 512, height: 512 });
   if (canvas) {
     emit('update:modelValue', canvas.toDataURL('image/jpeg'));
     showCropper.value = false;

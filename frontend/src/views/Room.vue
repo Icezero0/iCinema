@@ -2,6 +2,9 @@
   <div class="room-page" :class="{ 'dark-mode': isDarkMode }">
     <div class="ws-status-bar-row">
       <button class="back-home-btn" @click="goHome">返回主页</button>
+      <div class="room-title">
+        {{ roomName }}
+      </div>
       <div class="ws-status-bar" :class="wsStatus">
         <span v-if="wsStatus === 'connected'">🟢 已连接</span>
         <span v-else-if="wsStatus === 'connecting'">🟡 正在连接...</span>
@@ -20,12 +23,12 @@
         <video ref="videoRef" class="video-player" />
         <!-- 自定义控制栏 -->
         <div class="custom-video-controls">
-          <button @click="togglePlay" class="play-btn">
+          <button @click="togglePlay" class="play-btn" :disabled="!isOwner">
             <span v-if="!isPlaying">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style="display:block;"><polygon points="8,5 19,12 8,19" /></svg>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="8,5 19,12 8,19" /></svg>
             </span>
             <span v-else>
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style="display:block;"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
             </span>
           </button>
           <!-- 自定义进度条缓冲区可视化 -->
@@ -44,11 +47,12 @@
               v-model.number="currentTime"
               @input="onSeek"
               class="video-progress-input"
+              :disabled="!isOwner"
             />
           </div>
           <span class="time-label">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
-          <span class="volume-icon" style="margin-left:10px;">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:block;">
+          <span class="volume-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <polygon points="3,9 3,15 7,15 12,20 12,4 7,9" />
               <path d="M16.5,12c0-1.77-1-3.29-2.5-4.03v8.06C15.5,15.29,16.5,13.77,16.5,12z" />
             </svg>
@@ -62,11 +66,10 @@
             @input="onVolumeChange"
             class="volume-slider"
             title="音量"
-            style="width: 80px; margin-left: 0;"
           />
         </div>
         <!-- 视频状态提示，放在播放器下方、表单上方 -->
-        <div v-if="videoStatusMsg" class="video-status-msg" :class="{ loading: videoLoading }" style="width:100%;margin:10px auto 0 auto;max-width:640px;">
+        <div v-if="videoStatusMsg" class="video-status-msg" :class="{ loading: videoLoading }">
           {{ videoStatusMsg }}
         </div>
         <!-- 视频外链/房间设置表单，紧跟在控制栏下方 -->
@@ -109,16 +112,15 @@
               <UserAvatar :src="member.avatarUrl" :alt="member.username" size="38" class="room-member-avatar" />
               <div class="room-member-name">{{ member.username }}</div>
             </div>
-            <!-- 新增：添加用户按钮（加号），始终在最后一个用户后 -->
-            <div class="room-member-item add-member-btn" @click="showAddUserDialog = true" title="添加成员" style="cursor:pointer;">
-              <div class="room-member-avatar" style="display:flex;align-items:center;justify-content:center;background:#e5e6eb;border-radius:50%;width:38px;height:38px;">
+            <div class="room-member-item add-member-btn" @click="showAddUserDialog = true" title="添加成员">
+              <div class="room-member-avatar add-member-avatar">
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="11" cy="11" r="11" fill="#fff"/>
                   <path d="M11 6V16" stroke="#888" stroke-width="2" stroke-linecap="round"/>
                   <path d="M6 11H16" stroke="#888" stroke-width="2" stroke-linecap="round"/>
                 </svg>
               </div>
-              <div class="room-member-name" style="text-align:center;color:#888;font-size:13px;margin-top:2px;">添加成员</div>
+              <div class="room-member-name add-member-label">添加成员</div>
             </div>
           </template>
           <template v-else>
@@ -127,42 +129,43 @@
               <div class="room-member-name">测试用户</div>
             </div>
           </template>
-          <!-- 添加成员弹窗（内容占位） -->
-          <div v-if="showAddUserDialog" class="add-user-dialog-mask">
-            <div class="add-user-dialog">
-              <div class="dialog-title">添加成员</div>
-              <div class="dialog-content">
-                <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
-                  <input v-model="userSearchQuery" @keyup.enter="fetchUserList" placeholder="输入邮箱或用户名检索" style="flex:1;padding:6px 10px;border:1px solid #ccc;border-radius:4px;" />
-                  <button @click="fetchUserList" style="padding:6px 16px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;">查询</button>
-                </div>
-                <div v-if="userListLoading" style="text-align:center;color:#888;">加载中...</div>
-                <div v-else>
-                  <div v-if="userList.length === 0" style="text-align:center;color:#888;">暂无用户</div>
-                  <ul v-else style="max-height:220px;overflow:auto;padding:0 0 8px 0;margin:0;list-style:none;">
-                    <li v-for="user in userList" :key="user.id" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
-                      <UserAvatar :src="user.avatarUrl || defaultAvatar" :alt="user.username" :size="32" style="width:32px;height:32px;" />
-                      <span style="flex:1;">{{ user.username }}</span>
-                      <template v-if="roomMembers.some(m => m.id === user.id)">
-                        <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已在房间</span>
-                      </template>
-                      <template v-else-if="invitedUserIds.includes(user.id)">
-                        <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已邀请</span>
-                      </template>
-                      <template v-else>
-                        <button
-                          style="padding:3px 10px;font-size:14px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;"
-                          @click="inviteUser(user.id)"
-                        >邀请</button>
-                      </template>
-                    </li>
-                  </ul>
-                  <Pagination v-if="userTotal > userPageSize" :currentPage="userPage" :totalPages="userTotalPages" @update:currentPage="onUserPageChange" />
-                </div>
+          <!-- 添加成员弹窗（BaseDialog重构） -->
+          <BaseDialog
+            :show="showAddUserDialog"
+            title="添加成员"
+            @cancel="() => showAddUserDialog = false"
+            @ok="() => showAddUserDialog = false"
+          >
+            <div class="dialog-content">
+              <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
+                <input v-model="userSearchQuery" @keyup.enter="fetchUserList" placeholder="输入邮箱或用户名检索" style="flex:1;padding:6px 10px;border:1px solid #ccc;border-radius:4px;" />
+                <button @click="fetchUserList" style="padding:6px 16px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;">查询</button>
               </div>
-              <button class="dialog-close-btn" @click="showAddUserDialog = false">关闭</button>
+              <div v-if="userListLoading" style="text-align:center;color:#888;">加载中...</div>
+              <div v-else>
+                <div v-if="userList.length === 0" style="text-align:center;color:#888;">暂无用户</div>
+                <ul v-else style="max-height:220px;overflow:auto;padding:0 0 8px 0;margin:0;list-style:none;">
+                  <li v-for="user in userList" :key="user.id" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+                    <UserAvatar :src="user.avatarUrl || defaultAvatar" :alt="user.username" :size="32" style="width:32px;height:32px;" />
+                    <span style="flex:1;">{{ user.username }}</span>
+                    <template v-if="roomMembers.some(m => m.id === user.id)">
+                      <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已在房间</span>
+                    </template>
+                    <template v-else-if="invitedUserIds.includes(user.id)">
+                      <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已邀请</span>
+                    </template>
+                    <template v-else>
+                      <button
+                        style="padding:3px 10px;font-size:14px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;"
+                        @click="inviteUser(user.id)"
+                      >邀请</button>
+                    </template>
+                  </li>
+                </ul>
+                <Pagination v-if="userTotal > userPageSize" :currentPage="userPage" :totalPages="userTotalPages" @update:currentPage="onUserPageChange" />
+              </div>
             </div>
-          </div>
+          </BaseDialog>
         </div>
         <!-- 拖动分隔条 -->
         <div class="drag-divider" @mousedown="startDragDivider"></div>
@@ -183,6 +186,7 @@
         </div>
       </div>
     </div>
+    <BaseToast v-model="toastVisible" :message="toastMsg" :duration="1600" />
   </div>
 </template>
 
@@ -197,6 +201,8 @@ import { getImageUrl, API_BASE_URL } from '@/utils/api';
 import Hls from 'hls.js';
 import UserAvatar from '@/components/UserAvatar.vue';
 import Pagination from '@/components/Pagination.vue';
+import BaseDialog from '@/components/BaseDialog.vue';
+import BaseToast from '@/components/BaseToast.vue';
 
 const { avatarUrl, username, userId } = useMyUserInfo();
 const videoUrl = ref(''); // 这里可根据房间/后端接口动态设置
@@ -205,20 +211,23 @@ const inputMsg = ref('');
 const chatMessagesRef = ref(null);
 const messagePageSize = 30;
 let messageSkip = 0;
-let messageTotal = 0;
 let loadingHistory = false;
 
 async function fetchMessages({ append = false } = {}) {
   const roomId = route.query.id || route.params.id;
   if (!roomId) return;
   const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  let messageSkipCopy = messageSkip;
+  let loadingMessagePageSize = messagePageSize;
+  // console.log('messageSkipCopy:', messageSkipCopy, 'loadingMessagePageSize:', loadingMessagePageSize);
   try {
-    const resp = await fetch(`${API_BASE_URL}/rooms/${roomId}/messages/?skip=${messageSkip}&limit=${messagePageSize}`, {
+    messageSkip = Math.max(0, messageSkip - messagePageSize);
+    loadingMessagePageSize = messageSkipCopy - messageSkip;
+    const resp = await fetch(`${API_BASE_URL}/rooms/${roomId}/messages/?skip=${messageSkip}&limit=${loadingMessagePageSize}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
     if (resp.ok) {
       const data = await resp.json();
-      messageTotal = data.total || 0;
       // 新实现：异步补全消息用户信息
       const newMsgs = await Promise.all(
         (data.items || []).map(async msg => {
@@ -243,8 +252,12 @@ async function fetchMessages({ append = false } = {}) {
           }
         });
       }
+    }else {
+      messageSkip = messageSkipCopy;
     }
-  } catch (e) {}
+  } catch (e) {
+    messageSkip = messageSkipCopy;
+  }
 }
 
 const router = useRouter();
@@ -288,8 +301,10 @@ async function fetchRoomDetailsAndSetIdentity() {
       } else {
         isOwner.value = false;
       }
-      if (data.video_url) videoUrlInput.value = data.video_url;
       let members = [];
+      if (data.name) { 
+        roomName.value = data.name;
+      }
       if (data.owner) {
         members.push({
           id: data.owner.id,
@@ -311,7 +326,9 @@ async function fetchRoomDetailsAndSetIdentity() {
         );
       }
       roomMembers.value = members;
-      // console.log('最终成员列表:', members);
+      // 加载房间消息
+      if (data.message_count) messageSkip = data.message_count;
+      await fetchMessages();
     }
   } catch (e) { /* 可加错误提示 */ }
 }
@@ -369,14 +386,42 @@ function togglePlay() {
   if (!video) return;
   if (video.paused) {
     video.play();
+    // 新增：通过ws同步播放
+    const roomId = route.query.id || route.params.id;
+    if (isOwner.value && roomId) {
+      sendWsMessage('set_vedio_start', {
+        room_id: roomId,
+        sender_id: userId.value,
+        timestamp: Date.now()
+      });
+    }
   } else {
     video.pause();
+    // 新增：通过ws同步暂停
+    const roomId = route.query.id || route.params.id;
+    if (isOwner.value && roomId) {
+      sendWsMessage('set_vedio_pause', {
+        room_id: roomId,
+        sender_id: userId.value,
+        timestamp: Date.now()
+      });
+    }
   }
 }
 function onSeek(e) {
   const video = videoRef.value;
   if (video) {
     video.currentTime = currentTime.value;
+    // 新增：通过ws同步跳转
+    const roomId = route.query.id || route.params.id;
+    if (isOwner.value && roomId) {
+      sendWsMessage('set_vedio_jump', {
+        room_id: roomId,
+        sender_id: userId.value,
+        video_time_offset: currentTime.value,
+        timestamp: Date.now()
+      });
+    }
   }
 }
 function onVolumeChange() {
@@ -436,13 +481,29 @@ function playVideoWithUrl(url, options = {}) {
 }
 
 function confirmVideoUrl() {
-  // 只设置视频地址，不自动播放，状态为暂停
   playVideoWithUrl(videoUrlInput.value, { autoPlay: false });
   const video = videoRef.value;
   if (video) {
     video.pause();
   }
   isPlaying.value = false;
+  // 新增：通过ws同步视频url
+  const roomId = route.query.id || route.params.id;
+  if (isOwner.value && roomId) {
+    sendWsMessage('set_vedio_url', {
+      room_id: roomId,
+      sender_id: userId.value,
+      url: videoUrlInput.value,
+      timestamp: Date.now()
+    });
+  }
+}
+
+function sendWsMessage(type, payload) {
+  const ws = getWebSocket();
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type, payload }));
+  }
 }
 
 function updateBuffered() {
@@ -495,42 +556,13 @@ onMounted(() => {
   video.addEventListener('progress', updateBuffered);
   video.addEventListener('durationchange', updateBuffered);
   video.addEventListener('timeupdate', updateBuffered);
-  messageSkip = 0;
-  fetchMessages();
   // 滚动到底部
   nextTick(() => {
     if (chatMessagesRef.value) {
       chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
     }
   });
-  // WebSocket消息处理
-  const ws = window.__icinema_ws__ || (typeof getWebSocket === 'function' ? getWebSocket() : null);
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.addEventListener('message', async (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'room_message' && msg.payload) {
-          const { room_id, sender_id, content, timestamp } = msg.payload;
-          // 获取用户信息
-          const userInfo = await useUserInfo(sender_id);
-          messages.value.push({
-            content,
-            user_id: sender_id,
-            username: userInfo?.username || '未知用户',
-            avatar: userInfo?.avatarUrl || defaultAvatar,
-            isSelf: sender_id === userId.value,
-            timestamp
-          });
-          nextTick(() => {
-            if (chatMessagesRef.value) {
-              chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
-            }
-          });
-        }
-        // 未来可扩展其他type
-      } catch (e) {}
-    });
-  }
+
 });
 watch(currentTime, (val) => {
   const video = videoRef.value;
@@ -555,6 +587,92 @@ watch(videoUrlInput, (val) => {
     videoStatusMsg.value = '';
   }
 });
+
+async function getWebSocketAndEnterRoom() {
+  // 发送websocket进入房间消息
+  const ws = getWebSocket();
+  const roomId = route.query.id || route.params.id;
+  if (!roomId) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'enter_room',
+      payload: {
+        room_id: roomId
+      }
+    }));
+  }
+  // WebSocket消息处理
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.addEventListener('message', async (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'room_message' && msg.payload) {
+          const { room_id, sender_id, content, timestamp } = msg.payload;
+          // 获取用户信息
+          const userInfo = await useUserInfo(sender_id);
+          messages.value.push({
+            content,
+            user_id: sender_id,
+            username: userInfo?.username || '未知用户',
+            avatar: userInfo?.avatarUrl || defaultAvatar,
+            isSelf: sender_id === userId.value,
+            timestamp
+          });
+          nextTick(() => {
+            if (chatMessagesRef.value) {
+              chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+            }
+          });
+        } else if (msg.type === 'set_vedio_url' && msg.payload) {
+          videoUrlInput.value = msg.payload.url;
+          playVideoWithUrl(videoUrlInput.value, { autoPlay: false });
+          const video = videoRef.value;
+          if (video) {
+            video.pause();
+          }
+          isPlaying.value = false;
+          const senderId = msg.payload.sender_id;
+          const userInfo = await useUserInfo(senderId);
+          const username = userInfo?.username || '神秘用户';
+          showToast(`${username} 设置了视频地址`);
+        } else if (msg.type === 'set_vedio_start') {
+          const video = videoRef.value;
+          if (video && video.paused) video.play();
+          const senderId = msg.payload.sender_id;
+          const userInfo = await useUserInfo(senderId);
+          const username = userInfo?.username || '神秘用户';
+          showToast(`${username} 开启了视频播放`);
+        } else if (msg.type === 'set_vedio_pause') {
+          const video = videoRef.value;
+          if (video && !video.paused) video.pause();
+          const senderId = msg.payload.sender_id;
+          const userInfo = await useUserInfo(senderId);
+          const username = userInfo?.username || '神秘用户';
+          showToast(`${username} 暂停了视频播放`);
+        } else if (msg.type === 'set_vedio_jump' && msg.payload) {
+          const { video_time_offset, timestamp } = msg.payload;
+          const video = videoRef.value;
+          if (video && typeof video_time_offset === 'number' && typeof timestamp === 'number') {
+            const now = Date.now();
+            const offset = video_time_offset + (now - timestamp) / 1000;
+            video.currentTime = offset;
+            const senderId = msg.payload.sender_id;
+            const userInfo = await useUserInfo(senderId);
+            const username = userInfo?.username || '神秘用户';
+            showToast(`${username} 调整了视频进度`);
+          }
+        }
+        // 未来可扩展其他type
+      } catch (e) {}
+    });
+  }
+}
+
+function addWebSocketEvents() {
+  const ws = getWebSocket();
+  
+}
+
 
 const membersBarRef = ref(null);
 let isDragging = false;
@@ -652,17 +770,34 @@ function onChatScroll() {
   if (loadingHistory) return;
   const el = chatMessagesRef.value;
   if (!el) return;
-  if (el.scrollTop === 0 && messages.value.length < messageTotal) {
+  if (el.scrollTop === 0 && messageSkip > 0) {
     loadingHistory = true;
-    messageSkip += messagePageSize;
+    let heightBefore = el.scrollHeight;
     fetchMessages({ append: true }).then(() => {
       nextTick(() => {
         // 保持滚动位置
-        if (el) el.scrollTop = 1;
+        let heightAfter = el.scrollHeight;
+        el.scrollTop = heightAfter - heightBefore;
         loadingHistory = false;
       });
     });
   }
+}
+
+watch(wsStatus, (newStatus) => {
+  if (newStatus === 'connected') {
+    getWebSocketAndEnterRoom();
+  }
+});
+
+const toastVisible = ref(false);
+const toastMsg = ref('');
+function showToast(msg, duration = 1500) {
+  toastMsg.value = msg;
+  toastVisible.value = false;
+  nextTick(() => {
+    toastVisible.value = true;
+  });
 }
 </script>
 
@@ -825,12 +960,12 @@ function onChatScroll() {
   background: #1976d2;
   border: none;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 35px;
+  height: 35px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 32px;
   color: #fff;
   cursor: pointer;
   outline: none;
@@ -942,6 +1077,7 @@ function onChatScroll() {
   outline: none;
 }
 .volume-slider {
+  width: 80px;
   accent-color: #1976d2;
   height: 4px;
 }
@@ -1220,6 +1356,20 @@ function onChatScroll() {
 .room-page.dark-mode .volume-icon svg {
   color: #fff;
 }
+.room-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 18px;
+  flex-shrink: 0;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #222;
+}
+.room-page.dark-mode .room-title {
+  color: #1976d2;
+}
 .room-members-bar {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
@@ -1284,6 +1434,7 @@ function onChatScroll() {
   border: 2.5px solid #90caf9;
   background: #fff;
   box-sizing: border-box;
+  cursor: pointer;
 }
 .room-member-item.owner .room-member-avatar {
   border-color: #ffd600;
@@ -1375,5 +1526,28 @@ function onChatScroll() {
 }
 .dialog-close-btn:hover {
   color: #333;
+}
+:deep(.dialog-cancel-btn) {
+  display: none;
+}
+.add-member-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e5e6eb;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+}
+.room-page.dark-mode .add-member-avatar {
+  border-color: #1976d2;
+  background: #e5e6eb;
+}
+.add-member-label {
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+  margin-top: 2px;
 }
 </style>

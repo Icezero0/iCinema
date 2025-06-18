@@ -40,18 +40,31 @@ export function useMyUserInfo() {
         avatarUrl.value = data.avatar_path ? getImageUrl(data.avatar_path) : (data.avatar || defaultAvatar);
         email.value = data.email || '';
         userId.value = data.id || null;
-        // 组装新结构
-        const cacheObj = {
-          my_id: data.id,
-          user_infos: [
-            {
-              username: data.username || 'unknown_user',
-              avatar_url: data.avatar_path ? getImageUrl(data.avatar_path) : (data.avatar || defaultAvatar),
-              email: data.email || '',
-              user_id: data.id || null
-            }
-          ]
+        // 先读取已有缓存
+        let cacheObj = { my_id: data.id, user_infos: [] };
+        const cached = sessionStorage.getItem(USER_CACHE_KEY);
+        if (cached) {
+          try {
+            cacheObj = JSON.parse(cached);
+            cacheObj.my_id = data.id; // 更新 my_id
+            if (!Array.isArray(cacheObj.user_infos)) cacheObj.user_infos = [];
+          } catch (e) {
+            cacheObj = { my_id: data.id, user_infos: [] };
+          }
+        }
+        // 检查 user_infos 是否已有该用户，更新或添加
+        const idx = cacheObj.user_infos.findIndex(u => Number(u.user_id) === Number(data.id));
+        const userInfoObj = {
+          username: data.username || 'unknown_user',
+          avatar_url: data.avatar_path ? getImageUrl(data.avatar_path) : (data.avatar || defaultAvatar),
+          email: data.email || '',
+          user_id: data.id || null
         };
+        if (idx >= 0) {
+          cacheObj.user_infos[idx] = userInfoObj;
+        } else {
+          cacheObj.user_infos.push(userInfoObj);
+        }
         sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(cacheObj));
       }
     } catch (e) {
@@ -64,12 +77,13 @@ export function useMyUserInfo() {
 }
 
 export async function useUserInfo(userId) {
-  // 1. 先查缓存
+  // 1. 先查缓存（每次都重新读取最新的 sessionStorage）
   let cacheObj = null;
+  let cached = sessionStorage.getItem(USER_CACHE_KEY);
   if (cached) {
     try {
       cacheObj = JSON.parse(cached);
-      const userInfo = (cacheObj.user_infos || []).find(u => u.user_id === userId);
+      const userInfo = (cacheObj.user_infos || []).find(u => Number(u.user_id) == Number(userId));
       if (userInfo) {
         return {
           username: userInfo.username,

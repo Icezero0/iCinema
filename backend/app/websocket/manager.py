@@ -87,14 +87,14 @@ class ConnectionManager:
                 return False
         return False
 
-    async def join_room(self, user_id: int, room_id: int) -> bool:
-        """用户加入房间（当用户打开房间页面时调用）"""
+    async def enter_room(self, user_id: int, room_id: int) -> bool:
+        """用户进入房间（当用户打开房间页面时调用）"""
         try:
             async with AsyncSessionLocal() as db:  # type: ignore
                 # 检查房间是否存在
                 room = await crud.rooms.get_room(db, room_id)
                 if not room:
-                    logger.warning(f"User {user_id} tried to join non-existent room {room_id}")
+                    logger.warning(f"User {user_id} tried to enter non-existent room {room_id}")
                     return False
                 
                 # 检查用户是否为房间成员
@@ -116,11 +116,11 @@ class ConnectionManager:
                     await db.commit()
                     logger.info(f"Room {room_id} became active")
                 
-                logger.info(f"User {user_id} joined room {room_id}")
+                logger.info(f"User {user_id} entered room {room_id}")
                 return True
                 
         except Exception as e:
-            logger.error(f"Failed to join room {room_id} for user {user_id}: {e}")
+            logger.error(f"User {user_id} failed to enter room {room_id}: {e}")
             return False
 
     async def leave_room(self, user_id: int, room_id: int):
@@ -143,10 +143,8 @@ class ConnectionManager:
         if room_id not in self.active_room_users:
             return 0
         sent_count = 0
-        print(self.active_room_users[room_id])
         for user_id in self.active_room_users[room_id].copy():
             if user_id != exclude_user:
-                print('going to send to ',user_id)
                 if await self.send_to_user(user_id, message):
                     sent_count += 1
         

@@ -81,7 +81,11 @@ async def get_room_details(
     db_room = await crud.rooms.get_room_details(db, room_id)
     if not db_room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="房间不存在")
-    return db_room
+    message_count = await crud.rooms.get_room_message_count(db, room_id)
+    # 组装响应
+    room_schema = schemas.RoomDetailsResponse.model_validate(db_room, from_attributes=True)
+    room_schema.message_count = message_count
+    return room_schema
 
 @router.put("/rooms/{room_id}", response_model=schemas.Room)
 async def update_room(

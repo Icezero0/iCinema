@@ -21,7 +21,7 @@
     <div class="card-container">
       <!-- 大厅房间 -->
       <div class="room-card">
-        <h2>大厅房间</h2>
+        <h2 class="room-title">大厅房间</h2>
         <div v-if="loadingPublicRooms" class="room-hint">加载中...</div>
         <div v-else-if="publicRooms.length === 0" class="room-hint">暂无大厅房间</div>
         <ul v-else class="room-list">
@@ -47,7 +47,16 @@
       </div>
       <!-- 我的房间 -->
       <div class="room-card">
-        <h2>我的房间</h2>
+        <button class="create-room-btn-float" @click="showCreateRoomDialog = true" title="创建房间">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="12" fill="#1976d2"/>
+            <path d="M12 7V17" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+            <path d="M7 12H17" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div class="my-room-header">
+          <h2 class="room-title">我的房间</h2>
+        </div>
         <div v-if="loadingMyRooms" class="room-hint">加载中...</div>
         <div v-else-if="myRooms.length === 0" class="room-hint">暂无我的房间</div>
         <ul v-else class="room-list">
@@ -71,6 +80,15 @@
       @ok="handleLogoutConfirm"
       @cancel="handleLogoutCancel"
     />
+    <!-- 创建房间对话框复用 -->
+    <BaseDialog
+      :show="showCreateRoomDialog"
+      title="创建房间"
+      @ok="handleCreateRoomOk"
+      @cancel="() => showCreateRoomDialog = false"
+    >
+      <RoomForm v-model="createRoomForm" />
+    </BaseDialog>
     <div v-if="showJoinRequestTip" class="member-invite-tip-mask">
       <div class="member-invite-tip">
         <div>{{ joinRequestTipMsg }}</div>
@@ -85,7 +103,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onUnmounted } from 'vue';
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import CustomConfirm from '@/components/CustomConfirm.vue';
 import { useMyUserInfo } from '@/composables/useUserInfo.js';
@@ -95,6 +113,8 @@ import { checkAccessToken } from '@/utils/auth';
 import { useWebSocketStatus } from '@/composables/useWebSocketStatus';
 import UserAvatar from '@/components/UserAvatar.vue';
 import Pagination from '@/components/Pagination.vue';
+import BaseDialog from '@/components/BaseDialog.vue';
+import RoomForm from '@/components/RoomForm.vue';
 
 const showDropdown = ref(false);
 const showLogoutConfirm = ref(false);
@@ -124,6 +144,46 @@ const notificationCount = ref(0);
 const showJoinRequestTip = ref(false);
 const joinRequestTipMsg = ref('');
 const myRoomIds = ref([]);
+const showCreateRoomDialog = ref(false);
+const newRoomName = ref("");
+const createRoomForm = ref({ name: '', isPublic: true });
+watch(showCreateRoomDialog, (v) => {
+  if (v) {
+    createRoomForm.value.name = `${username.value} 的房间`;
+    createRoomForm.value.isPublic = true;
+  }
+});
+async function handleCreateRoomOk() {
+  // 获取表单数据
+  const { name, isPublic } = createRoomForm.value;
+  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  if (!accessToken) {
+    alert('未登录或登录已过期，请重新登录');
+    return;
+  }
+  try {
+    const resp = await fetch(`${API_BASE_URL}/rooms/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        name,
+        config: { ispublic: isPublic }
+      })
+    });
+    if (resp.ok) {
+      showCreateRoomDialog.value = false;
+      await fetchMyRooms(); // 刷新房间列表
+    } else {
+      const data = await resp.json();
+      alert(data.detail || '创建房间失败');
+    }
+  } catch (e) {
+    alert('网络错误，创建房间失败');
+  }
+}
 
 let heartbeatTimer = null;
 let reconnectTimer = null;
@@ -269,16 +329,6 @@ function changeMyPage(page) {
   fetchMyRooms();
 }
 function enterRoom(roomId) {
-  // 发送websocket消息
-  const ws = getWebSocket();
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'enter_room',
-      payload: {
-        room_id: roomId
-      }
-    }));
-  }
   router.push({ path: '/room', query: { id: roomId } });
 }
 function goToProfile() {
@@ -448,6 +498,7 @@ function applyToJoin(roomId) {
 }
 
 .room-card {
+  position: relative;
   background: linear-gradient(120deg, #f8fafc 0%, #e6eaf5 100%); /* 卡片淡色渐变 */
   border-radius: 18px;
   box-shadow: 0 8px 24px rgba(0, 80, 180, 0.08), 0 1.5px 8px rgba(0,0,0,0.04);
@@ -648,5 +699,38 @@ function applyToJoin(roomId) {
   font-size: 1.2rem;
   color: #333;
   margin-bottom: 0.8rem;
+}
+
+.room-title {
+  flex: 1;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 2.2rem;
+}
+.create-room-btn-float {
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  transition: background 0.2s;
+  z-index: 2;
+}
+.create-room-btn-float svg {
+  display: block;
+}
+.create-room-btn-float:hover svg circle {
+  fill: #1256a2;
+}
+.create-room-btn-float:active svg circle {
+  fill: #0d3c7b;
 }
 </style>

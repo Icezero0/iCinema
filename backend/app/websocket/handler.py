@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect, status
 from typing import Optional
 from .manager import manager
@@ -153,15 +154,14 @@ class WebSocketHandler:
             })
             
         elif message_type == "enter_room":
-            # 加入房间（包含数据库验证）
-            room_id = payload.get("room_id")
+            # 进入房间（包含数据库验证）
+            room_id = int(payload.get("room_id"))
             if room_id:
                 try:
-                    success = await manager.join_room(user_id, room_id)
-                    
+                    success = await manager.enter_room(user_id, room_id)
                     if success:
                         await websocket.send_json({
-                            "type": "room_joined",
+                            "type": "room_entered",
                             "payload": {
                                 "room_id": room_id,
                                 "status": "success",
@@ -170,26 +170,26 @@ class WebSocketHandler:
                         })
                     else:
                         await websocket.send_json({
-                            "type": "room_join_error",
+                            "type": "room_enter_error",
                             "payload": {
                                 "room_id": room_id,
                                 "status": "failed",
-                                "message": "无法加入房间，请检查房间是否存在或您是否有权限"
+                                "message": "无法进入房间，请检查房间是否存在或您是否有权限"
                             }
                         })
                 except Exception as e:
-                    logger.error(f"Error joining room {room_id} for user {user_id}: {e}")
+                    logger.error(f"Error entering room {room_id} for user {user_id}: {e}")
                     await websocket.send_json({
-                        "type": "room_join_error",
+                        "type": "room_enter_error",
                         "payload": {
                             "room_id": room_id,
                             "status": "error",
-                            "message": "加入房间时发生错误"
+                            "message": "进入房间时发生错误"
                         }
                     })
             else:
                 await websocket.send_json({
-                    "type": "room_join_error",
+                    "type": "room_enter_error",
                     "payload": {
                         "status": "invalid",
                         "message": "缺少房间ID"
@@ -199,7 +199,7 @@ class WebSocketHandler:
         
         elif message_type == "leave_room":
             # 离开房间
-            room_id = payload.get("room_id")
+            room_id = int(payload.get("room_id"))
             if room_id:
                 try:
                     await manager.leave_room(user_id, room_id)
@@ -228,7 +228,84 @@ class WebSocketHandler:
                         "message": "缺少房间ID"
                     }
                 })
-        
+
+        # elif message_type == "room_message":
+        #     room_id = int(payload.get("room_id"))
+        #     content = payload.get("content")
+        #     if room_id:
+        #         timestamp = datetime.now(timezone.utc).isoformat()
+        #         ws_message = {
+        #             "type": "room_message",
+        #             "payload": {
+        #                 "room_id": room_id,
+        #                 "sender_id": user_id,
+        #                 "content": content,
+        #                 "timestamp": timestamp
+        #             }
+        #         }
+        #         await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
+
+        elif message_type == "set_vedio_url":
+            room_id = int(payload.get("room_id"))
+            url = payload.get("url")
+            if room_id:
+                timestamp = datetime.now(timezone.utc).isoformat()
+                ws_message = {
+                    "type": "set_vedio_url",
+                    "payload": {
+                        "room_id": room_id,
+                        "sender_id": user_id,
+                        "url": url,
+                        "timestamp": timestamp
+                    }
+                }
+                await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
+
+        elif message_type == "set_vedio_start":
+            room_id = int(payload.get("room_id"))
+            if room_id:
+                timestamp = datetime.now(timezone.utc).isoformat()
+                ws_message = {
+                    "type": "set_vedio_start",
+                    "payload": {
+                        "room_id": room_id,
+                        "sender_id": user_id,
+                        "timestamp": timestamp
+                    }
+                }
+                await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
+
+        elif message_type == "set_vedio_pause":
+            room_id = int(payload.get("room_id"))
+            if room_id:
+                timestamp = datetime.now(timezone.utc).isoformat()
+                ws_message = {
+                    "type": "set_vedio_pause",
+                    "payload": {
+                        "room_id": room_id,
+                        "sender_id": user_id,
+                        "timestamp": timestamp
+                    }
+                }
+                await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
+
+                
+        elif message_type == "set_vedio_jump":
+            room_id = int(payload.get("room_id"))
+            video_time_offset = payload.get("video_time_offset")
+            timestamp = int(payload.get("timestamp"))
+            if room_id:
+                ws_message = {
+                    "type": "set_vedio_jump",
+                    "payload": {
+                        "room_id": room_id,
+                        "sender_id": user_id,
+                        "video_time_offset": video_time_offset,
+                        "timestamp": timestamp
+                    }
+                }
+                await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
+
         else:
             # 未知消息类型
             logger.warning(f"Unknown message type '{message_type}' from user {user_id}")
@@ -236,6 +313,6 @@ class WebSocketHandler:
                 "type": "error",
                 "payload": {
                     "message": f"未知的消息类型: {message_type}",
-                    "supported_types": ["ping", "join_room", "leave_room"]
+                    "supported_types": ["ping", "enter_room", "leave_room"]
                 }
             })

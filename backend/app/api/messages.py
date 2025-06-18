@@ -64,10 +64,8 @@ async def create_message(
                 "timestamp": timestamp
             }
         }
-        
         # 向房间内除发送者外的所有在线用户广播
         sent_count = await manager.broadcast_to_room(room_id, ws_message, exclude_user=current_user.id)
-        
         return {
             "message": "消息发送成功",
             "message_id": db_message.id,

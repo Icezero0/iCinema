@@ -141,7 +141,7 @@ class RoomResponse(Room):
 class RoomDetailsResponse(Room):
     owner : User
     members : List[User]
-    # messages : List[]
+    message_count: int = 0
 
     model_config = {
         "from_attributes": True
