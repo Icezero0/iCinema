@@ -32,16 +32,16 @@ class ConnectionManager:
         self.connections[user_id] = websocket
         logger.info(f"User {user_id} registered in connection manager")
 
-    async def connect(self, websocket: WebSocket, user_id: int, auto_accept: bool = True):
-        """建立WebSocket连接（包含accept操作）- 向后兼容方法"""
-        if auto_accept:
-            try:
-                await websocket.accept()
-            except RuntimeError as e:
-                # 连接已经被accept，继续注册
-                logger.warning(f"WebSocket already accepted for user {user_id}: {e}")
+    # async def connect(self, websocket: WebSocket, user_id: int, auto_accept: bool = True):
+    #     """建立WebSocket连接（包含accept操作）- 向后兼容方法"""
+    #     if auto_accept:
+    #         try:
+    #             await websocket.accept()
+    #         except RuntimeError as e:
+    #             # 连接已经被accept，继续注册
+    #             logger.warning(f"WebSocket already accepted for user {user_id}: {e}")
         
-        await self.register_connection(websocket, user_id)
+    #     await self.register_connection(websocket, user_id)
 
     def disconnect(self, user_id: int):
         """断开WebSocket连接"""
@@ -80,6 +80,7 @@ class ConnectionManager:
             try:
                 websocket = self.connections[user_id]
                 await websocket.send_json(message)
+                print(f"Sent message to user {user_id}: {message}")
                 return True
             except Exception as e:
                 logger.error(f"Failed to send message to user {user_id}: {e}")
@@ -196,6 +197,17 @@ class ConnectionManager:
     def is_room_active(self, room_id: int) -> bool:
         """检查房间是否活跃（有在线用户）"""
         return room_id in self.active_room_users and len(self.active_room_users[room_id]) > 0
+    
+    def is_online_user(self, user_id: int) -> bool:
+        """检查用户是否在线"""
+        return user_id in self.connections
+    
+    def get_user_current_room(self, user_id: int) -> Optional[int]:
+        """获取用户当前所在的房间ID"""
+        for room_id, users in self.active_room_users.items():
+            if user_id in users:
+                return room_id
+        return None
 
 # 全局连接管理器实例
 manager = ConnectionManager()

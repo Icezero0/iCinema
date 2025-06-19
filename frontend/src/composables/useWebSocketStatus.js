@@ -2,8 +2,10 @@ import { ref, computed } from 'vue';
 import { connectWebSocket, isWebSocketConnected, getWebSocket, wsDebugMsgList } from '@/utils/ws';
 import { checkAccessToken } from '@/utils/auth';
 
+// 全局唯一 wsStatus
+export const wsStatus = ref('disconnected');
+
 export function useWebSocketStatus() {
-  const wsStatus = ref('disconnected');
   // computed 依赖 wsDebugMsgList.value，保证响应式
   const wsDebugMsg = computed(() => wsDebugMsgList.value.join('\n'));
 

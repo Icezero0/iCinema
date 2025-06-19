@@ -80,7 +80,7 @@ async def refresh_token(
         "token_type": "bearer"
     }
 
-@router.post("/users/", response_model=schemas.User)
+@router.post("/users", response_model=schemas.User)
 async def create_user(
     user: schemas.UserCreate, 
     db: AsyncSession = Depends(get_db)
@@ -256,7 +256,7 @@ async def update_user_me(
 async def check_access_token(current_user = Depends(auth_deps.get_current_user)):
     return {"status": "valid"}
 
-@router.get("/users/", response_model=schemas.UserList)
+@router.get("/users", response_model=schemas.UserList)
 async def list_users(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="分页起始位置"),

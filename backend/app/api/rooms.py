@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List
+
+from app.websocket.manager import manager
 from .. import schemas, crud, models
 from ..database import get_db
 from app.auth import dependencies as auth_deps
@@ -11,14 +13,12 @@ from ..utils.notifications import create_notification_content
 
 router = APIRouter()
 
-@router.post("/rooms/", response_model=schemas.RoomResponse)
+@router.post("/rooms", response_model=schemas.RoomResponse)
 async def create_room(
     room: schemas.RoomCreate,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(auth_deps.get_current_user)
 ):
-    print(f"Creating room with data: {room}")
-    # 创建房间，房主为当前用户
     db_room = await crud.rooms.create_room(db, room, owner_id=current_user.id)
     if not db_room:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房间创建失败")
@@ -30,7 +30,9 @@ async def create_room(
         owner_id=current_user.id,
         name=room.name,
         created_at=schema_room.created_at,
-        is_active=True
+        is_active=True,
+        is_public=schema_room.is_public,
+        config=schema_room.config
     )
 
 @router.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -70,6 +72,7 @@ async def get_room_info(
         created_at=schema_room.created_at,
         owner_id=schema_room.owner_id,
         is_active=True,
+        is_public=schema_room.is_public
     )
 
 @router.get("/rooms/{room_id}/details", response_model=schemas.RoomDetailsResponse)
@@ -156,7 +159,13 @@ async def create_room_invitation(
             sender_id=current_user.id, 
             status="pending"  # 邀请状态为待处理
         )
-        #TODO :若该用户在线则通过websocket连接推送消息提醒查看
+        if manager.is_online_user(roomMemberAdd.user_id):
+            # 如果用户在线，则通过WebSocket推送消息提醒
+            await manager.send_to_user(
+                roomMemberAdd.user_id,{
+                    "type": "receive_notification"
+                }
+            )
         return {"message": "已发送邀请给用户", "status": "pending"}
     
     elif roomMemberAdd.action == "join_request":
@@ -174,7 +183,13 @@ async def create_room_invitation(
             sender_id=current_user.id,
             status="pending"  # 邀请状态为待处理
         )
-        #TODO :若房主在线则通过websocket连接推送消息提醒查看
+        if manager.is_online_user(schema_room.owner_id):
+            # 如果用户在线，则通过WebSocket推送消息提醒
+            await manager.send_to_user(
+                schema_room.owner_id,{
+                    "type": "receive_notification"
+                }
+            )
         return {"message": "已发送加入申请", "status": "pending"}
     
     elif roomMemberAdd.action == "member_invitation":
@@ -201,7 +216,13 @@ async def create_room_invitation(
             sender_id=current_user.id,
             status="pending"  # 邀请状态为待处理
         )
-        #TODO :若该用户在线则通过websocket连接推送消息提醒查看
+        if manager.is_online_user(roomMemberAdd.user_id):
+            # 如果用户在线，则通过WebSocket推送消息提醒
+            await manager.send_to_user(
+                roomMemberAdd.user_id,{
+                    "type": "receive_notification"
+                }
+            )
         return {"message": "已发送邀请给用户", "status": "pending"}
     
     else:
@@ -245,6 +266,7 @@ async def list_rooms(
     name: str = Query(None, description="房间名模糊搜索"),
     owner_id: int = Query(None, description="房主ID"),
     is_active: bool = Query(None, description="是否活跃"),
+    is_public: bool = Query(None, description="是否公开房间"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -255,6 +277,7 @@ async def list_rooms(
         name=name,
         owner_id=owner_id,
         is_active=is_active,
+        is_public=is_public,
         skip=skip,
         limit=limit
     )

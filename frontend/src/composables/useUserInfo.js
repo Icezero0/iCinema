@@ -68,7 +68,7 @@ export function useMyUserInfo() {
         sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(cacheObj));
       }
     } catch (e) {
-      alert('获取用户信息失败，请稍后再试。');
+      // alert('获取用户信息失败，请稍后再试。');
       console.error('Error fetching user info:', e);
     }
   }
@@ -98,7 +98,7 @@ export async function useUserInfo(userId) {
   let userInfo = null;
   try {
     const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-    const resp = await fetch(`${API_BASE_URL}/users/?userid=${userId}`, {
+    const resp = await fetch(`${API_BASE_URL}/users?userid=${userId}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
     if (resp.ok) {

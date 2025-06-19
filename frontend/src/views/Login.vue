@@ -24,8 +24,10 @@ const handleLogin = async () => {
       throw new Error('登录失败，请检查您的邮箱和密码');
     }    const data = await response.json();
 
-    document.cookie = `accesstoken=${data.access_token}; path=/; secure;`;
-    document.cookie = `refreshtoken=${data.refresh_token}; path=/; secure; max-age=604800;`;
+    // document.cookie = `accesstoken=${data.access_token}; path=/; secure;`;
+    // document.cookie = `refreshtoken=${data.refresh_token}; path=/; secure; max-age=604800;`;
+    document.cookie = `accesstoken=${data.access_token}; path=/;`;
+    document.cookie = `refreshtoken=${data.refresh_token}; path=/; max-age=604800;`;
 
     router.push('/home');
   } catch (error) {

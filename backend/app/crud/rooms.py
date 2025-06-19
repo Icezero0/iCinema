@@ -13,7 +13,9 @@ async def create_room(
     db_room = models.Room(
         name=room.name,
         owner_id=owner_id,
-        is_active=True
+        is_active=False,
+        is_public=room.is_public,
+        config=room.config
     )
     db.add(db_room)
     await db.commit()
@@ -41,6 +43,7 @@ async def get_rooms_by_filter(
     name: Optional[str] = None,
     owner_id: Optional[int] = None,
     is_active: Optional[bool] = None,
+    is_public: Optional[bool] = None,
     skip: int = 0,
     limit: int = 20
 ) -> tuple[List[models.Room], int]:
@@ -50,6 +53,7 @@ async def get_rooms_by_filter(
     :param name: 房间名（模糊匹配）
     :param owner_id: 房主ID
     :param is_active: 是否活跃
+    :param is_public: 是否公开房间
     :param skip: 跳过条数
     :param limit: 返回条数
     :return: 元组 (房间列表, 总数)
@@ -61,6 +65,8 @@ async def get_rooms_by_filter(
         base_query = base_query.where(models.Room.owner_id == owner_id)
     if is_active is not None:
         base_query = base_query.where(models.Room.is_active == is_active)
+    if is_public is not None:
+        base_query = base_query.where(models.Room.is_public == is_public)
     
     # 计算总数
     count_query = select(func.count()).select_from(base_query.subquery())

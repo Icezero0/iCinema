@@ -95,10 +95,10 @@
         <button @click="showJoinRequestTip = false">知道了</button>
       </div>
     </div>
-    <div class="ws-debug">
+    <!-- <div class="ws-debug">
       <h4>WebSocket调试输出</h4>
       <pre style="max-height:200px;overflow:auto;background:#f7f7f7;border-radius:6px;padding:0.5rem;">{{ wsDebugMsg }}</pre>
-    </div>
+    </div> -->
   </div>
 </template>
 
@@ -162,7 +162,7 @@ async function handleCreateRoomOk() {
     return;
   }
   try {
-    const resp = await fetch(`${API_BASE_URL}/rooms/`, {
+    const resp = await fetch(`${API_BASE_URL}/rooms`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -170,7 +170,8 @@ async function handleCreateRoomOk() {
       },
       body: JSON.stringify({
         name,
-        config: { ispublic: isPublic }
+        is_public: isPublic,
+        // config:
       })
     });
     if (resp.ok) {
@@ -225,6 +226,16 @@ onMounted(async () => {
   await fetchMyRooms();
   await fetchNotificationCount();
   setupWebSocket();
+
+  const ws = getWebSocket && getWebSocket();
+  if (ws) {
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'receive_notification' && router.currentRoute.value.path === '/home') {
+        notificationCount.value += 1;
+      }
+    };
+  }
 });
 
 onUnmounted(() => {
@@ -236,8 +247,7 @@ async function fetchPublicRooms() {
   try {
     const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
     const skip = (publicPage.value - 1) * pageSize;
-    // 不加任何filter，直接查所有房间
-    const res = await fetch(`${API_BASE_URL}/rooms?skip=${skip}&limit=${pageSize}`, {
+    const res = await fetch(`${API_BASE_URL}/rooms?skip=${skip}&limit=${pageSize}&is_public=true`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
     if (res.ok) {
@@ -304,7 +314,7 @@ async function fetchMyRoomIds() {
 async function fetchNotificationCount() {
   try {
     const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-    const res = await fetch(`${API_BASE_URL}/notifications/?skip=0&limit=1`, {
+    const res = await fetch(`${API_BASE_URL}/notifications?skip=0&limit=1`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
     if (res.ok) {
@@ -684,7 +694,7 @@ function applyToJoin(roomId) {
   color: #f44336;
 }
 
-.ws-debug {
+/* .ws-debug {
   margin-top: 2rem;
   padding: 1rem;
   background: #fff;
@@ -699,7 +709,7 @@ function applyToJoin(roomId) {
   font-size: 1.2rem;
   color: #333;
   margin-bottom: 0.8rem;
-}
+} */
 
 .room-title {
   flex: 1;

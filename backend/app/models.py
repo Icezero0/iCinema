@@ -32,6 +32,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=get_utc_now)
     avatar_path = Column(String, nullable=True, default=None)
+    auto_accept = Column(Boolean, default=False, nullable=False)
     
     rooms_owned = relationship("Room", back_populates="owner")
     messages = relationship("Message", back_populates="user")
@@ -52,9 +53,11 @@ class Room(Base):
     created_at = Column(DateTime(timezone=True), default=get_utc_now)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_active = Column(Boolean, default=True)
+    is_public = Column(Boolean, default=False)
+    config = Column(String, nullable=True, default=None)
     
     owner = relationship("User", back_populates="rooms_owned")
-    messages = relationship("Message", back_populates="room")
+    messages = relationship("Message", back_populates="room", cascade="all, delete-orphan")
     
     members = relationship(
         "User",

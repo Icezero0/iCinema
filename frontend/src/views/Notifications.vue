@@ -77,7 +77,7 @@ async function fetchNotifications() {
   try {
     const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
     const skip = (page.value - 1) * pageSize;
-    const res = await fetch(`${API_BASE_URL}/notifications/?skip=${skip}&limit=${pageSize}`, {
+    const res = await fetch(`${API_BASE_URL}/notifications?skip=${skip}&limit=${pageSize}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
     if (res.ok) {

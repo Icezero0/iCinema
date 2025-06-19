@@ -19,97 +19,111 @@
     </div>
     <div class="room-main">
       <!-- 视频播放区域 -->
-      <div class="video-area">
+      <div class="video-area" ref="videoAreaRef">
         <video ref="videoRef" class="video-player" />
-        <!-- 自定义控制栏 -->
-        <div class="custom-video-controls">
-          <button @click="togglePlay" class="play-btn" :disabled="!isOwner">
-            <span v-if="!isPlaying">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="8,5 19,12 8,19" /></svg>
-            </span>
-            <span v-else>
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
-            </span>
-          </button>
-          <!-- 自定义进度条缓冲区可视化 -->
-          <div class="video-progress-bar-wrap">
-            <div class="video-buffer-bar">
-              <template v-for="(range, idx) in bufferedRanges" :key="idx">
-                <div class="buffered-segment" :style="{ left: range.start + '%', width: (range.end - range.start) + '%' }"></div>
-              </template>
+        <div class="video-extra-area">
+          <!-- 自定义控制栏 -->
+          <div class="custom-video-controls">
+            <button @click="togglePlay" class="play-btn" :disabled="!isOwner">
+              <span v-if="!isPlaying">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="8,5 19,12 8,19" /></svg>
+              </span>
+              <span v-else>
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+              </span>
+            </button>
+            <!-- 自定义进度条缓冲区可视化 -->
+            <div class="video-progress-bar-wrap">
+              <div class="video-buffer-bar">
+                <template v-for="(range, idx) in bufferedRanges" :key="idx">
+                  <div class="buffered-segment" :style="{ left: range.start + '%', width: (range.end - range.start) + '%' }"></div>
+                </template>
+              </div>
+              <div class="video-played-bar" :style="{ width: playedPercent + '%' }"></div>
+              <input
+                type="range"
+                min="0"
+                :max="duration"
+                step="0.1"
+                v-model.number="currentTime"
+                @input="onSeek"
+                class="video-progress-input"
+                :disabled="!isOwner"
+              />
             </div>
-            <div class="video-played-bar" :style="{ width: playedPercent + '%' }"></div>
+            <span class="time-label">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
+            <span class="volume-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <polygon points="3,9 3,15 7,15 12,20 12,4 7,9" />
+                <path d="M16.5,12c0-1.77-1-3.29-2.5-4.03v8.06C15.5,15.29,16.5,13.77,16.5,12z" />
+              </svg>
+            </span>
             <input
               type="range"
               min="0"
-              :max="duration"
-              step="0.1"
-              v-model.number="currentTime"
-              @input="onSeek"
-              class="video-progress-input"
-              :disabled="!isOwner"
+              max="1"
+              step="0.01"
+              v-model.number="volume"
+              @input="onVolumeChange"
+              class="volume-slider"
+              title="音量"
             />
           </div>
-          <span class="time-label">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
-          <span class="volume-icon">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <polygon points="3,9 3,15 7,15 12,20 12,4 7,9" />
-              <path d="M16.5,12c0-1.77-1-3.29-2.5-4.03v8.06C15.5,15.29,16.5,13.77,16.5,12z" />
-            </svg>
-          </span>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            v-model.number="volume"
-            @input="onVolumeChange"
-            class="volume-slider"
-            title="音量"
-          />
-        </div>
-        <!-- 视频状态提示，放在播放器下方、表单上方 -->
-        <div v-if="videoStatusMsg" class="video-status-msg" :class="{ loading: videoLoading }">
-          {{ videoStatusMsg }}
-        </div>
-        <!-- 视频外链/房间设置表单，紧跟在控制栏下方 -->
-        <form class="video-form">
-          <div class="form-group">
-            <label for="video-url">视频外链：</label>
-            <input
-              id="video-url"
-              v-model="videoUrlInput"
-              :disabled="!isOwner"
-              type="text"
-              placeholder="请输入视频外链地址"
-              class="video-url-input"
-            />
-            <button
-              type="button"
-              class="video-url-confirm-btn"
-              @click="confirmVideoUrl"
-              :disabled="!isValidVideoUrl || (!isOwner && videoUrlInput !== videoUrl)"
-              style="margin-left:8px;"
-            >确认</button>
+          <div v-if="videoStatusMsg" class="video-status-msg" :class="{ loading: videoLoading }">
+            {{ videoStatusMsg }}
           </div>
-        </form>
-        <div v-if="isOwner" class="room-settings card">
-          <h4>房间设置</h4>
-          <div class="form-group">
-            <label for="room-name">房间名称：</label>
-            <input id="room-name" v-model="roomName" type="text" class="room-name-input" />
+          <!-- 视频外链/房间设置表单，紧跟在控制栏下方 -->
+          <form class="video-form">
+            <div class="form-group">
+              <label for="video-url">视频外链：</label>
+              <input
+                id="video-url"
+                v-model="videoUrlInput"
+                :disabled="!isOwner"
+                type="text"
+                placeholder="请输入视频外链地址"
+                class="video-url-input"
+              />
+              <button
+                type="button"
+                class="video-url-confirm-btn"
+                @click="confirmVideoUrl"
+                :disabled="!isValidVideoUrl || (!isOwner && videoUrlInput !== videoUrl)"
+                style="margin-left:8px;"
+              >确认</button>
+            </div>
+          </form>
+          <div v-if="isOwner" class="room-settings card">
+            <h4>房间设置</h4>
+            <div class="form-group">
+              <label for="room-name">房间名称：</label>
+              <input id="room-name" v-model="roomNameInput" type="text" class="room-name-input" />
+              <label for="room-public-switch">公开：</label>
+              <input
+                id="room-public-switch"
+                type="checkbox"
+                v-model="isRoomPublic"
+                class="room-public-switch"
+              />
+            </div>
+            <div class="room-settings-actions">
+              <button class="save-btn" @click="saveRoomSettings">保存</button>
+              <button class="dissolve-btn" @click="dissolveRoom">解散房间</button>
+            </div>
+            <!-- 其他设置项可继续添加 -->
           </div>
-          <!-- 其他设置项可继续添加 -->
         </div>
       </div>
+      <!-- 垂直分隔条 -->
+      <div class="drag-divider drag-divider-vertical" @mousedown="startDragVerticalDivider"></div>
       <!-- 消息栏 -->
-      <div class="chat-bar">
+      <div class="chat-bar" ref="chatBarRef">
         <!-- 房间成员区域 -->
         <div class="room-members-label">房间成员</div>
         <div class="room-members-bar" ref="membersBarRef">
           <template v-if="roomMembers.length > 0">
             <div v-for="(member, idx) in roomMembers" :key="member.id" class="room-member-item" :class="{ owner: member.isOwner }">
-              <UserAvatar :src="member.avatarUrl" :alt="member.username" size="38" class="room-member-avatar" />
+              <UserAvatar :src="member.avatarUrl" :alt="member.username" size="38" class="room-member-avatar" @click="openUserInfoDialog(member)"/>
               <div class="room-member-name">{{ member.username }}</div>
             </div>
             <div class="room-member-item add-member-btn" @click="showAddUserDialog = true" title="添加成员">
@@ -129,7 +143,27 @@
               <div class="room-member-name">测试用户</div>
             </div>
           </template>
-          <!-- 添加成员弹窗（BaseDialog重构） -->
+          <!-- 用户信息弹窗 -->
+          <BaseDialog
+            :show="showUserInfoDialog"
+            title="用户信息"
+            @cancel="showUserInfoDialog = false"
+            @ok="showUserInfoDialog = false"
+          >
+              <div class="user-info-dialog-content" v-if="selectedUser">
+              <UserAvatar :src="selectedUser.avatarUrl" :alt="selectedUser.username" class="user-avatar-detail" />
+              <div class="user-info-username">{{ selectedUser.username }}</div>
+              <div class="user-info-email">{{ selectedUser.email }}</div>
+              <button class="remove-btn"
+                @click="removeUserFromRoom(selectedUser)"
+                :disabled="!canRemoveUser(selectedUser)"
+              >
+                移出房间
+              </button>
+              <!-- 其他信息 -->
+            </div>
+          </BaseDialog>
+          <!-- 添加成员弹窗 -->
           <BaseDialog
             :show="showAddUserDialog"
             title="添加成员"
@@ -223,7 +257,7 @@ async function fetchMessages({ append = false } = {}) {
   try {
     messageSkip = Math.max(0, messageSkip - messagePageSize);
     loadingMessagePageSize = messageSkipCopy - messageSkip;
-    const resp = await fetch(`${API_BASE_URL}/rooms/${roomId}/messages/?skip=${messageSkip}&limit=${loadingMessagePageSize}`, {
+    const resp = await fetch(`${API_BASE_URL}/rooms/${roomId}/messages?skip=${messageSkip}&limit=${loadingMessagePageSize}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
     if (resp.ok) {
@@ -235,7 +269,7 @@ async function fetchMessages({ append = false } = {}) {
           return {
             content: msg.content,
             user_id: msg.user_id,
-            username: userInfo?.username || '未知用户',
+            username: userInfo?.username || '神秘用户',
             avatar: userInfo?.avatarUrl || defaultAvatar,
             isSelf: msg.user_id === userId.value
           };
@@ -270,6 +304,8 @@ const videoUrlInput = ref("");
 const roomName = ref("");
 const videoStatusMsg = ref("");
 const videoLoading = ref(false);
+const roomNameInput = ref("");
+const isRoomPublic = ref(false);
 const roomMembers = ref([]);
 const showAddUserDialog = ref(false);
 const userSearchQuery = ref('');
@@ -280,9 +316,51 @@ const userPageSize = 10;
 const userTotal = ref(0);
 const userTotalPages = computed(() => Math.ceil(userTotal.value / userPageSize));
 const invitedUserIds = ref([]); // 新增：已邀请用户ID列表
+const showUserInfoDialog = ref(false);
+const selectedUser = ref(null);
+
 // 在fetchRoomDetailsAndSetIdentity中填充成员，房主排首位
 
 const { wsStatus, wsDebugMsg, setupWebSocket, updateWsStatusAndDebug } = useWebSocketStatus();
+
+async function openUserInfoDialog(user) {
+  showUserInfoDialog.value = true;
+  const userInfo = await useUserInfo(user.id);
+  selectedUser.value = {
+    id: user.id,
+    avatarUrl: userInfo.avatarUrl,
+    username: userInfo.username,
+    email: userInfo.email,
+  };
+}
+
+function canRemoveUser(user) {
+  return (isOwner.value && user.id !== userId.value) || (!isOwner.value && user.id === userId.value);
+}
+
+async function removeUserFromRoom(user) {
+  let ok = false;
+  if (isOwner.value) {
+    ok = window.confirm(`确定要将用户 ${user.username} 移出房间吗？`);
+  } else { 
+    ok = window.confirm(`确定要退出房间吗？`);
+  }
+  if (!ok) return;
+  const roomId = route.query.id || route.params.id;
+  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  // 调用后端API移除用户
+  await fetch(`${API_BASE_URL}/rooms/${roomId}/members/${user.id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`
+    }
+  });
+  const idx = roomMembers.value.findIndex(m => m.id === user.id);
+  if (idx !== -1) {
+    roomMembers.value.splice(idx, 1);
+  }
+  showUserInfoDialog.value = false;
+}
 
 async function fetchRoomDetailsAndSetIdentity() {
   const roomId = route.query.id || route.params.id;
@@ -304,6 +382,8 @@ async function fetchRoomDetailsAndSetIdentity() {
       let members = [];
       if (data.name) { 
         roomName.value = data.name;
+        roomNameInput.value = data.name;
+        isRoomPublic.value = data.is_public || false;
       }
       if (data.owner) {
         members.push({
@@ -329,6 +409,8 @@ async function fetchRoomDetailsAndSetIdentity() {
       // 加载房间消息
       if (data.message_count) messageSkip = data.message_count;
       await fetchMessages();
+
+
     }
   } catch (e) { /* 可加错误提示 */ }
 }
@@ -357,7 +439,7 @@ async function sendMessage() {
     if (roomId) {
       const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
       try {
-        await fetch(`${API_BASE_URL}/rooms/${roomId}/messages/`, {
+        await fetch(`${API_BASE_URL}/rooms/${roomId}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -521,6 +603,61 @@ function updateBuffered() {
   bufferedRanges.value = ranges;
 }
 
+function saveRoomSettings() {
+  const roomId = route.query.id || route.params.id;
+  if (!roomId) return;
+  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  fetch(`${API_BASE_URL}/rooms/${roomId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+      name: roomNameInput.value,
+      is_public: isRoomPublic.value,
+      // config: {
+      // }
+    })
+  }).then(resp => {
+    if (resp.ok) {
+      showToast('房间设置已保存');
+      roomName.value = roomNameInput.value;
+    } else {
+      showToast('保存房间设置失败，请稍后再试');
+    }
+  });
+}
+
+function dissolveRoom() {
+  const ok = window.confirm('确定要解散房间吗？此操作不可撤销！');
+  const roomId = route.query.id || route.params.id;
+  if (!roomId) return;
+  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  fetch(`${API_BASE_URL}/rooms/${roomId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  }).then(resp => {
+    if (resp.ok) {
+      showToast('时间Cia不多llo～(∠・ω< )⌒★');
+      setTimeout(() => {
+        // 断开WebSocket连接
+        const ws = getWebSocket();
+        if (ws) {
+          ws.send(JSON.stringify({
+            type: 'leave_room',
+            payload: { room_id: roomId, sender_id: userId.value }
+          }));
+          ws.close();
+        }
+        router.push('/');
+      }, 2000); 
+    } else {
+      showToast('解散房间失败，请稍后再试');
+    }
+  });
+}
+
 onMounted(() => {
   const video = videoRef.value;
   if (!video) return;
@@ -649,6 +786,8 @@ async function getWebSocketAndEnterRoom() {
           const userInfo = await useUserInfo(senderId);
           const username = userInfo?.username || '神秘用户';
           showToast(`${username} 暂停了视频播放`);
+        } else if (msg.type === 'receive_notification') {
+          showToast('您有新的通知，请在通知页面查看。');
         } else if (msg.type === 'set_vedio_jump' && msg.payload) {
           const { video_time_offset, timestamp } = msg.payload;
           const video = videoRef.value;
@@ -684,6 +823,7 @@ function startDragDivider(e) {
   startY = e.clientY;
   startHeight = membersBarRef.value.offsetHeight;
   document.body.style.cursor = 'row-resize';
+  document.body.style.userSelect = 'none';
   window.addEventListener('mousemove', onDragDivider);
   window.addEventListener('mouseup', stopDragDivider);
 }
@@ -696,6 +836,7 @@ function onDragDivider(e) {
 function stopDragDivider() {
   isDragging = false;
   document.body.style.cursor = '';
+  document.body.style.userSelect = '';
   window.removeEventListener('mousemove', onDragDivider);
   window.removeEventListener('mouseup', stopDragDivider);
 }
@@ -763,7 +904,7 @@ const inviteUser = async (userId) => {
     invitedUserIds.value.push(userId);
   }
 }
-watch(() => showAddUserDialog.value, v => { if (v) { userPage.value = 1; userSearchQuery.value = ''; fetchUserList(); invitedUserIds.value = []; } });
+watch(() => showAddUserDialog.value, v => { if (v) { userPage.value = 1; userSearchQuery.value = ''; invitedUserIds.value = []; } });
 
 
 function onChatScroll() {
@@ -798,6 +939,40 @@ function showToast(msg, duration = 1500) {
   nextTick(() => {
     toastVisible.value = true;
   });
+}
+
+const videoAreaRef = ref(null);
+const chatBarRef = ref(null);
+let isDraggingVertical = false;
+let startX = 0;
+let startChatBarWidth = 0;
+function startDragVerticalDivider(e) {
+  isDraggingVertical = true;
+  startX = e.clientX;
+  startChatBarWidth = chatBarRef.value.offsetWidth;
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  window.addEventListener('mousemove', onDragVerticalDivider);
+  window.addEventListener('mouseup', stopDragVerticalDivider);
+}
+function onDragVerticalDivider(e) {
+  if (!isDraggingVertical) return;
+  const delta = startX - e.clientX;
+  let newWidth = Math.max(200, startChatBarWidth + delta); // chat-bar最小宽度200px
+  // 计算video-area剩余宽度，不能小于640px
+  const roomMainWidth = videoAreaRef.value.parentElement.offsetWidth;
+  const maxChatBarWidth = roomMainWidth - 640; // video-area最小640px
+  if (newWidth > maxChatBarWidth) {
+    newWidth = maxChatBarWidth;
+  }
+  chatBarRef.value.style.width = `${newWidth}px`;
+}
+function stopDragVerticalDivider() {
+  isDraggingVertical = false;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  window.removeEventListener('mousemove', onDragVerticalDivider);
+  window.removeEventListener('mouseup', stopDragVerticalDivider);
 }
 </script>
 
@@ -922,6 +1097,7 @@ function showToast(msg, duration = 1500) {
   overflow-x: hidden;
   position: relative;
   min-width: 0;
+  min-height: 0;
 }
 .room-page.dark-mode .video-area {
   background: linear-gradient(120deg, #23283a 0%, #181c24 100%);
@@ -932,14 +1108,14 @@ function showToast(msg, duration = 1500) {
   aspect-ratio: 16 / 9;
   min-width: 640px;
   min-height: 360px;
-  max-width: 100vw;
-  max-height: 80vh;
+  max-width: 100%;
+  max-height: 100%;
   background: #000;
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.2);
   display: block;
   margin-top: 32px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 .custom-video-controls {
   width: 100%;
@@ -1126,9 +1302,54 @@ function showToast(msg, duration = 1500) {
   background: #23283a;
   color: #666;
 }
+
+.room-settings-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.save-btn {
+  padding: 8px 24px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.save-btn:hover {
+  background: #1256a2;
+}
+
+.dissolve-btn {
+  padding: 8px 24px;
+  background: #e53935;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.dissolve-btn:hover {
+  background: #b71c1c;
+}
+
+.room-public-switch {
+  width: 20px;
+  height: 20px;
+  accent-color: #1976d2;
+  margin-left: 0px;
+}
+
 .card {
   width: 100%;
-  max-width: 640px;
+  max-width: 800px;
   margin: 0 auto 24px auto;
   background: #fff;
   border-radius: 10px;
@@ -1162,7 +1383,9 @@ function showToast(msg, duration = 1500) {
   color: #90caf9;
 }
 .chat-bar {
-  width: 340px;
+  width: 330px;
+  min-width: 330px;
+  max-width: 100%;
   background: #fff;
   display: flex;
   flex-direction: column;
@@ -1418,6 +1641,35 @@ function showToast(msg, duration = 1500) {
 .room-page.dark-mode .drag-divider::after {
   background: #90caf9;
 }
+.drag-divider-vertical {
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  background: #e0e6ed;
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.room-page.dark-mode .drag-divider-vertical {
+  background: #23283a;
+}
+.drag-divider-vertical::after {
+  content: '';
+  display: block;
+  height: 32px;
+  width: 3px;
+  background: #b0bec5;
+  border-radius: 2px;
+  margin: 0 auto;
+}
+.room-page.dark-mode .drag-divider-vertical::after {
+  background: #90caf9;
+}
 .room-member-item {
   display: flex;
   flex-direction: column;
@@ -1513,20 +1765,6 @@ function showToast(msg, duration = 1500) {
   color: #333;
   margin-bottom: 24px;
 }
-.dialog-close-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 16px;
-  color: #888;
-  transition: color 0.2s;
-}
-.dialog-close-btn:hover {
-  color: #333;
-}
 :deep(.dialog-cancel-btn) {
   display: none;
 }
@@ -1549,5 +1787,52 @@ function showToast(msg, duration = 1500) {
   color: #888;
   font-size: 13px;
   margin-top: 2px;
+}
+.video-extra-area {
+  width: 100%;
+  flex: 1 1 0;
+  overflow-y: auto;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.user-info-dialog-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.user-info-username {
+  font-size: 24px;
+  color: #333;
+}
+.user-info-email {
+  font-size: 16px;
+  color: #888; 
+  font-style: italic;
+}
+
+.user-avatar-detail {
+  width: 128px !important;
+  height: 128px !important;
+  border-radius: 5%;
+  object-fit: cover;
+}
+
+.remove-btn {
+  margin-top: 16px;
+  padding: 8px 24px;
+  background: #e53935;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.remove-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }
 </style>

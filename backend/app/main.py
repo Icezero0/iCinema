@@ -13,6 +13,7 @@ import os
 
 logging.basicConfig(level=logging.INFO)
 
+# 创建上传目录存在
 avatars_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/upload/avatars'))
 os.makedirs(avatars_dir, exist_ok=True)
 

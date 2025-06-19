@@ -15,6 +15,7 @@ class User(UserBase):
     id: int
     created_at: datetime
     avatar_path: Optional[str] = None
+    auto_accept: bool = False
 
     model_config = {
         "from_attributes": True
@@ -25,6 +26,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     username: Optional[str] = None
     avatar_base64: Optional[str] = None
+    auto_accept: Optional[bool] = None
 
 class UserList(BaseModel):
     items: List[User]
@@ -33,6 +35,8 @@ class UserList(BaseModel):
 # 房间相关的 Schema
 class RoomBase(BaseModel):
     name: str
+    is_public: Optional[bool] = None
+    config: Optional[str] = None
 
 class RoomCreate(RoomBase):
     pass
@@ -49,6 +53,8 @@ class Room(RoomCreate):
 
 class RoomUpdate(BaseModel):
     name: Optional[str] = None
+    is_public: Optional[bool] = None
+    config: Optional[str] = None
 
 class RoomList(BaseModel):
     items: List[Room]

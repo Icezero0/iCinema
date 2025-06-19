@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.post("/rooms/{room_id}/messages/")
+@router.post("/rooms/{room_id}/messages")
 async def create_message(
     room_id: int,
     message: schemas.MessageCreate,
@@ -83,7 +83,7 @@ async def create_message(
             "timestamp": timestamp
         }
 
-@router.get("/rooms/{room_id}/messages/", response_model=schemas.MessageListResponse)
+@router.get("/rooms/{room_id}/messages", response_model=schemas.MessageListResponse)
 async def get_room_messages(
     room_id: int,
     skip: int = Query(0, ge=0, description="跳过的消息数量"),

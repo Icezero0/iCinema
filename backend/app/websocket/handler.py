@@ -200,7 +200,7 @@ class WebSocketHandler:
         elif message_type == "leave_room":
             # 离开房间
             room_id = int(payload.get("room_id"))
-            if room_id:
+            if room_id and room_id == manager.get_user_current_room(user_id):
                 try:
                     await manager.leave_room(user_id, room_id)
                     await websocket.send_json({

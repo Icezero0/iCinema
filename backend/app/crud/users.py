@@ -50,7 +50,7 @@ async def update_user(
     update_data: dict
 ) -> Optional[models.User]:
     # 只允许更新的字段白名单
-    ALLOWED_FIELDS = {"username", "avatar_path", "hashed_password"}
+    ALLOWED_FIELDS = {"username", "avatar_path", "hashed_password", "auto_accept"}
     query = select(models.User).where(models.User.id == user_id)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
