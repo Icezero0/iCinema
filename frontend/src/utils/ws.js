@@ -30,7 +30,7 @@ export function connectWebSocket({
     return null;
   }
   onStatusChange && onStatusChange('connecting');
-  const wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || `ws${location.protocol === 'https:' ? 's' : ''}://${location.hostname}:8000`;
+  const wsBaseUrl = `ws${location.protocol === 'https:' ? 's' : ''}://${location.hostname}:8000`;
   ws = new WebSocket(`${wsBaseUrl}/ws`);
   ws.onopen = () => {
     onStatusChange && onStatusChange('connected');

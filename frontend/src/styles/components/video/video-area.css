@@ -1,0 +1,229 @@
+/* ===== VideoArea Component Styles ===== */
+
+.video-area {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  min-width: 640px; /* 确保视频区域最小宽度为640px（360p） */
+  min-height: 0;
+  transition: background var(--transition-normal);
+}
+
+.video-area.dark-mode {
+  background: linear-gradient(120deg, #23283a 0%, #181c24 100%);
+}
+
+.video-player {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  min-width: 640px;
+  min-height: 360px;
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-lg);
+  display: block;
+  margin-top: 0; /* 修改上边距为0 */
+  margin-bottom: var(--spacing-lg);
+  transition: box-shadow var(--transition-normal);
+}
+
+.video-player:hover {
+  box-shadow: var(--shadow-xl);
+}
+
+.video-extra-area {
+  width: 100%;
+  flex: 1 1 0;
+  overflow-y: auto;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.card {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto var(--spacing-lg) auto;
+  background: var(--color-background);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-md) var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-hover);
+}
+
+.video-area.dark-mode .card {
+  background: #23283a;
+  border: 1px solid #23283a;
+  box-shadow: 0 2px 12px rgba(25, 118, 210, 0.10);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .video-area {
+    min-width: 100%; /* 移动端移除最小宽度限制 */
+    overflow-x: hidden;
+    min-height: 0;
+  }  .video-area.mobile-mode {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background: #000; /* 移动端视频区域背景为黑色 */
+    margin: 0;
+    padding: 0;
+    position: relative;
+  }
+
+  .video-area.mobile-mode .video-player {
+    width: 100%;
+    height: 100%; /* 占满整个容器 */
+    min-width: 100%;
+    min-height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0;
+    border-radius: 0; /* 移动端去掉圆角 */
+    box-shadow: none;
+    object-fit: contain; /* 确保视频按比例缩放 */
+  }  .video-player {
+    min-width: 100%; /* 移动端视频播放器占满容器宽度 */
+    min-height: auto;
+    margin-top: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    border-radius: var(--mobile-border-radius);
+  }
+  
+  .video-extra-area {
+    padding: 0 var(--mobile-padding);
+  }
+  
+  .card {
+    margin: 0 0 var(--spacing-sm) 0;
+    padding: var(--mobile-padding);
+    border-radius: var(--mobile-border-radius);
+  }
+}
+
+/* ===== 移动端视频状态遮罩层 ===== */
+.mobile-video-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  pointer-events: none;
+  transition: all var(--transition-normal);
+}
+
+/* 加载中遮罩 */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm); /* 减少转圈动画和文字间距 */
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--transition-normal);
+}
+
+.mobile-video-overlay.show-loading .loading-overlay {
+  opacity: 1;
+  visibility: visible;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 0; /* 移除额外的上边距，依赖父容器的gap */
+}
+
+/* 错误状态遮罩 */
+.error-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--transition-normal);
+}
+
+.mobile-video-overlay.show-error .error-overlay {
+  opacity: 1;
+  visibility: visible;
+}
+
+.error-icon {
+  font-size: 48px;
+  color: #ff6b6b;
+  margin-bottom: var(--spacing-xs);
+}
+
+.error-text {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  max-width: 80%;
+  line-height: 1.4;
+}
+
+/* 深色模式下的遮罩层调整 */
+.mobile-video-overlay.dark-mode .loading-overlay {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.mobile-video-overlay.dark-mode .error-overlay {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+/* 加载动画 */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

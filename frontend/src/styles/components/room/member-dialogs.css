@@ -1,0 +1,285 @@
+/* 成员弹窗样式 */
+.user-info-dialog-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+}
+
+.user-avatar-detail {
+  width: 150px !important;
+  height: 150px !important;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 3px solid #1976d2;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: block;
+}
+
+.user-info-username {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.user-info-email {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-style: italic;
+}
+
+.remove-btn {
+  padding: var(--spacing-xs) var(--spacing-lg);
+  background: var(--color-danger);
+  color: var(--color-background);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.remove-btn:hover:not(:disabled) {
+  background: var(--color-danger-hover);
+}
+
+.remove-btn:disabled {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+/* 添加成员弹窗样式 */
+.dialog-content {
+  padding: var(--spacing-md);
+}
+
+.search-area {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.search-input {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.search-input:focus {
+  border-color: var(--primary-color);
+}
+
+.search-btn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--primary-color);
+  color: var(--color-background);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.search-btn:hover {
+  background: var(--primary-color-hover);
+}
+
+.loading-text,
+.empty-text {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--spacing-lg);
+}
+
+.user-list {
+  max-height: 220px;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.user-item-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.user-item-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.user-status-badge {
+  padding: 3px 10px;
+  font-size: 12px;
+  border-radius: var(--border-radius-sm);
+  font-weight: 500;
+  line-height: 1.2;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  box-sizing: border-box;
+}
+
+.user-status-badge.in-room {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.user-status-badge.invited {
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+}
+
+.invite-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  background: var(--primary-color);
+  color: var(--color-background);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  font-weight: 500;
+  line-height: 1.2;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  box-sizing: border-box;
+}
+
+.invite-btn:hover {
+  background: var(--primary-color-hover);
+}
+
+/* 深色模式 */
+.room-page.dark-mode .user-avatar-detail {
+  border-color: #90caf9;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.room-page.dark-mode .user-info-username {
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .user-info-email {
+  color: rgba(224, 230, 237, 0.66);
+}
+
+.room-page.dark-mode .remove-btn {
+  background: #dc3545;
+  color: #fff;
+}
+
+.room-page.dark-mode .remove-btn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.room-page.dark-mode .remove-btn:disabled {
+  background: #23283a;
+  color: rgba(224, 230, 237, 0.66);
+}
+
+.room-page.dark-mode .search-input {
+  background: #181c24;
+  border-color: #23283a;
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .search-input:focus {
+  border-color: #90caf9;
+}
+
+.room-page.dark-mode .search-btn {
+  background: #90caf9;
+  color: #181c24;
+}
+
+.room-page.dark-mode .search-btn:hover {
+  background: #64b5f6;
+}
+
+.room-page.dark-mode .user-item {
+  border-bottom-color: #23283a;
+}
+
+.room-page.dark-mode .user-item-name {
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .user-status-badge.in-room {
+  background: #23283a;
+  color: rgba(224, 230, 237, 0.66);
+}
+
+.room-page.dark-mode .user-status-badge.invited {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffd600;
+}
+
+.room-page.dark-mode .invite-btn {
+  background: #90caf9;
+  color: #181c24;
+}
+
+.room-page.dark-mode .invite-btn:hover {
+  background: #64b5f6;
+}
+
+.room-page.dark-mode .loading-text,
+.room-page.dark-mode .empty-text {
+  color: rgba(224, 230, 237, 0.66);
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .user-item {
+    padding: var(--spacing-sm) 0;
+  }
+
+  .user-status-badge,
+  .invite-btn {
+    font-size: 11px;
+    padding: 4px 8px;
+    min-height: 24px;
+    white-space: nowrap;
+  }
+
+  .user-item-name {
+    font-size: 13px;
+  }
+
+  .search-input {
+    font-size: 16px; /* 防止移动端放大 */
+  }
+
+  .dialog-content {
+    padding: var(--spacing-sm);
+  }
+
+  .user-list {
+    max-height: 180px;
+  }
+}

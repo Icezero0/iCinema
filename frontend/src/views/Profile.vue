@@ -6,13 +6,13 @@
         <AvatarUploader v-model="avatarUrl" />
       </div>
       <div class="form-group">
-        <label>用户名<span v-if="usernameInput !== username">*</span></label>
-        <input
+        <label>用户名<span v-if="usernameInput !== username">*</span></label>        <input
           type="text"
           v-model="usernameInput"
           @blur="validateUsername"
           :placeholder="usernameError ? usernameError : '请输入用户名'"
           :class="{'input-error-border': usernameError}"
+          autocomplete="new-username"
         />
       </div>
       <div class="form-group">
@@ -21,7 +21,12 @@
       </div>
       <div class="form-group">
         <label>新密码</label>
-        <input type="password" v-model="newPassword" placeholder="不修改" />
+        <input 
+          type="password" 
+          v-model="newPassword" 
+          placeholder="不修改" 
+          autocomplete="new-password"
+        />
       </div>
       <div class="form-group">
         <label style="display: flex; align-items: center; min-height: 1.5em;">
@@ -29,7 +34,12 @@
           <span v-if="confirmPassword && newPassword && confirmPassword !== newPassword" class="password-error-tip">*密码不一致</span>
           <span v-else class="password-error-tip" style="visibility:hidden;">不一致</span>
         </label>
-        <input type="password" v-model="confirmPassword" placeholder="不修改" />
+        <input 
+          type="password" 
+          v-model="confirmPassword" 
+          placeholder="不修改" 
+          autocomplete="new-password"
+        />
       </div>
       <div class="button-group">
         <button class="save-button" type="button" @click="handleSave" :disabled="!isModified">保存</button>
@@ -50,8 +60,8 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
-import AvatarUploader from '@/components/AvatarUploader.vue';
-import CustomConfirm from '@/components/CustomConfirm.vue';
+import AvatarUploader from '@/components/user/AvatarUploader.vue';
+import CustomConfirm from '@/components/base/CustomConfirm.vue';
 import { useMyUserInfo } from '@/composables/useUserInfo.js';
 import { API_BASE_URL, getImageUrl } from '@/utils/api';
 

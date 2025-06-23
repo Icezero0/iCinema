@@ -1,0 +1,28 @@
+/* ===== Dark Theme ===== */
+
+[data-theme="dark"] {
+  /* Background Colors */
+  --color-background: var(--vt-c-black);
+  --color-background-soft: var(--vt-c-black-soft);
+  --color-background-mute: var(--vt-c-black-mute);
+
+  /* Border Colors */
+  --color-border: var(--vt-c-divider-dark-2);
+  --color-border-hover: var(--vt-c-divider-dark-1);
+
+  /* Text Colors */
+  --color-heading: var(--vt-c-text-dark-1);
+  --color-text: var(--vt-c-text-dark-2);
+  --color-text-secondary: rgba(235, 235, 235, 0.44);
+
+  /* Component Specific Dark Theme Colors */
+  --video-gradient: linear-gradient(120deg, #23283a 0%, #181c24 100%);
+  --control-bg: rgba(35, 40, 58, 0.98);
+  --modal-bg: rgba(0, 0, 0, 0.8);
+
+  /* Dark theme specific overrides */
+  --primary-color-dark: #90caf9;
+  --success-color-dark: #66bb6a;
+  --danger-color-dark: #ef5350;
+  --warning-color-dark: #ffca28;
+}

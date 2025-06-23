@@ -1,0 +1,98 @@
+/* 单条消息样式 */
+.chat-content-row {
+  display: flex;
+  align-items: flex-start;
+}
+
+.self-message .chat-content-row {
+  flex-direction: row-reverse;
+}
+
+.chat-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 10px;
+  border: 2px solid #e0e6ed;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.self-message .chat-avatar {
+  margin-left: 10px;
+  margin-right: 0;
+}
+
+.chat-content-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.self-message .chat-content-col {
+  align-items: flex-end;
+}
+
+.chat-username {
+  font-size: 13px;
+  color: #1976d2;
+  margin-bottom: 2px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.self-message .chat-username {
+  color: #90caf9;
+  text-align: right;
+}
+
+.chat-bubble {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 18px;
+  background: #f0f4fa;
+  color: #333;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  max-width: 100%;
+  word-break: break-all;
+  position: relative;
+  margin-left: 4px;
+  margin-right: 4px;
+}
+
+.chat-bubble::before,
+.self-message .chat-bubble::before {
+  display: none !important;
+}
+
+.self-message .chat-bubble {
+  background: #d2eafd;
+  color: #333;
+}
+
+/* 深色模式 */
+.room-page.dark-mode .chat-avatar {
+  border-color: #23283a;
+  background: #181c24;
+}
+
+.room-page.dark-mode .chat-username {
+  color: #90caf9;
+}
+
+.room-page.dark-mode .self-message .chat-username {
+  color: #90caf9;
+}
+
+.room-page.dark-mode .chat-bubble {
+  background: #2d3346;
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .self-message .chat-bubble {
+  background: #90caf9;
+  color: #333;
+}

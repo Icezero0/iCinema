@@ -1,0 +1,88 @@
+/* 房间成员组件样式 */
+.room-members-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.room-members-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--primary-color);
+  padding: 10px 12px 2px 12px;
+  letter-spacing: 1px;
+}
+
+.room-members-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 12px 8px;
+  padding: 10px 12px 6px 12px;
+  border-bottom: 1px solid #eee;
+  background: #f7fafd;
+  min-height: 48px;
+  height: 85px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+.add-member-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  min-width: 0;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.add-member-btn:hover {
+  opacity: 0.8;
+}
+
+.add-member-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-background);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.add-member-avatar:hover {
+  border-color: var(--primary-color);
+}
+
+.add-member-label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* 深色模式 */
+.room-page.dark-mode .room-members-label {
+  color: #90caf9;
+}
+
+.room-page.dark-mode .room-members-bar {
+  background: #23283a;
+  border-bottom: 1px solid #23283a;
+}
+
+.room-page.dark-mode .add-member-avatar {
+  background: #181c24;
+  border-color: #23283a;
+}
+
+.room-page.dark-mode .add-member-avatar:hover {
+  border-color: #90caf9;
+}
+
+.room-page.dark-mode .add-member-label {
+  color: rgba(224, 230, 237, 0.66);
+}

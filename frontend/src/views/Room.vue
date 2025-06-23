@@ -1,225 +1,226 @@
 <template>
-  <div class="room-page" :class="{ 'dark-mode': isDarkMode }">
-    <div class="ws-status-bar-row">
-      <button class="back-home-btn" @click="goHome">返回主页</button>
-      <div class="room-title">
-        {{ roomName }}
-      </div>
-      <div class="ws-status-bar" :class="wsStatus">
-        <span v-if="wsStatus === 'connected'">🟢 已连接</span>
-        <span v-else-if="wsStatus === 'connecting'">🟡 正在连接...</span>
-        <span v-else>🔴 未连接</span>
-      </div>
-      <div class="dark-mode-switch">
-        <label>
-          <input type="checkbox" v-model="isDarkMode" />
-          <span>深色模式</span>
-        </label>
-      </div>
-    </div>
-    <div class="room-main">
+  <div class="room-page" :class="{ 'dark-mode': isDarkMode, 'mobile-layout': isMobile }">
+    <!-- 房间顶部状态栏 -->
+    <RoomHeader 
+      :room-name="roomName"
+      :ws-status="wsStatus"
+      :is-dark-mode="isDarkMode"
+      :is-mobile="isMobile"
+      @back-home="goHome"
+      @toggle-dark-mode="isDarkMode = $event"
+    />
+    
+    <!-- 桌面端布局 -->
+    <div v-if="!isMobile" class="room-main desktop-layout">
       <!-- 视频播放区域 -->
-      <div class="video-area" ref="videoAreaRef">
-        <video ref="videoRef" class="video-player" />
-        <div class="video-extra-area">
-          <!-- 自定义控制栏 -->
-          <div class="custom-video-controls">
-            <button @click="togglePlay" class="play-btn" :disabled="!isOwner">
-              <span v-if="!isPlaying">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="8,5 19,12 8,19" /></svg>
-              </span>
-              <span v-else>
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
-              </span>
-            </button>
-            <!-- 自定义进度条缓冲区可视化 -->
-            <div class="video-progress-bar-wrap">
-              <div class="video-buffer-bar">
-                <template v-for="(range, idx) in bufferedRanges" :key="idx">
-                  <div class="buffered-segment" :style="{ left: range.start + '%', width: (range.end - range.start) + '%' }"></div>
-                </template>
-              </div>
-              <div class="video-played-bar" :style="{ width: playedPercent + '%' }"></div>
-              <input
-                type="range"
-                min="0"
-                :max="duration"
-                step="0.1"
-                v-model.number="currentTime"
-                @input="onSeek"
-                class="video-progress-input"
-                :disabled="!isOwner"
-              />
-            </div>
-            <span class="time-label">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
-            <span class="volume-icon">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <polygon points="3,9 3,15 7,15 12,20 12,4 7,9" />
-                <path d="M16.5,12c0-1.77-1-3.29-2.5-4.03v8.06C15.5,15.29,16.5,13.77,16.5,12z" />
-              </svg>
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              v-model.number="volume"
-              @input="onVolumeChange"
-              class="volume-slider"
-              title="音量"
-            />
-          </div>
-          <div v-if="videoStatusMsg" class="video-status-msg" :class="{ loading: videoLoading }">
-            {{ videoStatusMsg }}
-          </div>
-          <!-- 视频外链/房间设置表单，紧跟在控制栏下方 -->
-          <form class="video-form">
-            <div class="form-group">
-              <label for="video-url">视频外链：</label>
-              <input
-                id="video-url"
-                v-model="videoUrlInput"
-                :disabled="!isOwner"
-                type="text"
-                placeholder="请输入视频外链地址"
-                class="video-url-input"
-              />
-              <button
-                type="button"
-                class="video-url-confirm-btn"
-                @click="confirmVideoUrl"
-                :disabled="!isValidVideoUrl || (!isOwner && videoUrlInput !== videoUrl)"
-                style="margin-left:8px;"
-              >确认</button>
-            </div>
-          </form>
-          <div v-if="isOwner" class="room-settings card">
-            <h4>房间设置</h4>
-            <div class="form-group">
-              <label for="room-name">房间名称：</label>
-              <input id="room-name" v-model="roomNameInput" type="text" class="room-name-input" />
-              <label for="room-public-switch">公开：</label>
-              <input
-                id="room-public-switch"
-                type="checkbox"
-                v-model="isRoomPublic"
-                class="room-public-switch"
-              />
-            </div>
-            <div class="room-settings-actions">
-              <button class="save-btn" @click="saveRoomSettings">保存</button>
-              <button class="dissolve-btn" @click="dissolveRoom">解散房间</button>
-            </div>
-            <!-- 其他设置项可继续添加 -->
-          </div>
-        </div>
-      </div>
+      <VideoArea 
+        ref="videoAreaComponentRef"
+        :is-owner="isOwner"
+        :room-id="roomId"
+        :user-id="userId"
+        :is-dark-mode="isDarkMode"
+        :room-name="roomName"
+        :is-room-public="isRoomPublic"
+        @video-play="handleVideoPlay"
+        @video-pause="handleVideoPause"
+        @video-seek="handleVideoSeek"
+        @video-url-change="handleVideoUrlChange"
+        @room-settings-save="handleRoomSettingsSave"
+        @room-dissolve="handleRoomDissolve"
+      />
+      
       <!-- 垂直分隔条 -->
-      <div class="drag-divider drag-divider-vertical" @mousedown="startDragVerticalDivider"></div>
+      <DragDivider 
+        direction="vertical"
+        :is-dark-mode="isDarkMode"
+        :target-ref="chatBarRef"
+        :min-size="200"
+      />
+      
       <!-- 消息栏 -->
       <div class="chat-bar" ref="chatBarRef">
         <!-- 房间成员区域 -->
-        <div class="room-members-label">房间成员</div>
-        <div class="room-members-bar" ref="membersBarRef">
-          <template v-if="roomMembers.length > 0">
-            <div v-for="(member, idx) in roomMembers" :key="member.id" class="room-member-item" :class="{ owner: member.isOwner }">
-              <UserAvatar :src="member.avatarUrl" :alt="member.username" size="38" class="room-member-avatar" @click="openUserInfoDialog(member)"/>
-              <div class="room-member-name">{{ member.username }}</div>
-            </div>
-            <div class="room-member-item add-member-btn" @click="showAddUserDialog = true" title="添加成员">
-              <div class="room-member-avatar add-member-avatar">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="11" cy="11" r="11" fill="#fff"/>
-                  <path d="M11 6V16" stroke="#888" stroke-width="2" stroke-linecap="round"/>
-                  <path d="M6 11H16" stroke="#888" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-              </div>
-              <div class="room-member-name add-member-label">添加成员</div>
-            </div>
-          </template>
-          <template v-else>
-            <div class="room-member-item owner">
-              <UserAvatar :src="defaultAvatar" alt="测试用户" size="38" class="room-member-avatar" />
-              <div class="room-member-name">测试用户</div>
-            </div>
-          </template>
-          <!-- 用户信息弹窗 -->
-          <BaseDialog
-            :show="showUserInfoDialog"
-            title="用户信息"
-            @cancel="showUserInfoDialog = false"
-            @ok="showUserInfoDialog = false"
+        <RoomMembers 
+          :members="roomMembers" 
+          :is-owner="isOwner"
+          :current-user-id="userId"
+          :room-id="roomId"
+          @member-removed="handleMemberRemoved"
+          @member-added="handleMemberAdded"
+          ref="roomMembersRef"
+        />
+        
+        <!-- 水平分隔条 -->
+        <DragDivider 
+          direction="horizontal"
+          :is-dark-mode="isDarkMode"
+          :target-ref="membersBarRef"
+          :min-size="48"
+        />
+          <!-- 聊天区域组件 -->
+        <ChatArea
+          :messages="messages"
+          :room-id="roomId"
+          :user-id="userId"
+          :loading-history="loadingHistory"
+          @send-message="handleSendMessage"
+          @load-history-with-callback="handleLoadHistoryWithCallback"
+          ref="chatAreaRef"
+        />
+      </div>
+    </div>
+
+    <!-- 移动端布局 -->
+    <div v-if="isMobile" class="room-main mobile-layout">
+      <!-- 视频播放区域 (16:9) -->
+      <div class="mobile-video-container">
+        <VideoArea 
+          ref="videoAreaComponentRef"
+          :is-owner="isOwner"
+          :room-id="roomId"
+          :user-id="userId"
+          :is-dark-mode="isDarkMode"
+          :room-name="roomName"
+          :is-room-public="isRoomPublic"          :is-mobile="true"
+          @video-play="handleVideoPlay"
+          @video-pause="handleVideoPause"
+          @video-seek="handleVideoSeek"
+          @video-url-change="handleVideoUrlChange"
+          @status-update="handleStatusUpdate"
+          @room-settings-save="handleRoomSettingsSave"
+          @room-dissolve="handleRoomDissolve"
+        />
+      </div>      <!-- 视频控制区域 -->
+      <div class="mobile-controls">        <div class="mobile-control-buttons">          <button 
+            class="mobile-control-btn"
+            :class="{ active: showMobileControls }"
+            @click="toggleMobilePanel('controls')"
           >
-              <div class="user-info-dialog-content" v-if="selectedUser">
-              <UserAvatar :src="selectedUser.avatarUrl" :alt="selectedUser.username" class="user-avatar-detail" />
-              <div class="user-info-username">{{ selectedUser.username }}</div>
-              <div class="user-info-email">{{ selectedUser.email }}</div>
-              <button class="remove-btn"
-                @click="removeUserFromRoom(selectedUser)"
-                :disabled="!canRemoveUser(selectedUser)"
-              >
-                移出房间
-              </button>
-              <!-- 其他信息 -->
-            </div>
-          </BaseDialog>
-          <!-- 添加成员弹窗 -->
-          <BaseDialog
-            :show="showAddUserDialog"
-            title="添加成员"
-            @cancel="() => showAddUserDialog = false"
-            @ok="() => showAddUserDialog = false"
+            <span class="btn-text">视频控制</span>
+          </button>
+          <button 
+            class="mobile-control-btn"
+            :class="{ active: showMobileMembers }"
+            @click="toggleMobilePanel('members')"
           >
-            <div class="dialog-content">
-              <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
-                <input v-model="userSearchQuery" @keyup.enter="fetchUserList" placeholder="输入邮箱或用户名检索" style="flex:1;padding:6px 10px;border:1px solid #ccc;border-radius:4px;" />
-                <button @click="fetchUserList" style="padding:6px 16px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;">查询</button>
-              </div>
-              <div v-if="userListLoading" style="text-align:center;color:#888;">加载中...</div>
-              <div v-else>
-                <div v-if="userList.length === 0" style="text-align:center;color:#888;">暂无用户</div>
-                <ul v-else style="max-height:220px;overflow:auto;padding:0 0 8px 0;margin:0;list-style:none;">
-                  <li v-for="user in userList" :key="user.id" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
-                    <UserAvatar :src="user.avatarUrl || defaultAvatar" :alt="user.username" :size="32" style="width:32px;height:32px;" />
-                    <span style="flex:1;">{{ user.username }}</span>
-                    <template v-if="roomMembers.some(m => m.id === user.id)">
-                      <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已在房间</span>
-                    </template>
-                    <template v-else-if="invitedUserIds.includes(user.id)">
-                      <span style="padding:3px 10px;font-size:14px;background:#eee;color:#888;border-radius:4px;">已邀请</span>
-                    </template>
-                    <template v-else>
-                      <button
-                        style="padding:3px 10px;font-size:14px;background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer;"
-                        @click="inviteUser(user.id)"
-                      >邀请</button>
-                    </template>
-                  </li>
-                </ul>
-                <Pagination v-if="userTotal > userPageSize" :currentPage="userPage" :totalPages="userTotalPages" @update:currentPage="onUserPageChange" />
-              </div>
+            <span class="btn-icon">👥</span>
+            <span class="btn-text">成员 ({{ roomMembers.length }})</span>
+          </button>
+          <button 
+            v-if="isOwner"
+            class="mobile-control-btn"
+            :class="{ active: showMobileSettings }"
+            @click="toggleMobilePanel('settings')"
+          >
+            <span class="btn-icon">⚙️</span>
+            <span class="btn-text">房间设置</span>
+          </button>
+        </div>        <!-- 折叠的视频控制 -->
+        <div v-if="showMobileControls" class="mobile-collapsible mobile-video-controls">
+          <div class="mobile-panel-card">
+            <!-- 视频控制条 -->
+            <div class="mobile-video-control-section">
+              <h4 class="mobile-section-title">视频控制</h4>              <VideoControls
+                :is-playing="isPlaying"
+                :current-time="currentTime"
+                :duration="duration"
+                :buffered-ranges="bufferedRanges"
+                :played-percent="playedPercent"
+                :volume="volume"
+                :is-owner="isOwner"
+                :is-dark-mode="isDarkMode"
+                :is-mobile="true"                @toggle-play="handleTogglePlay"
+                @seek="handleControlSeek"
+                @volume-change="handleVolumeChange"
+              />
             </div>
-          </BaseDialog>
-        </div>
-        <!-- 拖动分隔条 -->
-        <div class="drag-divider" @mousedown="startDragDivider"></div>
-        <div class="chat-messages" ref="chatMessagesRef" @scroll="onChatScroll">
-          <div v-for="(msg, idx) in messages" :key="idx" class="chat-message" :class="{ 'self-message': msg.isSelf }">
-            <div class="chat-content-row">
-              <UserAvatar :src="msg.avatar || defaultAvatar" :alt="msg.username" size="32" class="chat-avatar" />
-              <div class="chat-content-col">
-                <div class="chat-username" :class="{ 'self-username': msg.isSelf }">{{ msg.username }}</div>
-                <span class="chat-bubble">{{ msg.content }}</span>
+
+            <!-- 视频URL控制 -->
+            <div class="mobile-url-section">
+              <h4 class="mobile-section-title">视频链接</h4>
+              <div class="mobile-url-input-group">
+                <input 
+                  v-model="videoUrlInput" 
+                  type="url" 
+                  placeholder="输入视频链接..."
+                  class="mobile-url-input"
+                  :disabled="!isOwner"
+                />
+                <button 
+                  @click="confirmVideoUrl"
+                  class="mobile-confirm-btn"
+                  :disabled="!isOwner || !videoUrlInput.trim()"
+                >
+                  确认
+                </button>
               </div>
+              <div v-if="videoStatusMsg" class="mobile-status-msg">{{ videoStatusMsg }}</div>
             </div>
           </div>
         </div>
-        <div class="chat-input-area">
-          <input v-model="inputMsg" @keyup.enter="sendMessage" placeholder="输入消息..." class="chat-input" />
-          <button @click="sendMessage" class="chat-send-btn">发送</button>
+
+        <!-- 折叠的成员列表 -->
+        <div v-if="showMobileMembers" class="mobile-collapsible mobile-members">
+          <RoomMembers 
+            :members="roomMembers" 
+            :is-owner="isOwner"
+            :current-user-id="userId"
+            :room-id="roomId"
+            :is-mobile="true"
+            @member-removed="handleMemberRemoved"
+            @member-added="handleMemberAdded"
+            ref="roomMembersRef"
+          />
+        </div>        <!-- 折叠的房间设置 -->
+        <div v-if="showMobileSettings && isOwner" class="mobile-collapsible mobile-settings">
+          <div class="mobile-panel-card">            <RoomSettings 
+              :is-owner="isOwner"
+              :room-id="roomId"
+              :room-name="roomName"
+              :is-room-public="isRoomPublic"
+              :is-dark-mode="isDarkMode"
+              :is-mobile="true"
+              @room-settings-save="handleRoomSettingsSave"
+              @room-dissolve="handleRoomDissolve"
+              @show-error="handleRoomSettingsError"
+            />
+          </div>
         </div>
       </div>
+
+      <!-- 聊天区域 -->
+      <div class="mobile-chat-container">        <ChatArea
+          :messages="messages"
+          :room-id="roomId"
+          :user-id="userId"
+          :loading-history="loadingHistory"
+          :is-mobile="true"
+          @send-message="handleSendMessage"
+          @load-history-with-callback="handleLoadHistoryWithCallback"
+          ref="chatAreaRef"
+        />
+      </div>
     </div>
+    
+    <!-- 自动播放被阻止提示 -->
+    <div v-if="autoPlayBlocked" class="auto-play-prompt">
+      <div class="auto-play-content">
+        <div class="auto-play-icon">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
+            <polygon points="8,5 19,12 8,19" />
+          </svg>
+        </div>
+        <h3>需要手动播放</h3>
+        <p>浏览器阻止了自动播放，请点击下方按钮继续观看</p>
+        <button @click="resumePlayback" class="resume-play-btn">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <polygon points="8,5 19,12 8,19" />
+          </svg>
+          继续播放
+        </button>
+      </div>
+    </div>
+    
     <BaseToast v-model="toastVisible" :message="toastMsg" :duration="1600" />
   </div>
 </template>
@@ -227,151 +228,273 @@
 <script setup>
 import { ref, watch, onMounted, computed, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+
+// Composables
 import { useWebSocketStatus } from '@/composables/useWebSocketStatus';
 import { useMyUserInfo, useUserInfo } from '@/composables/useUserInfo.js';
-import { connectWebSocket, isWebSocketConnected, getWebSocket } from '@/utils/ws';
-import defaultAvatar from '@/assets/default_avatar.jpg';
+import { useVideoSync } from '@/composables/useVideoSync.js';
+import { useChatMessages } from '@/composables/useChatMessages.js';
+import { useResponsive } from '@/composables/useResponsive.js';
+
+// Utils
+import { getWebSocket } from '@/utils/ws';
 import { getImageUrl, API_BASE_URL } from '@/utils/api';
-import Hls from 'hls.js';
-import UserAvatar from '@/components/UserAvatar.vue';
-import Pagination from '@/components/Pagination.vue';
-import BaseDialog from '@/components/BaseDialog.vue';
-import BaseToast from '@/components/BaseToast.vue';
+
+// Assets
+import defaultAvatar from '@/assets/default_avatar.jpg';
+
+// Components
+import BaseToast from '@/components/base/BaseToast.vue';
+import DragDivider from '@/components/base/DragDivider.vue';
+import VideoArea from '@/components/video/VideoArea.vue';
+import VideoControls from '@/components/video/VideoControls.vue';
+import RoomMembers from '@/components/room/RoomMembers.vue';
+import RoomHeader from '@/components/room/RoomHeader.vue';
+import RoomSettings from '@/components/room/RoomSettings.vue';
+import ChatArea from '@/components/chat/ChatArea.vue';
 
 const { avatarUrl, username, userId } = useMyUserInfo();
-const videoUrl = ref(''); // 这里可根据房间/后端接口动态设置
-const messages = ref([]);
-const inputMsg = ref('');
-const chatMessagesRef = ref(null);
-const messagePageSize = 30;
-let messageSkip = 0;
-let loadingHistory = false;
 
-async function fetchMessages({ append = false } = {}) {
-  const roomId = route.query.id || route.params.id;
-  if (!roomId) return;
-  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-  let messageSkipCopy = messageSkip;
-  let loadingMessagePageSize = messagePageSize;
-  // console.log('messageSkipCopy:', messageSkipCopy, 'loadingMessagePageSize:', loadingMessagePageSize);
-  try {
-    messageSkip = Math.max(0, messageSkip - messagePageSize);
-    loadingMessagePageSize = messageSkipCopy - messageSkip;
-    const resp = await fetch(`${API_BASE_URL}/rooms/${roomId}/messages?skip=${messageSkip}&limit=${loadingMessagePageSize}`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      // 新实现：异步补全消息用户信息
-      const newMsgs = await Promise.all(
-        (data.items || []).map(async msg => {
-          const userInfo = await useUserInfo(msg.user_id);
-          return {
-            content: msg.content,
-            user_id: msg.user_id,
-            username: userInfo?.username || '神秘用户',
-            avatar: userInfo?.avatarUrl || defaultAvatar,
-            isSelf: msg.user_id === userId.value
-          };
-        })
-      );
-      if (append) {
-        messages.value = [...newMsgs, ...messages.value];
-      } else {
-        messages.value = newMsgs;
-        // 新增：首次加载后滚动到底部
-        nextTick(() => {
-          if (chatMessagesRef.value) {
-            chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
-          }
-        });
-      }
-    }else {
-      messageSkip = messageSkipCopy;
-    }
-  } catch (e) {
-    messageSkip = messageSkipCopy;
-  }
-}
+// NOTE: 视频播放控制现在完全在 VideoArea 组件中，Room.vue 不再直接控制
+
+// NOTE: HLS 处理现在完全在 VideoArea 组件中，Room.vue 不再直接处理
+
+// 使用视频同步 composable
+const {
+  toastVisible,
+  toastMsg,
+  autoPlayBlocked,
+  syncPlay,
+  syncPause,
+  syncSeek,
+  syncVideoUrl,
+  handleVideoSyncMessage,
+  handleRoomStateRestore,
+  showSyncToast,
+  resumePlayback
+} = useVideoSync();
 
 const router = useRouter();
 const route = useRoute();
 const isDarkMode = ref(true);
 
-// 用户身份模拟：实际应从后端接口/房间信息获取
+// 房间相关状态
+const roomId = computed(() => route.query.id || route.params.id);
 const isOwner = ref(false); // true为房主，false为成员
-const videoUrlInput = ref("");
+const videoAreaComponentRef = ref(null);
+const roomMembersRef = ref(null);
 const roomName = ref("");
-const videoStatusMsg = ref("");
-const videoLoading = ref(false);
-const roomNameInput = ref("");
 const isRoomPublic = ref(false);
 const roomMembers = ref([]);
-const showAddUserDialog = ref(false);
-const userSearchQuery = ref('');
-const userList = ref([]);
-const userListLoading = ref(false);
-const userPage = ref(1);
-const userPageSize = 10;
-const userTotal = ref(0);
-const userTotalPages = computed(() => Math.ceil(userTotal.value / userPageSize));
-const invitedUserIds = ref([]); // 新增：已邀请用户ID列表
-const showUserInfoDialog = ref(false);
-const selectedUser = ref(null);
+
+// 响应式检测
+const { isMobile } = useResponsive();
+
+// 移动端状态管理
+const mobileActiveTab = ref('video'); // 当前活跃标签
+const showMobileControls = ref(false); // 是否显示视频控制
+const showMobileMembers = ref(false); // 是否显示成员列表
+const showMobileSettings = ref(false); // 是否显示房间设置
+
+// 视频控制相关变量
+const videoUrlInput = ref('');
+const videoStatusMsg = computed(() => videoAreaComponentRef.value?.videoStatusMsg || '');
+
+// 监听videoUrlInput变化，同步到VideoArea组件
+watch(videoUrlInput, (newValue) => {
+  if (videoAreaComponentRef.value && videoAreaComponentRef.value.videoUrlInput !== newValue) {
+    videoAreaComponentRef.value.videoUrlInput = newValue;
+  }
+});
+
+// 从VideoArea组件同步videoUrlInput的值
+watch(() => videoAreaComponentRef.value?.videoUrlInput, (newValue) => {
+  if (newValue !== undefined && videoUrlInput.value !== newValue) {
+    videoUrlInput.value = newValue;
+  }
+});
+
+// 视频播放器状态
+const isPlaying = ref(false);
+const currentTime = ref(0);
+const duration = ref(0);
+const bufferedRanges = ref([]);
+const volume = ref(1);
+
+// 处理VideoArea组件的状态更新
+function handleStatusUpdate(status) {
+  isPlaying.value = status.isPlaying;
+  currentTime.value = status.currentTime;
+  duration.value = status.duration;
+  bufferedRanges.value = status.bufferedRanges;
+  volume.value = status.volume;
+  console.log('Room.vue 状态更新:', status);
+}
+
+const playedPercent = computed(() => {
+  if (!duration.value || duration.value <= 0) return 0;
+  const percent = (currentTime.value / duration.value) * 100;
+  console.log('Room.vue playedPercent computed:', percent);
+  return percent;
+});
+
+// 视频控制方法
+function handleTogglePlay() {
+  if (!videoAreaComponentRef.value) return;
+  
+  // 调用VideoArea的togglePlay方法，它会自动处理房间同步
+  videoAreaComponentRef.value.togglePlay();
+}
+
+function handleControlSeek(newTime) {
+  if (!videoAreaComponentRef.value) return;
+  
+  // 调用VideoArea的onSeek方法，它会自动处理房间同步
+  videoAreaComponentRef.value.onSeek(newTime);
+}
+
+function handleVolumeChange(newVolume) {
+  if (!videoAreaComponentRef.value) return;
+  
+  // 音量变化只是本地操作，不需要房间同步
+  videoAreaComponentRef.value.setVolume(newVolume);
+}
+
+// 确认视频URL
+function confirmVideoUrl() {
+  if (!isOwner.value) {
+    console.warn('用户不是房主');
+    return;
+  }
+  
+  if (!videoUrlInput.value.trim()) {
+    console.warn('视频URL为空');
+    return;
+  }
+  
+  // 调用VideoArea组件的方法
+  if (videoAreaComponentRef.value && typeof videoAreaComponentRef.value.confirmVideoUrl === 'function') {
+    try {
+      // 先同步videoUrlInput到VideoArea组件
+      videoAreaComponentRef.value.videoUrlInput = videoUrlInput.value;
+      // 然后调用确认方法
+      videoAreaComponentRef.value.confirmVideoUrl();
+    } catch (error) {
+      console.error('调用VideoArea的confirmVideoUrl方法失败:', error);
+    }
+  } else {
+    console.error('VideoArea组件未准备好或confirmVideoUrl方法不存在');
+  }
+}
+
+// 移动端面板切换逻辑（互斥）
+function toggleMobilePanel(panelType) {
+  if (panelType === 'controls') {
+    const wasOpen = showMobileControls.value;
+    // 关闭所有面板
+    showMobileControls.value = false;
+    showMobileMembers.value = false;
+    showMobileSettings.value = false;
+    // 如果之前是关闭的，则打开当前面板
+    if (!wasOpen) {
+      showMobileControls.value = true;
+    }
+  } else if (panelType === 'members') {
+    const wasOpen = showMobileMembers.value;
+    showMobileControls.value = false;
+    showMobileMembers.value = false;
+    showMobileSettings.value = false;
+    if (!wasOpen) {
+      showMobileMembers.value = true;
+    }
+  } else if (panelType === 'settings') {
+    const wasOpen = showMobileSettings.value;
+    showMobileControls.value = false;
+    showMobileMembers.value = false;
+    showMobileSettings.value = false;
+    if (!wasOpen) {
+      showMobileSettings.value = true;
+    }
+  }
+}
+
+// 移动端视窗高度处理
+const handleMobileViewportResize = () => {
+  if (isMobile.value) {
+    // 设置CSS自定义属性来处理动态视窗高度
+    const vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+  }
+};
+
+// 监听窗口大小变化
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', handleMobileViewportResize);
+  window.addEventListener('orientationchange', handleMobileViewportResize);
+}
+
+// 使用聊天消息 composable
+const {
+  messages,
+  loadingHistory,
+  sendMessage: sendChatMessage,
+  loadHistoryMessages,
+  initializeMessages,
+  fetchMessages
+} = useChatMessages(roomId, userId);
+
+// 聊天区域引用
+const chatAreaRef = ref(null);
 
 // 在fetchRoomDetailsAndSetIdentity中填充成员，房主排首位
 
-const { wsStatus, wsDebugMsg, setupWebSocket, updateWsStatusAndDebug } = useWebSocketStatus();
+const { wsStatus, setupWebSocket } = useWebSocketStatus();
 
-async function openUserInfoDialog(user) {
-  showUserInfoDialog.value = true;
-  const userInfo = await useUserInfo(user.id);
-  selectedUser.value = {
-    id: user.id,
-    avatarUrl: userInfo.avatarUrl,
-    username: userInfo.username,
-    email: userInfo.email,
-  };
-}
-
-function canRemoveUser(user) {
-  return (isOwner.value && user.id !== userId.value) || (!isOwner.value && user.id === userId.value);
-}
-
-async function removeUserFromRoom(user) {
-  let ok = false;
-  if (isOwner.value) {
-    ok = window.confirm(`确定要将用户 ${user.username} 移出房间吗？`);
-  } else { 
-    ok = window.confirm(`确定要退出房间吗？`);
-  }
-  if (!ok) return;
+// 成员管理事件处理函数
+async function handleMemberRemoved(user) {
   const roomId = route.query.id || route.params.id;
   const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-  // 调用后端API移除用户
-  await fetch(`${API_BASE_URL}/rooms/${roomId}/members/${user.id}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`
+  
+  try {
+    await fetch(`${API_BASE_URL}/rooms/${roomId}/members/${user.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    });
+    
+    // 更新本地成员列表
+    const idx = roomMembers.value.findIndex(m => m.id === user.id);
+    if (idx !== -1) {
+      roomMembers.value.splice(idx, 1);
     }
-  });
-  const idx = roomMembers.value.findIndex(m => m.id === user.id);
-  if (idx !== -1) {
-    roomMembers.value.splice(idx, 1);
+    
+    showSyncToast(`用户 ${user.username} 已被移出房间`);
+  } catch (e) {
+    console.error('移除用户失败:', e);
+    showSyncToast('操作失败，请重试');
   }
-  showUserInfoDialog.value = false;
+}
+
+function handleMemberAdded(data) {
+  // 可以在这里处理成员添加后的逻辑，比如刷新成员列表
+  showSyncToast('成员邀请已发送');
 }
 
 async function fetchRoomDetailsAndSetIdentity() {
   const roomId = route.query.id || route.params.id;
   if (!roomId) return;
+  
   const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
+  
   try {
     const resp = await fetch(`${API_BASE_URL}/rooms/${roomId}/details`, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
+    
     if (resp.ok) {
       const data = await resp.json();
+      
       // 获取当前登录用户id
       let myId = userId.value;
       if (data.owner && myId && data.owner.id === myId) {
@@ -379,12 +502,14 @@ async function fetchRoomDetailsAndSetIdentity() {
       } else {
         isOwner.value = false;
       }
+      
       let members = [];
+      
       if (data.name) { 
         roomName.value = data.name;
-        roomNameInput.value = data.name;
         isRoomPublic.value = data.is_public || false;
       }
+      
       if (data.owner) {
         members.push({
           id: data.owner.id,
@@ -393,6 +518,7 @@ async function fetchRoomDetailsAndSetIdentity() {
           isOwner: true
         });
       }
+      
       if (data.members && Array.isArray(data.members)) {
         members = members.concat(
           data.members
@@ -405,324 +531,132 @@ async function fetchRoomDetailsAndSetIdentity() {
             }))
         );
       }
+      
       roomMembers.value = members;
-      // 加载房间消息
-      if (data.message_count) messageSkip = data.message_count;
-      await fetchMessages();
-
-
+        // 初始化聊天消息
+      if (data.message_count) {
+        initializeMessages(data.message_count);
+        await fetchMessages();
+        
+        // 消息加载完成后滚动到底部
+        nextTick(() => {
+          if (chatAreaRef.value) {
+            chatAreaRef.value.scrollToBottom();
+          }
+        });
+      } else {
+        // 即使没有历史消息，也要滚动到底部确保位置正确
+        nextTick(() => {
+          if (chatAreaRef.value) {
+            chatAreaRef.value.scrollToBottom();
+          }
+        });
+      }
     }
-  } catch (e) { /* 可加错误提示 */ }
+  } catch (e) { 
+    /* 可加错误提示 */ 
+  }
 }
 
 function goHome() {
+  // 通过websocket发送离开房间消息
+  const ws = getWebSocket();
+  const roomId = route.query.id || route.params.id;
+  
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'leave_room',
+      payload: { room_id: roomId }
+    }));
+  }
+  
   router.push('/');
 }
 
-async function sendMessage() {
-  if (inputMsg.value.trim()) {
-    // 先本地显示
-    messages.value.push({
-      content: inputMsg.value,
-      isSelf: true,
-      avatar: avatarUrl.value,
-      username: username.value
-    });
-    // 滚动到底部
-    nextTick(() => {
-      if (chatMessagesRef.value) {
-        chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
-      }
-    });
-    // 发送到后端
-    const roomId = route.query.id || route.params.id;
-    if (roomId) {
-      const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-      try {
-        await fetch(`${API_BASE_URL}/rooms/${roomId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({ content: inputMsg.value })
-        });
-      } catch (e) {}
-    }
-    
-    inputMsg.value = '';
-  }
-}
-
-const videoRef = ref(null);
-const isPlaying = ref(false);
-const currentTime = ref(0);
-const duration = ref(0);
-const volume = ref(1);
-let hlsInstance = null;
-const bufferedRanges = ref([]); // [{start: 0, end: 100}, ...]
-const playedPercent = computed(() => duration.value ? (currentTime.value / duration.value) * 100 : 0);
-
-function togglePlay() {
-  const video = videoRef.value;
-  if (!video) return;
-  if (video.paused) {
-    video.play();
-    // 新增：通过ws同步播放
-    const roomId = route.query.id || route.params.id;
-    if (isOwner.value && roomId) {
-      sendWsMessage('set_vedio_start', {
-        room_id: roomId,
-        sender_id: userId.value,
-        timestamp: Date.now()
-      });
-    }
-  } else {
-    video.pause();
-    // 新增：通过ws同步暂停
-    const roomId = route.query.id || route.params.id;
-    if (isOwner.value && roomId) {
-      sendWsMessage('set_vedio_pause', {
-        room_id: roomId,
-        sender_id: userId.value,
-        timestamp: Date.now()
-      });
-    }
-  }
-}
-function onSeek(e) {
-  const video = videoRef.value;
-  if (video) {
-    video.currentTime = currentTime.value;
-    // 新增：通过ws同步跳转
-    const roomId = route.query.id || route.params.id;
-    if (isOwner.value && roomId) {
-      sendWsMessage('set_vedio_jump', {
-        room_id: roomId,
-        sender_id: userId.value,
-        video_time_offset: currentTime.value,
-        timestamp: Date.now()
-      });
-    }
-  }
-}
-function onVolumeChange() {
-  const video = videoRef.value;
-  if (video) {
-    video.volume = volume.value;
-  }
-}
-function formatTime(t) {
-  t = Math.floor(t || 0);
-  const m = String(Math.floor(t / 60)).padStart(2, '0');
-  const s = String(Math.floor(t % 60)).padStart(2, '0');
-  return `${m}:${s}`;
-}
-
-function playVideoWithUrl(url, options = {}) {
-  const video = videoRef.value;
-  if (!video) return;
-  // 清理旧的 hls 实例
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
-  }
-  videoStatusMsg.value = "";
-  videoLoading.value = true;
-  if (url && url.endsWith('.m3u8')) {
-    if (Hls.isSupported()) {
-      hlsInstance = new Hls();
-      hlsInstance.loadSource(url);
-      hlsInstance.attachMedia(video);
-      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-        videoLoading.value = false;
-        videoStatusMsg.value = "";
-        if (options.autoPlay) video.play();
-      });
-      hlsInstance.on(Hls.Events.ERROR, (event, data) => {
-        videoLoading.value = false;
-        if (data.fatal) {
-          videoStatusMsg.value = 'HLS 播放失败：' + data.type;
-        } else {
-          videoStatusMsg.value = 'HLS 播放警告：' + data.type;
-        }
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = url;
-      videoLoading.value = false;
-      if (options.autoPlay) video.play();
-    } else {
-      videoStatusMsg.value = '当前浏览器不支持 HLS(m3u8) 播放';
-      videoLoading.value = false;
-    }
-  } else {
-    video.src = url;
-    videoLoading.value = false;
-    if (options.autoPlay) video.play();
-  }
-}
-
-function confirmVideoUrl() {
-  playVideoWithUrl(videoUrlInput.value, { autoPlay: false });
-  const video = videoRef.value;
-  if (video) {
-    video.pause();
-  }
-  isPlaying.value = false;
-  // 新增：通过ws同步视频url
-  const roomId = route.query.id || route.params.id;
-  if (isOwner.value && roomId) {
-    sendWsMessage('set_vedio_url', {
-      room_id: roomId,
-      sender_id: userId.value,
-      url: videoUrlInput.value,
-      timestamp: Date.now()
-    });
-  }
-}
-
-function sendWsMessage(type, payload) {
-  const ws = getWebSocket();
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type, payload }));
-  }
-}
-
-function updateBuffered() {
-  const video = videoRef.value;
-  if (!video || !duration.value) {
-    bufferedRanges.value = [];
-    return;
-  }
-  const ranges = [];
-  for (let i = 0; i < video.buffered.length; i++) {
-    const start = (video.buffered.start(i) / duration.value) * 100;
-    const end = (video.buffered.end(i) / duration.value) * 100;
-    ranges.push({ start, end });
-  }
-  bufferedRanges.value = ranges;
-}
-
-function saveRoomSettings() {
-  const roomId = route.query.id || route.params.id;
-  if (!roomId) return;
-  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-  fetch(`${API_BASE_URL}/rooms/${roomId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`
-    },
-    body: JSON.stringify({
-      name: roomNameInput.value,
-      is_public: isRoomPublic.value,
-      // config: {
-      // }
-    })
-  }).then(resp => {
-    if (resp.ok) {
-      showToast('房间设置已保存');
-      roomName.value = roomNameInput.value;
-    } else {
-      showToast('保存房间设置失败，请稍后再试');
+// 聊天相关事件处理函数
+async function handleSendMessage(content) {
+  await sendChatMessage(content, { username: username.value, avatarUrl: avatarUrl.value });
+  
+  // 滚动到底部
+  nextTick(() => {
+    if (chatAreaRef.value) {
+      chatAreaRef.value.scrollToBottom();
     }
   });
 }
 
-function dissolveRoom() {
-  const ok = window.confirm('确定要解散房间吗？此操作不可撤销！');
-  const roomId = route.query.id || route.params.id;
-  if (!roomId) return;
-  const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-  fetch(`${API_BASE_URL}/rooms/${roomId}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${accessToken}` }
-  }).then(resp => {
-    if (resp.ok) {
-      showToast('时间Cia不多llo～(∠・ω< )⌒★');
-      setTimeout(() => {
-        // 断开WebSocket连接
-        const ws = getWebSocket();
-        if (ws) {
-          ws.send(JSON.stringify({
-            type: 'leave_room',
-            payload: { room_id: roomId, sender_id: userId.value }
-          }));
-          ws.close();
-        }
-        router.push('/');
-      }, 2000); 
-    } else {
-      showToast('解散房间失败，请稍后再试');
-    }
+function handleLoadHistoryWithCallback(callback) {
+  // 使用旧代码的处理方式
+  loadHistoryMessages().then(() => {
+    // 历史消息加载完成后执行位置保持回调
+    callback();
   });
+}
+
+// VideoArea 组件事件处理函数
+function handleVideoPlay(roomId, userId, currentTime) {
+  syncPlay(roomId, userId, currentTime);
+}
+
+function handleVideoPause(roomId, userId, currentTime) {
+  syncPause(roomId, userId, currentTime);
+}
+
+function handleVideoSeek(roomId, userId, currentTime) {
+  syncSeek(roomId, userId, currentTime);
+}
+
+function handleVideoUrlChange(roomId, userId, url) {
+  syncVideoUrl(roomId, userId, url);
+}
+
+function handleRoomSettingsSave(newRoomName, newIsRoomPublic) {
+  roomName.value = newRoomName;
+  isRoomPublic.value = newIsRoomPublic;
+  
+  // 显示保存成功的提示
+  showSyncToast('房间设置已保存');
+}
+
+function handleRoomSettingsError(errorMessage) {
+  // 显示错误提示
+  showSyncToast(errorMessage);
+}
+
+function handleRoomDissolve() {
+  // 显示解散房间的提示
+  showSyncToast('时间Cia不多llo');
+  
+  setTimeout(() => {
+    // 断开WebSocket连接
+    const ws = getWebSocket();
+    if (ws) {
+      ws.send(JSON.stringify({
+        type: 'leave_room',
+        payload: { room_id: roomId.value, sender_id: userId.value }
+      }));
+      ws.close();
+    }
+    router.push('/');
+  }, 2000);
 }
 
 onMounted(() => {
-  const video = videoRef.value;
-  if (!video) return;
-  video.addEventListener('timeupdate', () => {
-    currentTime.value = video.currentTime;
-  });
-  video.addEventListener('durationchange', () => {
-    duration.value = video.duration || 0;
-  });
-  video.addEventListener('play', () => {
-    isPlaying.value = true;
-  });
-  video.addEventListener('pause', () => {
-    isPlaying.value = false;
-  });
-  video.addEventListener('waiting', () => {
-    videoStatusMsg.value = '视频加载中...';
-    videoLoading.value = true;
-  });
-  video.addEventListener('playing', () => {
-    videoStatusMsg.value = '';
-    videoLoading.value = false;
-  });
-  video.addEventListener('error', () => {
-    videoStatusMsg.value = '视频播放失败，请检查链接或网络。';
-    videoLoading.value = false;
-  });
-  video.volume = volume.value;
   fetchRoomDetailsAndSetIdentity();
-  setupWebSocket();
-  // 初始加载
-  if (videoUrlInput.value) playVideoWithUrl(videoUrlInput.value);
-  video.addEventListener('progress', updateBuffered);
-  video.addEventListener('durationchange', updateBuffered);
-  video.addEventListener('timeupdate', updateBuffered);
-  // 滚动到底部
-  nextTick(() => {
-    if (chatMessagesRef.value) {
-      chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
-    }
-  });
-
-});
-watch(currentTime, (val) => {
-  const video = videoRef.value;
-  if (video && Math.abs(video.currentTime - val) > 0.5) {
-    video.currentTime = val;
-  }
-});
-const isValidVideoUrl = computed(() => {
-  // 简单检测：支持 http(s) 并以 .mp4/.webm/.ogg/.m3u8 结尾
-  if (!videoUrlInput.value) return false;
-  const url = videoUrlInput.value.trim();
-  return /^https?:\/\/.+\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(url);
-});
-watch(videoUrlInput, (val) => {
-  if (!val) {
-    videoStatusMsg.value = '';
-    return;
-  }
-  if (!isValidVideoUrl.value) {
-    videoStatusMsg.value = '请输入有效的视频直链（支持mp4/webm/ogg/m3u8）';
-  } else {
-    videoStatusMsg.value = '';
-  }
+  if (wsStatus.value === 'disconnected') setupWebSocket();
+  else getWebSocketAndEnterRoom();
+  
+  // 移动端视窗高度初始化
+  handleMobileViewportResize();
+  
+  // 确保聊天区域滚动到底部（延迟执行以等待所有内容加载完成）
+  setTimeout(() => {
+    nextTick(() => {
+      if (chatAreaRef.value) {
+        chatAreaRef.value.scrollToBottom();
+      }
+    });
+  }, 500); // 500ms延迟确保内容完全加载
 });
 
 async function getWebSocketAndEnterRoom() {
@@ -730,6 +664,7 @@ async function getWebSocketAndEnterRoom() {
   const ws = getWebSocket();
   const roomId = route.query.id || route.params.id;
   if (!roomId) return;
+  
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
       type: 'enter_room',
@@ -738,16 +673,18 @@ async function getWebSocketAndEnterRoom() {
       }
     }));
   }
+
   // WebSocket消息处理
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.addEventListener('message', async (event) => {
       try {
         const msg = JSON.parse(event.data);
+        console.log('收到WebSocket消息:', msg); // 添加调试信息
+        
         if (msg.type === 'room_message' && msg.payload) {
           const { room_id, sender_id, content, timestamp } = msg.payload;
           // 获取用户信息
-          const userInfo = await useUserInfo(sender_id);
-          messages.value.push({
+          const userInfo = await useUserInfo(sender_id);          messages.value.push({
             content,
             user_id: sender_id,
             username: userInfo?.username || '未知用户',
@@ -755,175 +692,90 @@ async function getWebSocketAndEnterRoom() {
             isSelf: sender_id === userId.value,
             timestamp
           });
+          
+          // 只有当用户在聊天底部时才自动滚动到新消息
           nextTick(() => {
-            if (chatMessagesRef.value) {
-              chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+            if (chatAreaRef.value && chatAreaRef.value.isUserAtBottom()) {
+              chatAreaRef.value.scrollToBottom();
             }
           });
         } else if (msg.type === 'set_vedio_url' && msg.payload) {
-          videoUrlInput.value = msg.payload.url;
-          playVideoWithUrl(videoUrlInput.value, { autoPlay: false });
-          const video = videoRef.value;
-          if (video) {
-            video.pause();
-          }
-          isPlaying.value = false;
-          const senderId = msg.payload.sender_id;
-          const userInfo = await useUserInfo(senderId);
-          const username = userInfo?.username || '神秘用户';
-          showToast(`${username} 设置了视频地址`);
-        } else if (msg.type === 'set_vedio_start') {
-          const video = videoRef.value;
-          if (video && video.paused) video.play();
-          const senderId = msg.payload.sender_id;
-          const userInfo = await useUserInfo(senderId);
-          const username = userInfo?.username || '神秘用户';
-          showToast(`${username} 开启了视频播放`);
+          // 通过 VideoArea 组件处理URL设置
+          const videoControls = {
+            loadVideo: (url, options) => {
+              videoAreaComponentRef.value?.loadVideo(url, options);
+            }
+          };
+          await handleVideoSyncMessage(msg, videoControls, useUserInfo);        } else if (msg.type === 'set_vedio_start') {
+          // 通过 VideoArea 组件处理播放
+          const videoControls = {
+            play: () => {
+              return videoAreaComponentRef.value?.play();
+            }
+          };
+          // allowProgressSync = false，实时播放控制不设置进度
+          await handleVideoSyncMessage(msg, videoControls, useUserInfo, false);
         } else if (msg.type === 'set_vedio_pause') {
-          const video = videoRef.value;
-          if (video && !video.paused) video.pause();
-          const senderId = msg.payload.sender_id;
-          const userInfo = await useUserInfo(senderId);
-          const username = userInfo?.username || '神秘用户';
-          showToast(`${username} 暂停了视频播放`);
+          // 通过 VideoArea 组件处理暂停
+          const videoControls = {
+            pause: () => {
+              videoAreaComponentRef.value?.pause();
+            }
+          };
+          await handleVideoSyncMessage(msg, videoControls, useUserInfo);
         } else if (msg.type === 'receive_notification') {
-          showToast('您有新的通知，请在通知页面查看。');
-        } else if (msg.type === 'set_vedio_jump' && msg.payload) {
-          const { video_time_offset, timestamp } = msg.payload;
-          const video = videoRef.value;
-          if (video && typeof video_time_offset === 'number' && typeof timestamp === 'number') {
-            const now = Date.now();
-            const offset = video_time_offset + (now - timestamp) / 1000;
-            video.currentTime = offset;
-            const senderId = msg.payload.sender_id;
-            const userInfo = await useUserInfo(senderId);
-            const username = userInfo?.username || '神秘用户';
-            showToast(`${username} 调整了视频进度`);
-          }
+          showSyncToast('您有新的通知，请在通知页面查看。');        } else if (msg.type === 'set_vedio_jump' && msg.payload) {
+          // 通过 VideoArea 组件处理跳转
+          const videoControls = {
+            seekTo: (time) => {
+              videoAreaComponentRef.value?.seekTo(time);
+            },
+            pause: () => {
+              videoAreaComponentRef.value?.pause();
+            }
+          };
+          await handleVideoSyncMessage(msg, videoControls, useUserInfo);
+        } else if (msg.type === 'room_entered' && msg.payload) {
+          console.log('已进入房间:', msg.payload.room_id, msg.payload.room_info);
+          
+          // 通过 VideoArea 组件处理房间状态恢复
+          const videoControls = {
+            loadVideo: (url, options) => {
+              videoAreaComponentRef.value?.loadVideo(url, options);
+            },            play: () => {
+              return videoAreaComponentRef.value?.play();
+            },
+            pause: () => {
+              videoAreaComponentRef.value?.pause();
+            },
+            seekTo: (time) => {
+              videoAreaComponentRef.value?.seekTo(time);
+            }
+          };
+          
+          // 使用专用的房间状态恢复函数
+          await handleRoomStateRestore(msg.payload.room_info, videoControls);
         }
         // 未来可扩展其他type
-      } catch (e) {}
+      } catch (e) {
+        console.error('WebSocket消息处理错误:', e);
+      }
     });
   }
 }
 
-function addWebSocketEvents() {
-  const ws = getWebSocket();
-  
-}
+// 拖拽调整成员区域高度
+const membersBarRef = computed(() => roomMembersRef.value?.membersBarRef);
 
-
-const membersBarRef = ref(null);
-let isDragging = false;
-let startY = 0;
-let startHeight = 0;
-
-function startDragDivider(e) {
-  isDragging = true;
-  startY = e.clientY;
-  startHeight = membersBarRef.value.offsetHeight;
-  document.body.style.cursor = 'row-resize';
-  document.body.style.userSelect = 'none';
-  window.addEventListener('mousemove', onDragDivider);
-  window.addEventListener('mouseup', stopDragDivider);
-}
-function onDragDivider(e) {
-  if (!isDragging) return;
-  const delta = e.clientY - startY;
-  let newHeight = Math.max(48, startHeight + delta);
-  membersBarRef.value.style.height = newHeight + 'px';
-}
-function stopDragDivider() {
-  isDragging = false;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  window.removeEventListener('mousemove', onDragDivider);
-  window.removeEventListener('mouseup', stopDragDivider);
-}
 onBeforeUnmount(() => {
-  window.removeEventListener('mousemove', onDragDivider);
-  window.removeEventListener('mouseup', stopDragDivider);
+  // 清理事件监听器
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', handleMobileViewportResize);
+    window.removeEventListener('orientationchange', handleMobileViewportResize);
+  }
+  
+  // 拖拽分隔条的清理现在由 DragDivider 组件内部处理
 });
-
-async function fetchUserList() {
-  userListLoading.value = true;
-  const params = new URLSearchParams();
-  params.append('skip', (userPage.value - 1) * userPageSize);
-  params.append('limit', userPageSize);
-  if (userSearchQuery.value) {
-    // 简单判断输入内容是邮箱还是用户名
-    if (userSearchQuery.value.includes('@')) {
-      params.append('email', userSearchQuery.value);
-    } else {
-      params.append('username', userSearchQuery.value);
-    }
-  }
-  try {
-    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-    const resp = await fetch(`${API_BASE_URL}/users?${params.toString()}`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      userList.value = (data.items || []).map(u => ({
-        ...u,
-        avatarUrl: u.avatar_path ? getImageUrl(u.avatar_path) : ''
-      }));
-      userTotal.value = data.total || 0;
-    } else {
-      userList.value = [];
-      userTotal.value = 0;
-    }
-  } catch (e) {
-    userList.value = [];
-    userTotal.value = 0;
-  } finally {
-    userListLoading.value = false;
-  }
-}
-function onUserPageChange(newPage) {
-  userPage.value = newPage;
-  fetchUserList();
-}
-const inviteUser = async (userId) => {
-  if (!invitedUserIds.value.includes(userId)) {
-    const roomId = route.query.id || route.params.id;
-    if (!roomId) return;
-    const accessToken = document.cookie.split('; ').find(row => row.startsWith('accesstoken='))?.split('=')[1];
-    const action = isOwner.value ? 'owner_invitation' : 'member_invitation';
-    try {
-      await fetch(`${API_BASE_URL}/rooms/${roomId}/members`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({ user_id: userId, action })
-      });
-    } catch (e) {}
-    invitedUserIds.value.push(userId);
-  }
-}
-watch(() => showAddUserDialog.value, v => { if (v) { userPage.value = 1; userSearchQuery.value = ''; invitedUserIds.value = []; } });
-
-
-function onChatScroll() {
-  if (loadingHistory) return;
-  const el = chatMessagesRef.value;
-  if (!el) return;
-  if (el.scrollTop === 0 && messageSkip > 0) {
-    loadingHistory = true;
-    let heightBefore = el.scrollHeight;
-    fetchMessages({ append: true }).then(() => {
-      nextTick(() => {
-        // 保持滚动位置
-        let heightAfter = el.scrollHeight;
-        el.scrollTop = heightAfter - heightBefore;
-        loadingHistory = false;
-      });
-    });
-  }
-}
 
 watch(wsStatus, (newStatus) => {
   if (newStatus === 'connected') {
@@ -931,457 +783,43 @@ watch(wsStatus, (newStatus) => {
   }
 });
 
-const toastVisible = ref(false);
-const toastMsg = ref('');
-function showToast(msg, duration = 1500) {
-  toastMsg.value = msg;
-  toastVisible.value = false;
-  nextTick(() => {
-    toastVisible.value = true;
-  });
-}
-
-const videoAreaRef = ref(null);
 const chatBarRef = ref(null);
-let isDraggingVertical = false;
-let startX = 0;
-let startChatBarWidth = 0;
-function startDragVerticalDivider(e) {
-  isDraggingVertical = true;
-  startX = e.clientX;
-  startChatBarWidth = chatBarRef.value.offsetWidth;
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-  window.addEventListener('mousemove', onDragVerticalDivider);
-  window.addEventListener('mouseup', stopDragVerticalDivider);
-}
-function onDragVerticalDivider(e) {
-  if (!isDraggingVertical) return;
-  const delta = startX - e.clientX;
-  let newWidth = Math.max(200, startChatBarWidth + delta); // chat-bar最小宽度200px
-  // 计算video-area剩余宽度，不能小于640px
-  const roomMainWidth = videoAreaRef.value.parentElement.offsetWidth;
-  const maxChatBarWidth = roomMainWidth - 640; // video-area最小640px
-  if (newWidth > maxChatBarWidth) {
-    newWidth = maxChatBarWidth;
-  }
-  chatBarRef.value.style.width = `${newWidth}px`;
-}
-function stopDragVerticalDivider() {
-  isDraggingVertical = false;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  window.removeEventListener('mousemove', onDragVerticalDivider);
-  window.removeEventListener('mouseup', stopDragVerticalDivider);
-}
 </script>
 
 <style scoped>
+@import '@/styles/room.css';
+
 .room-page {
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
-  transition: background 0.3s;
+  transition: background var(--transition-normal);
 }
-.ws-status-bar-row {
-  display: flex;
-  align-items: center;
-  background: #fff;
-  border-bottom: 1px solid #eee;
-  padding: 0.5rem 1rem 0.5rem 0.5rem;
-  position: relative;
+
+.room-page.dark-mode {
+  background: linear-gradient(120deg, #23283a 0%, #181c24 100%);
 }
-.room-page.dark-mode .ws-status-bar-row {
-  background: linear-gradient(90deg, #23283a 60%, #181c24 100%);
-  border-bottom: 1px solid #23283a;
-}
-.back-home-btn {
-  margin-right: 18px;
-  background: #fff;
-  color: #1976d2;
-  border: 1px solid #1976d2;
-  border-radius: 4px;
-  padding: 0.3rem 1.1rem;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-.room-page.dark-mode .back-home-btn {
-  background: #23283a;
-  color: #90caf9;
-  border-color: #90caf9;
-}
-.back-home-btn:hover {
-  background: #1976d2;
-  color: #fff;
-}
-.room-page.dark-mode .back-home-btn:hover {
-  background: #90caf9;
-  color: #23283a;
-}
-.ws-status-bar {
-  font-size: 15px;
-  flex: 1 1 0;
-}
-.dark-mode-switch {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  font-size: 15px;
-  color: #333;
-  user-select: none;
-}
-.room-page.dark-mode .dark-mode-switch {
-  color: #90caf9;
-}
-.dark-mode-switch label {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  padding: 4px 10px;
-  border-radius: 16px;
-  background: #f0f0f0;
-  transition: background 0.2s;
-}
-.room-page.dark-mode .dark-mode-switch label {
-  background: #23283a;
-}
-.dark-mode-switch input[type="checkbox"] {
-  appearance: none;
-  width: 36px;
-  height: 20px;
-  background: #ccc;
-  border-radius: 10px;
-  position: relative;
-  outline: none;
-  transition: background 0.2s;
-  margin-right: 8px;
-  cursor: pointer;
-}
-.dark-mode-switch input[type="checkbox"]:checked {
-  background: #1976d2;
-}
-.dark-mode-switch input[type="checkbox"]::before {
-  content: '';
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 16px;
-  height: 16px;
-  background: #fff;
-  border-radius: 50%;
-  transition: left 0.2s;
-}
-.dark-mode-switch input[type="checkbox"]:checked::before {
-  left: 18px;
-  background: #fff;
-}
-.dark-mode-switch span {
-  font-size: 15px;
-  margin-left: 2px;
-}
+
 .room-main {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
-.video-area {
-  flex: 1 1 0;
+
+.desktop-layout {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  background: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
-  overflow-y: auto;
-  overflow-x: hidden;
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-}
-.room-page.dark-mode .video-area {
-  background: linear-gradient(120deg, #23283a 0%, #181c24 100%);
-}
-.video-player {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  min-width: 640px;
-  min-height: 360px;
-  max-width: 100%;
-  max-height: 100%;
-  background: #000;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-  display: block;
-  margin-top: 32px;
-  margin-bottom: 20px;
-}
-.custom-video-controls {
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto 8px auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255,255,255,0.95);
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-  padding: 8px 16px;
-}
-.room-page.dark-mode .custom-video-controls {
-  background: rgba(35,40,58,0.98);
-}
-.play-btn {
-  background: #1976d2;
-  border: none;
-  border-radius: 50%;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  color: #fff;
-  cursor: pointer;
-  outline: none;
-  box-shadow: 0 2px 8px rgba(25,118,210,0.10);
-  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
-}
-.play-btn:hover {
-  background: #1565c0;
-  box-shadow: 0 4px 16px rgba(25,118,210,0.18);
-  transform: scale(1.08);
-}
-.room-page.dark-mode .play-btn {
-  background: #1976d2;
-  color: #fff;
-}
-.room-page.dark-mode .play-btn:hover {
-  background: #42a5f5;
-}
-.video-progress-bar-wrap {
-  position: relative;
-  flex: 1 1 0;
-  height: 16px;
-  margin: 0 8px;
-  display: flex;
-  align-items: center;
-}
-.video-buffer-bar {
-  position: absolute;
-  left: 0; top: 50%;
-  width: 100%; height: 6px;
-  background: #eee; /* 浅灰，表示未缓冲 */
-  border-radius: 3px;
-  transform: translateY(-50%);
-  z-index: 1;
+  flex: 1;
   overflow: hidden;
 }
-.room-page.dark-mode .video-buffer-bar {
-  background: #444; /* 深色模式下未缓冲为深灰 */
-}
-.buffered-segment {
-  position: absolute;
-  top: 0; height: 100%;
-  background: #bbb; /* 深灰，表示已缓冲 */
-  border-radius: 3px;
-  z-index: 2;
-}
-.room-page.dark-mode .buffered-segment {
-  background: #888; /* 深色模式下已缓冲为亮灰 */
-}
-.video-played-bar {
-  position: absolute;
-  left: 0; top: 50%;
-  height: 6px;
-  background: #1976d2;
-  border-radius: 3px;
-  transform: translateY(-50%);
-  z-index: 3;
-  pointer-events: none;
-}
-.video-progress-input {
-  position: relative;
-  width: 100%;
-  height: 16px;
-  background: transparent;
-  z-index: 4;
-  appearance: none;
-  outline: none;
-  margin: 0;
-  padding: 0;
-}
-.video-progress-input::-webkit-slider-thumb {
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #1976d2;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(25,118,210,0.18);
-  cursor: pointer;
-  margin-top: -5px;
-}
-.video-progress-input::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #1976d2;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(25,118,210,0.18);
-  cursor: pointer;
-}
-.video-progress-input::-ms-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #1976d2;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(25,118,210,0.18);
-  cursor: pointer;
-}
-.video-progress-input::-webkit-slider-runnable-track {
-  height: 6px;
-  background: transparent;
-}
-.video-progress-input::-ms-fill-lower,
-.video-progress-input::-ms-fill-upper {
-  background: transparent;
-}
-.video-progress-input:focus {
-  outline: none;
-}
-.volume-slider {
-  width: 80px;
-  accent-color: #1976d2;
-  height: 4px;
-}
-.time-label {
-  font-size: 13px;
-  color: #666;
-  min-width: 70px;
-  text-align: right;
-}
-.room-page.dark-mode .time-label {
-  color: #90caf9;
-}
-.video-form {
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto 24px auto;
-  background: rgba(255,255,255,0.95);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  padding: 18px 24px 12px 24px;
+
+.mobile-layout {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.room-page.dark-mode .video-form {
-  background: rgba(35,40,58,0.98);
-}
-.form-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.video-url-input, .room-name-input {
-  flex: 1 1 0;
-  padding: 6px 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 15px;
-}
-.video-url-input[disabled] {
-  background: #f5f5f5;
-  color: #aaa;
-}
-.room-page.dark-mode .video-url-input[disabled] {
-  background: #23283a;
-  color: #666;
+  flex: 1;
+  overflow: hidden;
 }
 
-.room-settings-actions {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 12px;
-}
-
-.save-btn {
-  padding: 8px 24px;
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.save-btn:hover {
-  background: #1256a2;
-}
-
-.dissolve-btn {
-  padding: 8px 24px;
-  background: #e53935;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.dissolve-btn:hover {
-  background: #b71c1c;
-}
-
-.room-public-switch {
-  width: 20px;
-  height: 20px;
-  accent-color: #1976d2;
-  margin-left: 0px;
-}
-
-.card {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto 24px auto;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  padding: 20px 28px 16px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border: 1px solid #e0e6ed;
-}
-.room-page.dark-mode .card {
-  background: #23283a;
-  border: 1px solid #23283a;
-  box-shadow: 0 2px 12px rgba(25,118,210,0.10);
-}
-.room-settings {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid #eee;
-}
-.room-page.dark-mode .room-settings {
-  border-top: 1px solid #23283a;
-}
-.room-settings h4 {
-  color: #1976d2;
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.room-page.dark-mode .room-settings h4 {
-  color: #90caf9;
-}
 .chat-bar {
   width: 330px;
   min-width: 330px;
@@ -1392,447 +830,432 @@ function stopDragVerticalDivider() {
   border-left: 1px solid #eee;
   height: 100%;
 }
+
 .room-page.dark-mode .chat-bar {
   background: linear-gradient(120deg, #23283a 0%, #181c24 100%);
   border-left: 1px solid #23283a;
 }
-.chat-messages {
-  flex: 1 1 0;
-  overflow-y: auto;
-  padding: 1rem;
-  font-size: 15px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.chat-message {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-bottom: 8px;
-}
-.self-message {
-  align-items: flex-end;
-}
-.chat-content-row {
-  display: flex;
-  align-items: flex-start;
-}
-.self-message .chat-content-row {
-  flex-direction: row-reverse;
-}
-.chat-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  margin-right: 10px;
-  border: 2px solid #e0e6ed;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-  user-select: none;
-  -webkit-user-drag: none;
-}
-.self-message .chat-avatar {
-  margin-left: 10px;
-  margin-right: 0;
-}
-.chat-content-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.self-message .chat-content-col {
-  align-items: flex-end;
-}
-.chat-username {
-  font-size: 13px;
-  color: #1976d2;
-  margin-bottom: 2px;
-  font-weight: 500;
-  text-align: left;
-}
-.self-message .chat-username {
-  color: #90caf9;
-  text-align: right;
-}
-.chat-bubble {
-  display: inline-block;
-  padding: 0.5rem 1rem;
-  border-radius: 18px;
-  background: #f0f4fa;
-  color: #333;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-  max-width: 100%;
-  word-break: break-all;
-  position: relative;
-  margin-left: 4px;
-  margin-right: 4px;
-}
-.chat-bubble::before,
-.self-message .chat-bubble::before,
-.room-page.dark-mode .chat-bubble::before,
-.room-page.dark-mode .self-message .chat-bubble::before {
-  display: none !important;
-}
-.self-message .chat-bubble {
-  background: #d2eafd;
-  color: #333; /* 与他人消息一致 */
-}
-.room-page.dark-mode .self-message .chat-bubble {
-  background: #90caf9;
-  color: #333;
-}
-.room-page.dark-mode .self-message .chat-bubble::before {
-  display: none !important;
-}
-.room-page.dark-mode .chat-bubble {
-  background: #2d3346; /* 比#23283a更淡一些 */
-  color: #e0e6ed;
-}
-.chat-content {
-  color: #333;
-}
-.chat-input-area {
-  display: flex;
-  padding: 0.5rem 1rem;
-  border-top: 1px solid #eee;
-  background: #fafbfc;
-}
-.room-page.dark-mode .chat-input-area {
-  background: linear-gradient(90deg, #23283a 60%, #181c24 100%);
-  border-top: 1px solid #23283a;
-}
-.chat-input {
-  flex: 1 1 0;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 15px;
-  outline: none;
-}
-.chat-send-btn {
-  margin-left: 0.5rem;
-  padding: 0.4rem 1.2rem;
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.chat-send-btn:hover {
-  background: #1256a2;
-}
-.room-page.dark-mode .ws-status-bar {
-  color: #e0e6ed;
-}
-.video-url-confirm-btn {
-  padding: 6px 16px;
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.video-url-confirm-btn:disabled {
-  background: #ccc;
-  color: #fff;
-  cursor: not-allowed;
-}
-.room-page.dark-mode .video-url-confirm-btn {
-  background: #90caf9;
-  color: #23283a;
-}
-.room-page.dark-mode .video-url-confirm-btn:disabled {
-  background: #444a5a;
-  color: #888;
-}
-.video-status-msg {
-  color: #d32f2f;
-  font-size: 15px;
-  margin-top: 4px;
-  margin-bottom: 4px;
-  text-align: center; /* 居中文本 */
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-.video-status-msg.loading {
-  color: #1976d2;
-}
-.room-page.dark-mode .video-status-msg {
-  color: #ffb4b4;
-}
-.room-page.dark-mode .video-status-msg.loading {
-  color: #90caf9;
-}
+
 .loading {
   color: #1976d2;
 }
+
 .volume-icon svg {
   color: inherit;
 }
+
 .room-page.dark-mode .volume-icon svg {
   color: #fff;
 }
-.room-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 18px;
-  flex-shrink: 0;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #222;
-}
-.room-page.dark-mode .room-title {
-  color: #1976d2;
-}
-.room-members-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 12px 8px;
-  padding: 10px 12px 6px 12px;
-  border-bottom: 1px solid #eee;
-  background: #f7fafd;
-  min-height: 48px;
-  /* max-height: 120px; */
-  height: 85px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  /* transition: height 0.1s; */
-  user-select: none;
-}
-.room-page.dark-mode .room-members-bar {
-  background: #23283a;
-  border-bottom: 1px solid #23283a;
-}
-.drag-divider {
-  height: 7px;
-  background: #e0e6ed; /* 纯灰色，不再渐变 */
-  cursor: row-resize;
-  width: 100%;
-  position: relative;
-  z-index: 2;
-  margin: 0;
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.room-page.dark-mode .drag-divider {
-  background: #23283a;
-}
-.drag-divider::after {
-  content: '';
-  display: block;
-  width: 32px;
-  height: 3px;
-  background: #b0bec5;
-  border-radius: 2px;
-  margin: 0 auto;
-}
-.room-page.dark-mode .drag-divider::after {
-  background: #90caf9;
-}
-.drag-divider-vertical {
-  width: 7px;
-  height: 100%;
-  cursor: col-resize;
-  background: #e0e6ed;
-  position: relative;
-  z-index: 2;
-  margin: 0;
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.room-page.dark-mode .drag-divider-vertical {
-  background: #23283a;
-}
-.drag-divider-vertical::after {
-  content: '';
-  display: block;
-  height: 32px;
-  width: 3px;
-  background: #b0bec5;
-  border-radius: 2px;
-  margin: 0 auto;
-}
-.room-page.dark-mode .drag-divider-vertical::after {
-  background: #90caf9;
-}
-.room-member-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  min-width: 0;
-}
-.room-member-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2.5px solid #90caf9;
-  background: #fff;
-  box-sizing: border-box;
-  cursor: pointer;
-}
-.room-member-item.owner .room-member-avatar {
-  border-color: #ffd600;
-  box-shadow: 0 0 0 2px #fffbe6;
-}
-.room-page.dark-mode .room-member-avatar {
-  border-color: #1976d2;
-  background: #181c24;
-}
-.room-page.dark-mode .room-member-item.owner .room-member-avatar {
-  border-color: #ffd600;
-  box-shadow: 0 0 0 2px #232200;
-}
-.room-member-name {
-  font-size: 13px;
-  color: #1976d2;
-  text-align: center;
-  word-break: break-all;
-  max-width: 60px;
-  margin-top: 2px;
-}
-.room-page.dark-mode .room-member-name {
-  color: #90caf9;
-}
 
-/* 视频外链和房间设置表单 label 默认样式 */
-.video-form label,
-.room-settings label {
-  color: #1976d2;
-  font-size: 15px;
-  font-weight: 500;
-}
-.room-page.dark-mode .video-form label,
-.room-page.dark-mode .room-settings label {
-  color: #90caf9; /* 与返回主页按钮文字色一致 */
-}
-.room-members-label {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1976d2;
-  padding: 10px 12px 2px 12px;
-  letter-spacing: 1px;
-}
-.room-page.dark-mode .room-members-label {
-  color: #90caf9;
-}
-.add-user-dialog-mask {
+/* 自动播放提示样式 */
+.auto-play-prompt {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(4px);
 }
-.add-user-dialog {
+
+.auto-play-content {
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  padding: 24px;
-  width: 90%;
-  max-width: 400px;
-  position: relative;
-}
-.dialog-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: #1976d2;
-}
-.dialog-content {
-  font-size: 15px;
-  color: #333;
-  margin-bottom: 24px;
-}
-:deep(.dialog-cancel-btn) {
-  display: none;
-}
-.add-member-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #e5e6eb;
-  border-radius: 50%;
-  width: 38px;
-  height: 38px;
-  cursor: pointer;
-}
-.room-page.dark-mode .add-member-avatar {
-  border-color: #1976d2;
-  background: #e5e6eb;
-}
-.add-member-label {
+  border-radius: 16px;
+  padding: 32px;
   text-align: center;
-  color: #888;
-  font-size: 13px;
-  margin-top: 2px;
-}
-.video-extra-area {
-  width: 100%;
-  flex: 1 1 0;
-  overflow-y: auto;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.user-info-dialog-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
 }
 
-.user-info-username {
-  font-size: 24px;
-  color: #333;
-}
-.user-info-email {
-  font-size: 16px;
-  color: #888; 
-  font-style: italic;
-}
-
-.user-avatar-detail {
-  width: 128px !important;
-  height: 128px !important;
-  border-radius: 5%;
-  object-fit: cover;
-}
-
-.remove-btn {
-  margin-top: 16px;
-  padding: 8px 24px;
-  background: #e53935;
+.room-page.dark-mode .auto-play-content {
+  background: #2a3045;
   color: #fff;
+}
+
+.auto-play-icon {
+  color: #1976d2;
+  margin-bottom: 16px;
+}
+
+.room-page.dark-mode .auto-play-icon {
+  color: #90caf9;
+}
+
+.auto-play-content h3 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.auto-play-content p {
+  margin: 0 0 24px 0;
+  color: #666;
+  line-height: 1.5;
+}
+
+.room-page.dark-mode .auto-play-content p {
+  color: #ccc;
+}
+
+.resume-play-btn {
+  background: #1976d2;
+  color: white;
   border: none;
-  border-radius: 4px;
-  font-size: 15px;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  transition: all 0.2s ease;
 }
-.remove-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
+
+.resume-play-btn:hover {
+  background: #1565c0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
 }
+
+.resume-play-btn:active {
+  transform: translateY(0);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .room-page.mobile-layout {
+    /* 使用自定义属性处理视窗高度 */
+    height: calc(var(--vh, 1vh) * 100);
+    /* 降级方案 */
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+  }
+
+  /* 支持动态视窗高度的浏览器 */
+  @supports (height: 100dvh) {
+    .room-page.mobile-layout {
+      height: 100dvh;
+    }
+  }
+  /* 移动端视频容器 (16:9 比例) */
+  .mobile-video-container {
+    width: 100%;
+    max-width: 100vw; /* 确保不超出视窗宽度 */
+    aspect-ratio: 16/9;
+    max-height: 35vh; /* 稍微减少高度，为其他内容留更多空间 */
+    background: #000;
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden; /* 防止内容溢出 */
+    box-sizing: border-box;
+  }
+  /* 移动端控制区域 */
+  .mobile-controls {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid #eee;
+    flex-shrink: 0;
+    max-height: 60vh; /* 大幅增加控制区域高度，可以占满下半部分 */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .room-page.dark-mode .mobile-controls {
+    background: rgba(35, 40, 58, 0.95);
+    border-bottom: 1px solid #23283a;
+  }
+  .mobile-control-buttons {
+    display: flex;
+    padding: 12px 16px;
+    gap: 12px;
+    overflow-x: auto;
+    flex-shrink: 0; /* 按钮区域不收缩 */
+  }
+
+  .mobile-control-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    transform: translateZ(0); /* 启用硬件加速 */
+    white-space: nowrap;
+    min-height: var(--mobile-touch-target);
+  }
+
+  .mobile-control-btn:hover,
+  .mobile-control-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+  }
+
+  .room-page.dark-mode .mobile-control-btn {
+    background: #23283a;
+    border-color: #3a4050;
+    color: #fff;
+  }
+
+  .room-page.dark-mode .mobile-control-btn:hover,
+  .room-page.dark-mode .mobile-control-btn.active {
+    background: #007bff;
+    border-color: #007bff;
+  }
+
+  .btn-icon {
+    font-size: 16px;
+  }
+
+  .btn-text {
+    font-size: 14px;
+    font-weight: 500;
+  }  /* 折叠区域 */
+  .mobile-collapsible {
+    border-top: 1px solid #eee;
+    flex: 1; /* 让折叠区域占据剩余空间 */
+    min-height: 300px; /* 最小高度 */
+    max-height: calc(60vh - 80px); /* 控制区域高度减去按钮区域高度 */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    /* 动画效果 */
+    animation: fadeIn 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+    transform-origin: top;
+  }
+
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }  /* 成员列表折叠区域 */
+  .mobile-collapsible.mobile-members {
+    padding: 8px 0; /* 减少内边距 */
+    animation: fadeIn 0.35s cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+  /* 当有折叠面板展开时，调整聊天容器高度 */
+  .room-page.mobile-layout:has(.mobile-collapsible) .mobile-chat-container {
+    flex: 0 1 40vh; /* 当有展开面板时，聊天区域最多占40vh */
+  }
+
+  .room-page.dark-mode .mobile-collapsible {
+    border-top: 1px solid #3a4050;
+  }
+  /* 移动端面板卡片样式 */
+  .mobile-panel-card {
+    background: #fff;
+    border-radius: 8px;
+    margin: 8px 12px 12px 12px; /* 减少顶部边距 */
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #f0f2f5;
+    flex: 1; /* 让卡片填充可用空间 */
+    display: flex;
+    flex-direction: column;    min-height: 0; /* 允许内容溢出时滚动 */
+    animation: fadeIn 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+
+  .room-page.dark-mode .mobile-panel-card {
+    background: #23283a;
+    border-color: #3a4050;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  /* 移动端区域标题 */
+  .mobile-section-title {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    border-bottom: 1px solid #f0f2f5;
+    padding-bottom: 8px;
+  }
+
+  .room-page.dark-mode .mobile-section-title {
+    color: #fff;
+    border-bottom-color: #3a4050;
+  }
+  /* 移动端视频控制区域 */
+  .mobile-video-control-section {
+    margin-bottom: 16px;
+  }
+
+  .mobile-video-control-section .custom-video-controls {
+    background: rgba(240, 242, 245, 0.8);
+    border-radius: 8px;
+    padding: 12px 16px;
+    border: 1px solid #e1e7ed;
+  }
+
+  .room-page.dark-mode .mobile-video-control-section .custom-video-controls {
+    background: rgba(42, 47, 62, 0.8);
+    border-color: #3a4050;
+  }
+
+  /* 移动端URL区域样式 */
+  .mobile-url-section {
+    margin-top: 16px;
+  }
+
+  .mobile-url-input-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .mobile-url-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+  }
+
+  .room-page.dark-mode .mobile-url-input {
+    background: #2a2f3e;
+    border-color: #3a4050;
+    color: #fff;
+  }
+
+  .mobile-url-input:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+  }
+
+  .mobile-confirm-btn {
+    padding: 10px 16px;
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    min-width: 60px;
+  }
+
+  .mobile-confirm-btn:hover {
+    background: #1565c0;
+  }
+
+  .mobile-confirm-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+
+  .mobile-status-msg {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+  }
+
+  .room-page.dark-mode .mobile-status-msg {
+    color: #ccc;
+  }
+
+  .mobile-members {
+    background: transparent;
+  }
+
+  .mobile-settings {
+    background: transparent;
+    padding: 0;
+  }  /* 移动端聊天容器 */
+  .mobile-chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px; /* 确保聊天区域有最小高度 */
+    background: #fff;
+    overflow: hidden;
+    position: relative;
+    border-top: 2px solid #e1e7ed;
+    border-left: 1px solid #f0f2f5;
+    border-right: 1px solid #f0f2f5;
+    border-bottom: 1px solid #f0f2f5;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .room-page.dark-mode .mobile-chat-container {
+    background: #23283a;
+    border-top: 2px solid #3a4050;
+    border-left: 1px solid #2a3242;
+    border-right: 1px solid #2a3242;
+    border-bottom: 1px solid #2a3242;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  /* 确保聊天输入框在底部可见 */
+  .mobile-chat-container {
+    padding-bottom: env(safe-area-inset-bottom); /* 考虑iPhone的安全区域 */
+  }
+
+  /* 隐藏桌面端特定元素 */
+  .mobile-layout .chat-bar,
+  .mobile-layout .desktop-layout {
+    display: none;
+  }
+
+  /* 调整自动播放提示在移动端的显示 */
+  .auto-play-prompt {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+  }
+
+  .auto-play-content {
+    margin: 20px;
+    max-width: none;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 200px;
+    opacity: 1;
+  }
+}
+
 </style>

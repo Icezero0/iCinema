@@ -8,10 +8,10 @@ from sqlalchemy.orm import selectinload
 
 
 async def create_user(db: AsyncSession, user: schemas.UserCreate) -> models.User:
-    # 创建新用户
+    # 创建新用户，邮箱转换为小写以确保大小写不敏感
     db_user = models.User(
         username=user.username,
-        email=user.email,
+        email=user.email.lower(),  # 统一转换为小写存储
         hashed_password=user.password
     )
     db.add(db_user)
@@ -28,10 +28,10 @@ async def get_user(db: AsyncSession, user_id: int) -> Optional[models.User]:
     return result.scalar_one_or_none()
 
 async def get_user_by_email(db: AsyncSession, email: str) -> Optional[models.User]:
-    # 根据邮箱获取用户信息
+    # 根据邮箱获取用户信息，大小写不敏感
     result = await db.execute(
         select(models.User)
-        .where(models.User.email == email)
+        .where(models.User.email == email.lower())  # 转换为小写进行查询
     )
     return result.scalar_one_or_none()
 
@@ -79,7 +79,7 @@ async def get_users(
     if userid is not None:
         query = query.where(models.User.id == userid)
     if email:
-        query = query.where(models.User.email == email)
+        query = query.where(models.User.email == email.lower())  # 邮箱查询也转换为小写
     if username:
         query = query.where(models.User.username.ilike(f"%{username}%"))
     total_result = await db.execute(

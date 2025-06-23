@@ -11,6 +11,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import '@/styles/components/user/avatar.css';
 import defaultAvatar from '@/assets/default_avatar.jpg';
 
 const props = defineProps({
@@ -32,12 +33,5 @@ function onError() {
 </script>
 
 <style scoped>
-.user-avatar {
-  border-radius: 50%;
-  object-fit: cover;
-  background: #fff;
-  user-select: none;
-  -webkit-user-drag: none;
-  display: block;
-}
+/* Component-specific styles can be added here if needed */
 </style>

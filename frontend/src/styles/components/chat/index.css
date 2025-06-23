@@ -1,0 +1,7 @@
+/* ===== Chat Components Styles Index ===== */
+
+@import './chat-area.css';
+@import './chat-messages.css';
+@import './chat-input.css';
+@import './message-item.css';
+/* Add other chat component styles here as they are created */

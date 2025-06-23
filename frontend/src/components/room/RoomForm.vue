@@ -2,7 +2,15 @@
   <form class="room-form" @submit.prevent>
     <div class="form-group">
       <label for="room-name">房间名称：</label>
-      <input id="room-name" v-model="modelValue.name" type="text" class="room-input" placeholder="请输入房间名称" required />
+      <input 
+        id="room-name" 
+        v-model="modelValue.name" 
+        type="text" 
+        class="room-input" 
+        placeholder="请输入房间名称" 
+        required 
+        autocomplete="off"
+      />
     </div>
     <div class="form-group">
       <label for="room-public">是否公开：</label>
@@ -14,6 +22,8 @@
 
 <script setup>
 import { reactive, watch, toRefs } from 'vue';
+import '@/styles/components/room/form.css';
+
 const props = defineProps({
   modelValue: {
     type: Object,
@@ -35,21 +45,5 @@ watch(() => props.modelValue, (val) => {
 </script>
 
 <style scoped>
-.room-form {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.form-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.room-input {
-  flex: 1 1 0;
-  padding: 6px 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 15px;
-}
+/* Component-specific styles can be added here if needed */
 </style>

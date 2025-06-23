@@ -1,0 +1,183 @@
+/* ===== CSS Variables for iCinema ===== */
+
+/* Base Colors */
+:root {
+  --vt-c-white: #ffffff;
+  --vt-c-white-soft: #f8f8f8;
+  --vt-c-white-mute: #f2f2f2;
+
+  --vt-c-black: #181818;
+  --vt-c-black-soft: #222222;
+  --vt-c-black-mute: #282828;
+
+  --vt-c-indigo: #2c3e50;
+
+  /* Dividers */
+  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
+  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
+  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
+  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+
+  /* Text Colors */
+  --vt-c-text-light-1: var(--vt-c-indigo);
+  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
+  --vt-c-text-dark-1: var(--vt-c-white);
+  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
+}
+
+/* Semantic Colors */
+:root {  --color-background: var(--vt-c-white);
+  --color-background-soft: var(--vt-c-white-soft);
+  --color-background-mute: var(--vt-c-white-mute);
+
+  --color-border: var(--vt-c-divider-light-2);
+  --color-border-hover: var(--vt-c-divider-light-1);
+  --color-border-light: rgba(0, 0, 0, 0.06);
+
+  --color-heading: var(--vt-c-text-light-1);
+  --color-text: var(--vt-c-text-light-1);
+  --color-text-secondary: rgba(60, 60, 60, 0.66);
+  /* Layout */
+  --section-gap: 160px;
+  
+  /* Responsive Breakpoints */
+  --breakpoint-mobile: 480px;
+  --breakpoint-mobile-l: 768px;
+  --breakpoint-tablet: 1024px;
+  --breakpoint-desktop: 1440px;
+  
+  /* Mobile Layout Variables */
+  --mobile-padding: 16px;
+  --mobile-margin: 12px;
+  --mobile-border-radius: 8px;
+  --mobile-button-height: 44px;
+  --mobile-input-height: 48px;
+  --mobile-touch-target: 44px;
+  
+  /* iCinema Brand Colors */
+  --primary-color: #1976d2;
+  --primary-color-hover: #1256a2;
+  --primary-color-light: rgba(25, 118, 210, 0.1);
+  --primary-color-dark: #90caf9;
+  
+  --success-color: #28a745;
+  --success-color-hover: #218838;
+  --success-color-light: rgba(40, 167, 69, 0.1);  
+  --danger-color: #dc3545;
+  --danger-color-hover: #c82333;
+  --danger-color-light: rgba(220, 53, 69, 0.1);
+  
+  --warning-color: #ffc107;
+  --warning-color-hover: #e0a800;
+  --warning-color-light: rgba(255, 193, 7, 0.1);
+  --warning-color-dark: #8a6d3b;
+  
+  --info-color: #17a2b8;
+  --info-color-hover: #138496;
+  --info-color-light: rgba(23, 162, 184, 0.1);
+
+  /* Success color alias */
+  --color-success: var(--success-color);
+  --color-danger: var(--danger-color);
+  --color-warning: var(--warning-color);
+  --color-info: var(--info-color);
+  
+  /* Border Radius */
+  --border-radius-xs: 2px;
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --border-radius-xl: 16px;
+  --border-radius-round: 50%;
+  
+  /* Spacing Scale */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+  
+  /* Font Sizes */
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+  
+  /* Font Weights */
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  /* Line Heights */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+  --shadow-xl: 0 25px 50px rgba(0, 0, 0, 0.25);
+  
+  /* Z-index Scale */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease-in-out;
+  --transition-normal: 0.3s ease-in-out;
+  --transition-slow: 0.5s ease-in-out;
+  
+  /* Breakpoints (for use in custom properties) */
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 992px;
+  --breakpoint-xl: 1200px;
+  
+  /* Component Specific Variables */
+  --video-gradient: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
+  --control-bg: rgba(255, 255, 255, 0.95);
+  --modal-bg: rgba(0, 0, 0, 0.5);
+  
+  /* Focus Ring */
+  --focus-ring-width: 2px;
+  --focus-ring-color: rgba(0, 123, 255, 0.25);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+}
+
+/* Dark Theme Variables */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: var(--vt-c-black);
+    --color-background-soft: var(--vt-c-black-soft);
+    --color-background-mute: var(--vt-c-black-mute);
+    --color-background-dark: #181c24;
+    --color-background-dark-soft: #23283a;
+
+    --color-border: var(--vt-c-divider-dark-2);
+    --color-border-hover: var(--vt-c-divider-dark-1);
+    --color-border-dark: #23283a;
+
+    --color-heading: var(--vt-c-text-dark-1);
+    --color-text: var(--vt-c-text-dark-2);
+    --color-text-dark: #e0e6ed;
+    --color-text-secondary-dark: rgba(224, 230, 237, 0.66);
+    
+    --video-gradient: linear-gradient(120deg, #23283a 0%, #181c24 100%);
+    --control-bg: rgba(35, 40, 58, 0.98);
+    --modal-bg: rgba(0, 0, 0, 0.8);
+  }
+}

@@ -41,10 +41,21 @@ const handleLogin = async () => {
   <div class="page-container">
     <div class="auth-card">
       <img src="@/assets/logo.svg" alt="logo" class="logo no-pointer" />
-      <h2 class="no-pointer">iCinema - 登录</h2>
-      <form @submit.prevent="handleLogin" class="auth-form">
-        <input type="email" v-model="email" placeholder="邮箱" required />
-        <input type="password" v-model="password" placeholder="密码" required />
+      <h2 class="no-pointer">iCinema - 登录</h2>      <form @submit.prevent="handleLogin" class="auth-form">
+        <input 
+          type="email" 
+          v-model="email" 
+          placeholder="邮箱" 
+          required 
+          autocomplete="new-username"
+        />
+        <input 
+          type="password" 
+          v-model="password" 
+          placeholder="密码" 
+          required 
+          autocomplete="new-password"
+        />
         <button type="submit">登录</button>
       </form>
       <button class="secondary-button" @click="$router.push('/register')">注册</button>
@@ -59,14 +70,14 @@ const handleLogin = async () => {
   align-items: center;
   min-height: 100vh;
   background: linear-gradient(to bottom, #e6f5f3, #c8e6e0); 
-  padding: 1rem;
+  padding: var(--spacing-md);
 }
 
 .auth-card {
-  background: white;
+  background: var(--color-background);
   padding: 2.5rem;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
   width: 100%;
   max-width: 360px;
   text-align: center;

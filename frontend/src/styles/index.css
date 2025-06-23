@@ -1,0 +1,17 @@
+/* ===== iCinema Main Styles Entry ===== */
+
+/* Global Styles */
+@import './global/variables.css';
+@import './global/base.css';
+@import './global/utilities.css';
+
+/* Component Styles */
+@import './components/base/index.css';
+@import './components/user/index.css';
+@import './components/room/index.css';
+@import './components/video/index.css';
+@import './components/chat/index.css';
+
+/* Theme Styles */
+@import './themes/light.css';
+@import './themes/dark.css';

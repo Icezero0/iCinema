@@ -17,7 +17,9 @@ async def websocket_status():
         return {
             "websocket_enabled": True,
             "online_users": manager.get_online_users_count(),
-            "active_rooms": manager.get_active_rooms_count(),
+            "total_rooms_in_memory": manager.get_active_rooms_count(),
+            "truly_active_rooms": manager.get_truly_active_rooms_count(),
+            "delayed_deactivation_rooms": manager.get_active_rooms_count() - manager.get_truly_active_rooms_count(),
             "endpoint": "/ws"
         }
     except ImportError:

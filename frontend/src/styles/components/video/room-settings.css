@@ -1,0 +1,76 @@
+/* ===== Room Settings Styles ===== */
+
+.room-settings {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-xs);
+  border-top: 1px solid var(--color-border);
+}
+
+.video-area.dark-mode .room-settings {
+  border-top: 1px solid #23283a;
+}
+
+.room-settings h4 {
+  color: var(--primary-color);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.video-area.dark-mode .room-settings h4 {
+  color: #90caf9;
+}
+
+.room-settings label {
+  color: var(--primary-color);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.video-area.dark-mode .room-settings label {
+  color: #90caf9;
+}
+
+.room-settings-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-sm);
+}
+
+.save-btn {
+  padding: var(--spacing-xs) var(--spacing-lg);
+  background: var(--primary-color);
+  color: var(--vt-c-white);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.save-btn:hover {
+  background: #1256a2;
+}
+
+.dissolve-btn {
+  padding: var(--spacing-xs) var(--spacing-lg);
+  background: var(--danger-color);
+  color: var(--vt-c-white);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.dissolve-btn:hover {
+  background: #b71c1c;
+}
+
+.room-public-switch {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary-color);
+  margin-left: 0px;
+}

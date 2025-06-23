@@ -1,0 +1,101 @@
+/* 聊天输入区域样式 */
+.chat-input-area {
+  display: flex;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid #eee;
+  background: #fafbfc;
+  gap: var(--spacing-sm);
+}
+
+/* 移动端输入区域优化 */
+@media (max-width: 768px) {
+  .chat-input-area {
+    border-top: 2px solid #e1e7ed;
+    background: #ffffff;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  .room-page.dark-mode .chat-input-area {
+    border-top: 2px solid #3a4050;
+    background: #23283a;
+    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.15);
+  }
+}
+
+.chat-input {
+  flex: 1 1 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.chat-input:focus {
+  border-color: var(--primary-color);
+}
+
+.chat-input:disabled {
+  background: var(--color-background-mute);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+.chat-send-btn {
+  padding: 0.4rem 1.2rem;
+  background: var(--primary-color);
+  color: var(--color-background);
+  border: none;
+  border-radius: 4px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  white-space: nowrap;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: var(--primary-color-hover);
+}
+
+.chat-send-btn:disabled {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+/* 深色模式 */
+.room-page.dark-mode .chat-input-area {
+  background: linear-gradient(90deg, #23283a 60%, #181c24 100%);
+  border-top: 1px solid #23283a;
+}
+
+.room-page.dark-mode .chat-input {
+  background: #181c24;
+  border-color: #23283a;
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .chat-input:focus {
+  border-color: #90caf9;
+}
+
+.room-page.dark-mode .chat-input:disabled {
+  background: #23283a;
+  color: rgba(224, 230, 237, 0.66);
+}
+
+.room-page.dark-mode .chat-send-btn {
+  background: #90caf9;
+  color: #181c24;
+}
+
+.room-page.dark-mode .chat-send-btn:hover:not(:disabled) {
+  background: #64b5f6;
+}
+
+.room-page.dark-mode .chat-send-btn:disabled {
+  background: #23283a;
+  color: rgba(224, 230, 237, 0.66);
+}

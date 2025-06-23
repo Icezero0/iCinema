@@ -1,0 +1,126 @@
+/* ===== Base Reset Styles ===== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+html, body, #app {
+  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-text);
+  background: var(--color-background);
+  transition: color var(--transition-slow), background-color var(--transition-slow);
+  line-height: 1.6;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    'Fira Sans',
+    'Droid Sans',
+    'Helvetica Neue',
+    sans-serif;
+  font-size: 15px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  max-width: none !important;
+  margin: 0 !important;
+  display: block !important;
+  padding: 0 !important;
+}
+
+/* Common Link Styles */
+a {
+  text-decoration: none;
+  color: var(--primary-color);
+  transition: var(--transition-normal);
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+  }
+}
+
+/* Responsive Layout */
+@media (min-width: 1024px) {
+  body {
+    display: flex;
+    place-items: center;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 0 2rem;
+  }
+}
+
+/* Mobile Base Styles */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  #app {
+    display: block !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  
+  /* Remove desktop-specific styling on mobile */
+  @media (min-width: 1024px) {
+    body {
+      display: block;
+      place-items: normal;
+    }
+
+    #app {
+      display: block !important;
+      grid-template-columns: none;
+      padding: 0;
+    }
+  }
+}
+
+/* Touch-friendly interactions */
+@media (max-width: 768px) and (hover: none) {
+  /* Remove hover effects on touch devices */
+  a:hover {
+    background-color: transparent;
+  }
+  
+  /* Improve touch targets */
+  button, a, input, select, textarea {
+    min-height: var(--mobile-touch-target);
+  }
+}
+
+/* Prevent zoom on input focus on iOS */
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}

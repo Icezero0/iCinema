@@ -1,0 +1,201 @@
+/* 房间顶部状态栏样式 */
+.room-header {
+  display: flex;
+  align-items: center;
+  background: var(--color-background);
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 12px 8px 8px; /* 替换 var(--spacing-sm) var(--spacing-md) var(--spacing-sm) var(--spacing-sm) */
+  position: relative;
+}
+
+.room-header.dark-mode {
+  background: linear-gradient(90deg, #23283a 60%, #181c24 100%);
+  border-bottom: 1px solid #23283a;
+}
+
+/* 返回主页按钮 */
+.back-home-btn {
+  margin-right: 18px;
+  background: var(--color-background);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  border-radius: var(--border-radius-sm);
+  padding: 4px 12px; /* 替换 var(--spacing-xs) var(--spacing-md) */
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.room-header.dark-mode .back-home-btn {
+  background: #23283a;
+  color: #90caf9;
+  border-color: #90caf9;
+}
+
+.back-home-btn:hover {
+  background: var(--primary-color);
+  color: var(--color-background);
+}
+
+.room-header.dark-mode .back-home-btn:hover {
+  background: #90caf9;
+  color: #23283a;
+}
+
+/* 房间标题 */
+.room-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 18px;
+  flex-shrink: 0;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #222;
+}
+
+.room-header.dark-mode .room-title {
+  color: #1976d2;
+}
+
+/* WebSocket 状态 */
+.ws-status-bar {
+  font-size: 15px;
+  flex: 1 1 0;
+}
+
+.room-header.dark-mode .ws-status-bar {
+  color: #e0e6ed;
+}
+
+/* 深色模式切换按钮 */
+.dark-mode-toggle-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 2px solid #1976d2;
+  border-radius: 20px;
+  background: linear-gradient(45deg, transparent, rgba(25, 118, 210, 0.05));
+  color: #1976d2;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.dark-mode-toggle-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.dark-mode-toggle-btn:hover::before {
+  left: 100%;
+}
+
+.dark-mode-toggle-btn:hover {
+  background: rgba(25, 118, 210, 0.1);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+.dark-mode-toggle-btn.dark-active {
+  background: linear-gradient(45deg, #0d1421, #1a1f2e);
+  color: #e0e6ed;
+  border-color: #2d3748;
+  box-shadow: 0 2px 8px rgba(13, 20, 33, 0.6);
+}
+
+.dark-mode-toggle-btn.dark-active::before {
+  background: linear-gradient(90deg, transparent, rgba(224, 230, 237, 0.2), transparent);
+}
+
+.dark-mode-toggle-btn.dark-active:hover {
+  background: linear-gradient(45deg, #0a0f1a, #151925);
+  border-color: #1a202c;
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(13, 20, 33, 0.8);
+}
+
+.toggle-icon {
+  margin-right: 4px;
+  font-size: 16px;
+  transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.dark-mode-toggle-btn:active .toggle-icon {
+  transform: rotate(360deg) scale(1.2);
+}
+
+.toggle-text {
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {  .room-header {
+    padding: 6px 8px; /* 增加内边距 */
+    min-height: auto; /* 移除固定最小高度 */
+    height: auto; /* 确保高度自适应 */
+    display: flex;
+    align-items: center;
+  }
+
+  .room-header .back-home-btn {
+    margin-right: 6px;
+    padding: 4px 8px; /* 增加内边距 */
+    font-size: 14px; /* 从10px增加到14px */
+    border-radius: 4px;
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: auto; /* 确保高度自适应 */
+    min-height: auto; /* 移除最小高度限制 */
+  }
+
+  .room-header .room-title {
+    font-size: 16px; /* 从12px增加到16px */
+    font-weight: 500;
+    margin: 0 6px;
+    max-width: 120px;
+    line-height: 1.1;
+  }  .room-header .ws-status-bar {
+    font-size: 13px; /* 从9px增加到13px */
+    line-height: 1.1;
+    display: flex;
+    align-items: center;
+  }
+  .room-header .dark-mode-toggle-btn {
+    margin-left: 6px;
+    padding: 4px 10px; /* 增加内边距 */
+    border-radius: 14px;
+    font-size: 13px; /* 从9px增加到13px */
+    border-width: 1px;
+    height: auto;
+    min-height: auto;
+  }
+
+  .room-header .dark-mode-toggle-btn:hover {
+    transform: scale(1.02);
+  }
+  .room-header .toggle-icon {
+    margin-right: 3px;
+    font-size: 14px; /* 从10px增加到14px */
+  }  .room-header .toggle-text {
+    font-size: 13px; /* 从9px增加到13px */
+    line-height: 1;
+  }
+}

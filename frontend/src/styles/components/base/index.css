@@ -1,0 +1,6 @@
+/* ===== Base Components Styles Index ===== */
+
+@import './dialog.css';
+@import './toast.css';
+@import './pagination.css';
+/* Add other base component styles here as they are created */

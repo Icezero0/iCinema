@@ -56,7 +56,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { API_BASE_URL } from '@/utils/api';
 import { useRouter } from 'vue-router';
 import defaultAvatar from '@/assets/default_avatar.jpg';
-import Pagination from '@/components/Pagination.vue';
+import Pagination from '@/components/base/Pagination.vue';
 
 const showMemberInviteTip = ref(false);
 const router = useRouter();

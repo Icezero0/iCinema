@@ -1,0 +1,61 @@
+/* ===== Pagination Component Styles ===== */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.pagination button {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--primary-color);
+  background: var(--color-background);
+  color: var(--primary-color);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.pagination button:hover:not(:disabled) {
+  background: var(--primary-color);
+  color: var(--color-background);
+}
+
+.pagination button:disabled {
+  background: var(--color-background-mute);
+  color: var(--color-border-hover);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.pagination span {
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .pagination {
+    gap: var(--mobile-margin);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .pagination button {
+    min-height: var(--mobile-touch-target);
+    padding: 12px 16px;
+    font-size: 16px;
+    min-width: 80px;
+  }
+
+  .pagination span {
+    font-size: 14px;
+    order: -1;
+    width: 100%;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+}

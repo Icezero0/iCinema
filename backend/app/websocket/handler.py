@@ -25,6 +25,8 @@ class WebSocketHandler:
     async def handle_connection(self, websocket: WebSocket):
         """处理WebSocket连接 - 支持Bearer token和连接后认证"""
         user_id = None
+
+        print(f"WebSocket连接请求: {websocket.client}")
         
         # 方案1: 尝试从Headers获取Bearer token
         authorization = websocket.headers.get("authorization")
@@ -158,14 +160,14 @@ class WebSocketHandler:
             room_id = int(payload.get("room_id"))
             if room_id:
                 try:
-                    success = await manager.enter_room(user_id, room_id)
-                    if success:
+                    result = await manager.enter_room(user_id, room_id)
+                    if result["success"]:
                         await websocket.send_json({
                             "type": "room_entered",
                             "payload": {
                                 "room_id": room_id,
                                 "status": "success",
-                                "active_users": manager.get_room_active_users_count(room_id)
+                                "room_info": result["room_info"]
                             }
                         })
                     else:
@@ -174,7 +176,7 @@ class WebSocketHandler:
                             "payload": {
                                 "room_id": room_id,
                                 "status": "failed",
-                                "message": "无法进入房间，请检查房间是否存在或您是否有权限"
+                                "message": result.get("error", "无法进入房间")
                             }
                         })
                 except Exception as e:
@@ -248,7 +250,15 @@ class WebSocketHandler:
         elif message_type == "set_vedio_url":
             room_id = int(payload.get("room_id"))
             url = payload.get("url")
-            if room_id:
+            duration = payload.get("duration")  # 可选的视频时长
+            if room_id and url:
+                # 更新后端状态
+                manager.update_room_video_operation(
+                    room_id, "set_url", user_id, 0.0, 
+                    url=url, duration=duration
+                )
+                
+                # 广播给其他用户
                 timestamp = datetime.now(timezone.utc).isoformat()
                 ws_message = {
                     "type": "set_vedio_url",
@@ -263,13 +273,19 @@ class WebSocketHandler:
 
         elif message_type == "set_vedio_start":
             room_id = int(payload.get("room_id"))
+            progress = float(payload.get("progress", 0.0))  # 开始播放时的进度
             if room_id:
+                # 更新后端状态
+                manager.update_room_video_operation(room_id, "play", user_id, progress)
+                
+                # 广播给其他用户
                 timestamp = datetime.now(timezone.utc).isoformat()
                 ws_message = {
                     "type": "set_vedio_start",
                     "payload": {
                         "room_id": room_id,
                         "sender_id": user_id,
+                        "progress": progress,
                         "timestamp": timestamp
                     }
                 }
@@ -277,13 +293,19 @@ class WebSocketHandler:
 
         elif message_type == "set_vedio_pause":
             room_id = int(payload.get("room_id"))
+            progress = float(payload.get("progress", 0.0))  # 暂停时的进度
             if room_id:
+                # 更新后端状态
+                manager.update_room_video_operation(room_id, "pause", user_id, progress)
+                
+                # 广播给其他用户
                 timestamp = datetime.now(timezone.utc).isoformat()
                 ws_message = {
                     "type": "set_vedio_pause",
                     "payload": {
                         "room_id": room_id,
                         "sender_id": user_id,
+                        "progress": progress,
                         "timestamp": timestamp
                     }
                 }
@@ -292,15 +314,24 @@ class WebSocketHandler:
                 
         elif message_type == "set_vedio_jump":
             room_id = int(payload.get("room_id"))
-            video_time_offset = payload.get("video_time_offset")
-            timestamp = int(payload.get("timestamp"))
+            video_time_offset = float(payload.get("video_time_offset", 0.0))
+            continue_playing = payload.get("playing", False)  # 跳转后是否继续播放
+            timestamp = int(payload.get("timestamp", 0))
             if room_id:
+                # 更新后端状态
+                manager.update_room_video_operation(
+                    room_id, "seek", user_id, video_time_offset,
+                    playing=continue_playing, client_timestamp=timestamp
+                )
+                
+                # 广播给其他用户
                 ws_message = {
                     "type": "set_vedio_jump",
                     "payload": {
                         "room_id": room_id,
                         "sender_id": user_id,
                         "video_time_offset": video_time_offset,
+                        "playing": continue_playing,
                         "timestamp": timestamp
                     }
                 }

@@ -1,0 +1,16 @@
+/* ===== UserAvatar Component Styles ===== */
+
+.user-avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--color-background);
+  user-select: none;
+  -webkit-user-drag: none;
+  display: block;
+  border: 2px solid var(--color-border);
+  transition: border-color var(--transition-fast);
+}
+
+.user-avatar:hover {
+  border-color: var(--color-border-hover);
+}

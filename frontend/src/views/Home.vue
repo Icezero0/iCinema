@@ -1,53 +1,64 @@
 <template>
-  <div class="page-container">
-    <button class="notification-btn" @click="goToNotifications">
-      通知<span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
-    </button>
-    <div class="profile-header" @mouseenter="showDropdown = true" @mouseleave="showDropdown = false">
-      <UserAvatar :src="avatarUrl" :alt="username" size="38" class="avatar" />
-      <span class="username">{{ username }}</span>
-      <transition name="dropdown-fade">
-        <div v-if="showDropdown" class="dropdown-menu">
-          <div class="dropdown-item" @click="goToProfile">编辑个人资料</div>
-          <div class="dropdown-item" @click="logout">退出登录</div>
+  <div class="page-container" :class="{ 'mobile-layout': isMobile }">
+    <!-- 移动端顶部导航栏 -->
+    <div v-if="isMobile" class="mobile-header">
+      <div class="mobile-user-info">
+        <UserAvatar :src="avatarUrl" :alt="username" size="32" class="mobile-avatar" />
+        <span class="mobile-username">{{ username }}</span>
+      </div>      <div class="mobile-actions">
+        <div class="ws-status mobile-ws-status" :class="wsStatus">
+          <span v-if="wsStatus === 'connected'">🟢 已连接</span>
+          <span v-else-if="wsStatus === 'connecting'">🟡 正在连接</span>
+          <span v-else>🔴 未连接</span>
         </div>
-      </transition>
+        <button class="mobile-notification-btn" @click="goToNotifications">
+          通知<span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
+        </button>
+        <button class="mobile-menu-btn" @click="showDropdown = !showDropdown">⋮</button>
+      </div>
     </div>
-    <div class="ws-status" :class="wsStatus">
-      <span v-if="wsStatus === 'connected'">🟢 已连接</span>
-      <span v-else-if="wsStatus === 'connecting'">🟡 正在连接...</span>
-      <span v-else>🔴 未连接</span>
-    </div>
-    <div class="card-container">
-      <!-- 大厅房间 -->
-      <div class="room-card">
-        <h2 class="room-title">大厅房间</h2>
-        <div v-if="loadingPublicRooms" class="room-hint">加载中...</div>
-        <div v-else-if="publicRooms.length === 0" class="room-hint">暂无大厅房间</div>
-        <ul v-else class="room-list">
-          <li v-for="room in publicRooms" :key="room.id" class="room-list-item">
-            <span>{{ room.name }}
-              <span v-if="room.is_active === true" style="color:green;font-size:12px;margin-left:4px;">[活跃]</span>
-              <span v-else-if="room.is_active === false" style="color:gray;font-size:12px;margin-left:4px;">[关闭]</span>
-            </span>
-            <button
-              v-if="myRoomIds.includes(room.id)"
-              @click="enterRoom(room.id)"
-            >进入</button>
-            <button
-              v-else
-              @click="applyToJoin(room.id)"
-              class="apply-btn"
-            >申请加入</button>
-          </li>
-        </ul>
-        <div class="pagination" v-if="publicTotal > pageSize">
-          <Pagination :currentPage="publicPage" :totalPages="publicTotalPages" @update:currentPage="changePublicPage" />
+
+    <!-- 桌面端原有布局 -->
+    <template v-if="!isMobile">
+      <button class="notification-btn" @click="goToNotifications">
+        通知<span v-if="notificationCount > 0" class="notification-badge">{{ notificationCount }}</span>
+      </button>
+      <div class="profile-header" @mouseenter="showDropdown = true" @mouseleave="showDropdown = false">
+        <UserAvatar :src="avatarUrl" :alt="username" size="38" class="avatar" />
+        <span class="username">{{ username }}</span>
+        <transition name="dropdown-fade">
+          <div v-if="showDropdown" class="dropdown-menu">
+            <div class="dropdown-item" @click="goToProfile">编辑个人资料</div>
+            <div class="dropdown-item" @click="logout">退出登录</div>
+          </div>
+        </transition>
+      </div>
+      <div class="ws-status" :class="wsStatus">
+        <span v-if="wsStatus === 'connected'">🟢 已连接</span>
+        <span v-else-if="wsStatus === 'connecting'">🟡 正在连接...</span>
+        <span v-else>🔴 未连接</span>
+      </div>
+    </template>
+
+    <!-- 移动端下拉菜单 -->
+    <div v-if="isMobile && showDropdown" class="mobile-dropdown-overlay" @click="showDropdown = false">
+      <div class="mobile-dropdown-menu" @click.stop>
+        <div class="mobile-dropdown-item" @click="goToProfile">
+          <span>编辑个人资料</span>
+        </div>
+        <div class="mobile-dropdown-item" @click="logout">
+          <span>退出登录</span>
         </div>
       </div>
+    </div>    <div class="card-container" :class="{ 'mobile-card-container': isMobile }">
       <!-- 我的房间 -->
-      <div class="room-card">
-        <button class="create-room-btn-float" @click="showCreateRoomDialog = true" title="创建房间">
+      <div class="room-card" :class="{ 'mobile-room-card': isMobile }">
+        <button 
+          class="create-room-btn-float" 
+          :class="{ 'mobile-create-btn': isMobile }"
+          @click="showCreateRoomDialog = true" 
+          title="创建房间"
+        >
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="12" cy="12" r="12" fill="#1976d2"/>
             <path d="M12 7V17" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
@@ -60,16 +71,74 @@
         <div v-if="loadingMyRooms" class="room-hint">加载中...</div>
         <div v-else-if="myRooms.length === 0" class="room-hint">暂无我的房间</div>
         <ul v-else class="room-list">
-          <li v-for="room in myRooms" :key="room.id" class="room-list-item">
-            <span>{{ room.name }}
-              <span v-if="room.is_active === true" style="color:green;font-size:12px;margin-left:4px;">[活跃]</span>
-              <span v-else-if="room.is_active === false" style="color:gray;font-size:12px;margin-left:4px;">[关闭]</span>
-            </span>
-            <button @click="enterRoom(room.id)">进入</button>
+          <li v-for="room in myRooms" :key="room.id" class="room-list-item" :class="{ 'mobile-room-item': isMobile }">
+            <!-- PC端显示方式 -->
+            <template v-if="!isMobile">
+              <span>{{ room.name }}
+                <span v-if="room.is_active === true" style="color:green;font-size:12px;margin-left:4px;">[活跃]</span>
+                <span v-else-if="room.is_active === false" style="color:gray;font-size:12px;margin-left:4px;">[关闭]</span>
+              </span>
+              <button @click="enterRoom(room.id)">进入</button>
+            </template>            <!-- 移动端显示方式 -->
+            <template v-else>
+              <div class="room-info">
+                <span class="room-name">{{ room.name }}</span>
+                <span v-if="room.is_active === true" class="room-status active">[活跃]</span>
+                <span v-else-if="room.is_active === false" class="room-status inactive">[关闭]</span>
+              </div>
+              <button @click="enterRoom(room.id)" class="room-action-btn primary">进入</button>
+            </template>
           </li>
         </ul>
         <div class="pagination" v-if="myTotal > pageSize">
           <Pagination :currentPage="myPage" :totalPages="myTotalPages" @update:currentPage="changeMyPage" />
+        </div>
+      </div>
+      
+      <!-- 大厅房间 -->
+      <div class="room-card" :class="{ 'mobile-room-card': isMobile }">
+        <h2 class="room-title">大厅房间</h2>
+        <div v-if="loadingPublicRooms" class="room-hint">加载中...</div>
+        <div v-else-if="publicRooms.length === 0" class="room-hint">暂无大厅房间</div>
+        <ul v-else class="room-list">
+          <li v-for="room in publicRooms" :key="room.id" class="room-list-item" :class="{ 'mobile-room-item': isMobile }">
+            <!-- PC端显示方式 -->
+            <template v-if="!isMobile">
+              <span>{{ room.name }}
+                <span v-if="room.is_active === true" style="color:green;font-size:12px;margin-left:4px;">[活跃]</span>
+                <span v-else-if="room.is_active === false" style="color:gray;font-size:12px;margin-left:4px;">[关闭]</span>
+              </span>
+              <button
+                v-if="myRoomIds.includes(room.id)"
+                @click="enterRoom(room.id)"
+              >进入</button>
+              <button
+                v-else
+                @click="applyToJoin(room.id)"
+                class="apply-btn"
+              >申请加入</button>
+            </template>            <!-- 移动端显示方式 -->
+            <template v-else>
+              <div class="room-info">
+                <span class="room-name">{{ room.name }}</span>
+                <span v-if="room.is_active === true" class="room-status active">[活跃]</span>
+                <span v-else-if="room.is_active === false" class="room-status inactive">[关闭]</span>
+              </div>
+              <button
+                v-if="myRoomIds.includes(room.id)"
+                @click="enterRoom(room.id)"
+                class="room-action-btn primary"
+              >进入</button>
+              <button
+                v-else
+                @click="applyToJoin(room.id)"
+                class="room-action-btn secondary"
+              >申请加入</button>
+            </template>
+          </li>
+        </ul>
+        <div class="pagination" v-if="publicTotal > pageSize">
+          <Pagination :currentPage="publicPage" :totalPages="publicTotalPages" @update:currentPage="changePublicPage" />
         </div>
       </div>
     </div>
@@ -105,16 +174,17 @@
 <script setup>
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import CustomConfirm from '@/components/CustomConfirm.vue';
+import CustomConfirm from '@/components/base/CustomConfirm.vue';
 import { useMyUserInfo } from '@/composables/useUserInfo.js';
 import { getImageUrl, API_BASE_URL } from '@/utils/api';
 import { connectWebSocket, isWebSocketConnected, getWebSocket } from '@/utils/ws';
 import { checkAccessToken } from '@/utils/auth';
 import { useWebSocketStatus } from '@/composables/useWebSocketStatus';
-import UserAvatar from '@/components/UserAvatar.vue';
-import Pagination from '@/components/Pagination.vue';
-import BaseDialog from '@/components/BaseDialog.vue';
-import RoomForm from '@/components/RoomForm.vue';
+import { useResponsive } from '@/composables/useResponsive';
+import UserAvatar from '@/components/user/UserAvatar.vue';
+import Pagination from '@/components/base/Pagination.vue';
+import BaseDialog from '@/components/base/BaseDialog.vue';
+import RoomForm from '@/components/room/RoomForm.vue';
 
 const showDropdown = ref(false);
 const showLogoutConfirm = ref(false);
@@ -124,6 +194,9 @@ const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
 const { username, avatarUrl, email, fetchUserInfo } = useMyUserInfo();
 const { wsStatus, wsDebugMsg, setupWebSocket, updateWsStatusAndDebug } = useWebSocketStatus();
 const { userId } = useMyUserInfo();
+
+// 响应式检测
+const { isMobile, deviceType } = useResponsive();
 
 // 分页相关
 const pageSize = 10;
@@ -398,7 +471,7 @@ function applyToJoin(roomId) {
   align-items: center;
   min-height: 100vh;
   background: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
-  padding: 1rem;
+  padding: var(--spacing-md);
 }
 
 .profile-header {
@@ -407,7 +480,7 @@ function applyToJoin(roomId) {
   position: fixed;
   top: 2rem;
   left: 2rem;
-  border: 2px solid #e0e0e0;
+  border: 2px solid var(--color-border);
   border-radius: 12px;
   padding: 0.5rem 1rem;
   background: linear-gradient(120deg, #fbeee6 0%, #e6eaf5 100%);
@@ -569,18 +642,18 @@ function applyToJoin(roomId) {
   background: #0056b3;
 }
 
+.room-list-item button.secondary {
+  background: #28a745;
+}
+
+.room-list-item button.secondary:hover {
+  background: #218838;
+}
+
+/* Legacy apply-btn class for backward compatibility */
 .apply-btn {
   background: #28a745 !important;
   color: #fff !important;
-  border: none !important;
-  border-radius: 6px !important;
-  padding: 0.3rem 1rem !important;
-  cursor: pointer !important;
-  font-size: 1rem !important;
-  transition: background 0.2s !important;
-}
-.apply-btn:hover {
-  background: #218838 !important;
 }
 
 .room-hint {
@@ -692,6 +765,281 @@ function applyToJoin(roomId) {
 }
 .ws-status.disconnected {
   color: #f44336;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  /* 确保页面顶部没有额外间距 */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  #app {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .page-container.mobile-layout {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 100vh;
+    height: auto;
+    background: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
+    position: relative;
+  }/* Mobile Header */
+  .mobile-header {
+    position: sticky;
+    top: 0;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 16px 16px 16px 16px;
+    padding-top: max(16px, env(safe-area-inset-top));
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin: 0;
+  }
+
+  .mobile-user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mobile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #eee;
+  }
+
+  .mobile-username {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #333;
+  }
+
+  .mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .mobile-ws-status {
+    position: static;
+    transform: none;
+    background: transparent;
+    border: none;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    box-shadow: none;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .mobile-notification-btn {
+    background: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    min-height: var(--mobile-touch-target);
+  }
+
+  .mobile-menu-btn {
+    background: #f8f9fa;
+    color: #333;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    min-height: var(--mobile-touch-target);
+    min-width: var(--mobile-touch-target);
+  }
+
+  /* Mobile Dropdown */
+  .mobile-dropdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 80px;
+  }
+
+  .mobile-dropdown-menu {
+    background: #fff;
+    border-radius: var(--mobile-border-radius);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
+    min-width: 200px;
+    max-width: 90vw;
+  }
+
+  .mobile-dropdown-item {
+    padding: 16px 20px;
+    font-size: 1rem;
+    color: #333;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    min-height: var(--mobile-touch-target);
+    display: flex;
+    align-items: center;
+  }
+
+  .mobile-dropdown-item:last-child {
+    border-bottom: none;
+  }
+
+  .mobile-dropdown-item:active {
+    background: #f8f9fa;
+  }  /* Mobile Card Container */
+  .mobile-card-container {
+    flex-direction: column;
+    gap: var(--mobile-padding);
+    margin: 0;
+    padding: var(--mobile-padding);
+    width: 100%;
+    align-items: center;
+    justify-content: flex-start;
+    box-sizing: border-box;
+  }  .mobile-room-card {
+    margin: 0 !important; /* 强制覆盖PC端的边距设置 */
+    padding: var(--mobile-padding);
+    min-width: 0;
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* 确保移动端卡片没有任何额外的边距 */
+  .page-container.mobile-layout .room-card:first-child,
+  .page-container.mobile-layout .room-card:last-child {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .mobile-room-card .room-title {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  /* Mobile Room Items */
+  .mobile-room-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px var(--mobile-padding);
+    border: 1px solid #f0f0f0;
+    border-radius: var(--mobile-border-radius);
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.8);
+  }
+
+  .mobile-room-item:last-child {
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 0;
+  }
+
+  .room-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .room-name {
+    font-weight: 500;
+    font-size: 1rem;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+  }
+
+  .room-status {
+    font-size: 0.8rem;
+    font-weight: normal;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .room-status.active {
+    color: #28a745;
+  }
+
+  .room-status.inactive {
+    color: #6c757d;
+  }
+
+  .room-action-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    min-height: 36px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .room-action-btn.primary {
+    background: #007bff;
+    color: #fff;
+  }
+
+  .room-action-btn.primary:active {
+    background: #0056b3;
+  }
+
+  .room-action-btn.secondary {
+    background: #28a745;
+    color: #fff;
+  }
+
+  .room-action-btn.secondary:active {
+    background: #218838;
+  }
+
+  /* Mobile Create Button */
+  .mobile-create-btn {
+    position: static;
+    margin-bottom: 1rem;
+    align-self: center;
+  }
+
+  /* Hide desktop elements on mobile */
+  .profile-header,
+  .notification-btn,
+  .ws-status:not(.mobile-ws-status) {
+    display: none;
+  }
+}
+
+/* Desktop-only elements should be hidden on mobile */
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
 }
 
 /* .ws-debug {

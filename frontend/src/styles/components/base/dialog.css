@@ -1,0 +1,125 @@
+/* ===== BaseDialog Component Styles ===== */
+
+.dialog-mask {
+  position: fixed;
+  top: 0; 
+  left: 0; 
+  right: 0; 
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog-box {
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
+  min-width: 320px;
+  max-width: 90vw;
+  padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-lg) var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+  color: var(--primary-color);
+}
+
+.dialog-content {
+  font-size: 15px;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-lg);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+.dialog-actions button {
+  padding: var(--spacing-xs) var(--spacing-lg);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-size: 15px;
+  cursor: pointer;
+  background: var(--primary-color);
+  color: var(--color-background);
+  transition: background var(--transition-fast);
+}
+
+.dialog-actions button:first-child {
+  background: var(--color-background-mute);
+  color: var(--color-text);
+}
+
+/* 当只有一个按钮时（取消按钮被隐藏），使用主色调 */
+.dialog-actions button:only-child {
+  background: var(--primary-color);
+  color: var(--color-background);
+}
+
+.dialog-actions button:hover {
+  background: #1256a2;
+}
+
+.dialog-actions button:first-child:hover {
+  background: var(--color-border-hover);
+}
+
+.dialog-actions button:only-child:hover {
+  background: #1256a2;
+}
+
+/* 深色模式 */
+.room-page.dark-mode .dialog-mask {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.room-page.dark-mode .dialog-box {
+  background: #181c24;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+}
+
+.room-page.dark-mode .dialog-title {
+  color: #90caf9;
+}
+
+.room-page.dark-mode .dialog-content {
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .dialog-actions button {
+  background: #90caf9;
+  color: #181c24;
+}
+
+.room-page.dark-mode .dialog-actions button:first-child {
+  background: #23283a;
+  color: #e0e6ed;
+}
+
+/* 深色模式下单按钮样式 */
+.room-page.dark-mode .dialog-actions button:only-child {
+  background: #90caf9;
+  color: #181c24;
+}
+
+.room-page.dark-mode .dialog-actions button:hover {
+  background: #64b5f6;
+}
+
+.room-page.dark-mode .dialog-actions button:first-child:hover {
+  background: #2d3346;
+}
+
+.room-page.dark-mode .dialog-actions button:only-child:hover {
+  background: #64b5f6;
+}

@@ -1,0 +1,10 @@
+/* 聊天区域主容器样式 */
+.chat-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+}
+
+/* 移除了原有的 chat-messages 和 chat-input-area 样式 */
+/* 这些样式现在在各自的组件文件中 */

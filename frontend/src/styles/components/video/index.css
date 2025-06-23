@@ -1,0 +1,7 @@
+/* ===== Video Components Styles Index ===== */
+
+@import './video-area.css';
+@import './video-controls.css';
+@import './video-form.css';
+@import './room-settings.css';
+/* Add other video component styles here as they are created */

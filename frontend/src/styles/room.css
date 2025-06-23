@@ -1,0 +1,90 @@
+/* 移动端控制区域样式 */
+.mobile-controls-content {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.mobile-url-section {
+  margin-bottom: 16px;
+}
+
+.mobile-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.mobile-url-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mobile-url-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.mobile-url-input:disabled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.mobile-confirm-btn {
+  padding: 8px 16px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mobile-confirm-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.mobile-status-msg {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+/* 深色模式下的移动端控制样式 */
+.dark-mode .mobile-controls-content {
+  background: rgba(35, 40, 58, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .mobile-label {
+  color: #e0e6ed;
+}
+
+.dark-mode .mobile-url-input {
+  background: #23283a;
+  border-color: #444;
+  color: #e0e6ed;
+}
+
+.dark-mode .mobile-url-input:disabled {
+  background: #1a1f2e;
+  color: #888;
+}
+
+.dark-mode .mobile-status-msg {
+  background: rgba(255, 255, 255, 0.1);
+  color: #90caf9;
+}

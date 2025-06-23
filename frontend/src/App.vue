@@ -1,5 +1,14 @@
 <script setup>
 // 清除登录相关功能
+import { useResponsive } from '@/composables/useResponsive'
+
+// 在开发环境下可以看到设备类型（生产环境可以移除这部分）
+if (import.meta.env.DEV) {
+  const { isMobile, deviceType } = useResponsive()
+  console.log('设备类型检测已启用')
+  console.log('当前是否为移动设备:', isMobile.value)
+  console.log('设备类型:', deviceType.value)
+}
 </script>
 
 <template>

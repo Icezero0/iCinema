@@ -13,6 +13,6 @@ call npm install
 echo [INFO] npm install 执行完毕
 
 echo [INFO] 启动 Vite 开发服务器（npm run dev）...
-npm run dev
+npm run dev -- --host
 
 endlocal

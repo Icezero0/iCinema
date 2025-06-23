@@ -1,0 +1,8 @@
+/* ===== Room Components Styles Index ===== */
+
+@import './room-header.css';
+@import './form.css';
+@import './room-members.css';
+@import './member-item.css';
+@import './member-dialogs.css';
+/* Add other room component styles here as they are created */
