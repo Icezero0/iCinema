@@ -96,6 +96,7 @@
             :class="{ active: showMobileControls }"
             @click="toggleMobilePanel('controls')"
           >
+            <span class="btn-icon">🎞️</span>
             <span class="btn-text">视频控制</span>
           </button>
           <button 
