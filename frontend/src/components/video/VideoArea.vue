@@ -1,24 +1,66 @@
 <template>
   <div class="video-area" :class="{ 'dark-mode': isDarkMode, 'mobile-mode': isMobile }">
-    <video ref="videoRef" class="video-player" />
-    
-    <!-- 移动端视频状态遮罩层 -->
-    <div v-if="isMobile" class="mobile-video-overlay" :class="overlayClass">
-      <!-- 加载中状态 -->
-      <div v-if="showLoadingOverlay" class="loading-overlay">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">{{ videoStatusMsg || '加载中...' }}</div>
-      </div>
+    <!-- 视频播放器容器 -->
+    <div class="video-player-container" :class="{ 'mobile-container': isMobile }">
+      <video ref="videoRef" class="video-player" />
       
-      <!-- 播放失败状态 -->
-      <div v-if="showErrorOverlay" class="error-overlay">
-        <div class="error-icon">⚠</div>
-        <div class="error-text">{{ videoStatusMsg }}</div>
+      <!-- 移动端视频状态遮罩层 -->
+      <div v-if="isMobile" class="mobile-video-overlay" :class="overlayClass">
+        <!-- 加载中状态 -->
+        <div v-if="showLoadingOverlay" class="overlay-content">
+          <div class="overlay-icon">
+            <div class="loading-spinner"></div>
+          </div>
+          <div class="overlay-text">{{ videoStatusMsg || '加载中...' }}</div>
+        </div>
+        
+        <!-- 播放失败状态 -->
+        <div v-if="showErrorOverlay" class="overlay-content">
+          <div class="overlay-icon error-icon">⚠</div>
+          <div class="overlay-text">{{ videoStatusMsg }}</div>
+        </div>
+        
+        <!-- 暂停状态 -->
+        <div v-if="showPausedOverlay" class="overlay-content">
+          <div class="overlay-icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
+              <rect x="6" y="5" width="4" height="14"/>
+              <rect x="14" y="5" width="4" height="14"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- 桌面端视频状态遮罩层 -->
+      <div v-if="!isMobile" class="desktop-video-overlay" :class="overlayClass">
+        <!-- 加载中状态 -->
+        <div v-if="showLoadingOverlay" class="overlay-content">
+          <div class="overlay-icon">
+            <div class="loading-spinner"></div>
+          </div>
+          <div class="overlay-text">{{ videoStatusMsg || '加载中...' }}</div>
+        </div>
+        
+        <!-- 播放失败状态 -->
+        <div v-if="showErrorOverlay" class="overlay-content">
+          <div class="overlay-icon error-icon">⚠</div>
+          <div class="overlay-text">{{ videoStatusMsg }}</div>
+        </div>
+        
+        <!-- 暂停状态 -->
+        <div v-if="showPausedOverlay" class="overlay-content">
+          <div class="overlay-icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
+              <rect x="6" y="5" width="4" height="14"/>
+              <rect x="14" y="5" width="4" height="14"/>
+            </svg>
+          </div>
+        </div>
       </div>
     </div>
-    
+
+    <!-- 桌面端显示完整的控制和设置 -->
     <div class="video-extra-area" v-if="!isMobile">
-      <!-- 桌面端显示完整的控制和设置 -->
       <!-- 自定义控制栏 -->
       <VideoControls
         :is-playing="isPlaying"
@@ -28,11 +70,15 @@
         :buffered-ranges="bufferedRanges"
         :played-percent="playedPercent"
         :is-owner="isOwner"
-        :is-dark-mode="isDarkMode"        @toggle-play="togglePlay"        @seek="onSeek"
+        :is-dark-mode="isDarkMode"        
+        @toggle-play="togglePlay"        
+        @seek="onSeek"
         @volume-change="onVolumeChange"
-      />      <!-- 视频外链表单 -->
+      />      
+      
+      <!-- 视频外链表单 -->
       <VideoUrlForm
-        v-model:video-url="videoUrlInput"
+        v-model:video-url="internalVideoUrlInput"
         :confirmed-url="videoUrl"
         :is-owner="isOwner"
         :is-dark-mode="isDarkMode"
@@ -42,7 +88,21 @@
         :video-loading="videoLoading"
         @confirm-url="confirmVideoUrl"
       />
-      <!-- 房间设置组件 -->      <RoomSettings
+      
+      <!-- 用户视频状态卡片 -->
+      <UserVideoStatus
+        ref="userVideoStatusRef"
+        :is-owner="isOwner"
+        :room-id="roomId"
+        :user-id="userId"
+        :is-dark-mode="isDarkMode"
+        :is-mobile="isMobile"
+        :ws-connection="wsConnection"
+        :room-members="roomMembers"
+      />
+      
+      <!-- 房间设置组件 -->      
+      <RoomSettings
         :is-owner="isOwner"
         :room-id="roomId"
         :room-name="roomName"
@@ -51,21 +111,22 @@
         @room-settings-save="handleRoomSettingsSave"
         @room-dissolve="handleRoomDissolve"
         @show-error="handleShowToast"
-      /></div>
-    
-    <!-- 移动端不显示控制栏，由Room.vue管理 -->
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, toRefs } from 'vue';
 import '@/styles/components/video/index.css';
+import '@/styles/components/video/responsive.css';
 import { useVideoPlayer } from '@/composables/useVideoPlayer.js';
 import { useHLS } from '@/composables/useHLS.js';
 import { useVideoSync } from '@/composables/useVideoSync.js';
 import { API_BASE_URL } from '@/utils/api';
 import VideoControls from '@/components/video/VideoControls.vue';
 import VideoUrlForm from '@/components/video/VideoUrlForm.vue';
+import UserVideoStatus from '@/components/room/UserVideoStatus.vue';
 import RoomSettings from '@/components/room/RoomSettings.vue';
 
 // Props
@@ -96,6 +157,22 @@ const props = defineProps({
   isMobile: {
     type: Boolean,
     default: false
+  },
+  videoUrlInput: {
+    type: String,
+    default: ''
+  },
+  externalVideoStatus: {
+    type: String,
+    default: ''
+  },
+  wsConnection: {
+    type: Object,
+    default: null
+  },
+  roomMembers: {
+    type: Array,
+    default: () => []
   }
 });
 
@@ -108,7 +185,9 @@ const emit = defineEmits([
   'room-settings-save',
   'room-dissolve',
   'show-toast',
-  'status-update'
+  'status-update',
+  'video-url-input-change',
+  'video-status-change'
 ]);
 
 // 使用视频播放器 composable
@@ -141,8 +220,12 @@ const {
 
 // 使用视频同步 composable
 const {
-  showSyncToast
+  showSyncToast,
+  sendVideoMessage
 } = useVideoSync();
+
+// 组件引用
+const userVideoStatusRef = ref(null);
 
 // 合并视频加载状态，添加智能检测
 const isVideoLoading = computed(() => {
@@ -164,31 +247,129 @@ const isVideoLoading = computed(() => {
   return combinedLoading;
 });
 
-// 移动端遮罩层显示控制
+// 遮罩层显示控制
 const showLoadingOverlay = computed(() => {
-  if (!props.isMobile) return false;
   return isVideoLoading.value || (videoStatusMsg.value === '加载中...');
 });
 
 const showErrorOverlay = computed(() => {
-  if (!props.isMobile) return false;
   return videoStatusMsg.value && 
          videoStatusMsg.value !== '加载中...' && 
          videoStatusMsg.value !== '';
+});
+
+const showPausedOverlay = computed(() => {
+  // 暂停遮罩支持PC端和移动端
+  const video = videoRef.value;
+  if (!video) {
+    console.log('暂停遮罩：视频元素不存在');
+    return false;
+  }
+  
+  // 简化判断条件：只要视频存在、不在播放、不在加载、没有错误信息就显示暂停遮罩
+  const shouldShow = !isPlaying.value && // 不在播放
+                     !isVideoLoading.value && // 不在加载中
+                     !showLoadingOverlay.value && // 不显示加载遮罩
+                     !showErrorOverlay.value && // 不显示错误遮罩
+                     video.readyState >= 1; // 视频至少有基本数据
+  
+  // 添加详细调试信息
+  console.log('暂停遮罩状态检查:', {
+    isMobile: props.isMobile,
+    hasVideo: !!video,
+    isPlaying: isPlaying.value,
+    isVideoLoading: isVideoLoading.value,
+    videoLoading: videoLoading.value,
+    hlsVideoLoading: hlsVideoLoading.value,
+    showLoadingOverlay: showLoadingOverlay.value,
+    showErrorOverlay: showErrorOverlay.value,
+    readyState: video ? video.readyState : 'no video',
+    videoSrc: video ? video.src : 'no video',
+    shouldShow
+  });
+  
+  return shouldShow;
 });
 
 const overlayClass = computed(() => {
   return {
     'show-loading': showLoadingOverlay.value,
     'show-error': showErrorOverlay.value,
+    'show-paused': showPausedOverlay.value,
     'dark-mode': props.isDarkMode
   };
 });
 
-// 内部状态
+// 内部状态 - 使用外部传入的状态作为默认值
 const videoUrl = ref('');
-const videoUrlInput = ref('');
+const internalVideoUrlInput = ref(props.videoUrlInput || '');
 const isRoomPublicLocal = ref(props.isRoomPublic);
+
+// 监听外部videoUrlInput变化，同步到内部状态
+watch(() => props.videoUrlInput, (newValue) => {
+  if (newValue !== internalVideoUrlInput.value) {
+    internalVideoUrlInput.value = newValue;
+  }
+});
+
+// 监听内部输入变化，通知外部
+watch(internalVideoUrlInput, (newValue) => {
+  emit('video-url-input-change', newValue);
+});
+
+// 监听外部视频状态变化
+watch(() => props.externalVideoStatus, (newValue) => {
+  if (newValue && newValue !== videoStatusMsg.value) {
+    videoStatusMsg.value = newValue;
+  }
+});
+
+// 监听内部状态变化，通知外部
+watch(videoStatusMsg, (newValue) => {
+  emit('video-status-change', newValue);
+});
+
+// 监听视频状态变化，发送WebSocket消息
+watch([showLoadingOverlay, showErrorOverlay, showPausedOverlay], ([loading, error, paused]) => {
+  const video = videoRef.value;
+  if (!video) return;
+  
+  let status = '';
+  let message = '';
+  
+  // 复用现有的状态判断逻辑
+  if (loading) {
+    status = 'loading';
+    message = videoStatusMsg.value || '加载中...';
+  } else if (error) {
+    status = 'error';
+    message = videoStatusMsg.value || '';
+  } else if (video.readyState >= 1) {
+    status = 'ready';
+    message = '';
+  }
+  
+  // 只在状态确实变化时发送消息
+  if (status && status !== watch.lastStatus) {
+    watch.lastStatus = status;
+    
+    sendVideoMessage('video_status', {
+      room_id: props.roomId,
+      sender_id: props.userId,
+      status: status,
+      message: message,
+      timestamp: Date.now()
+    });
+    
+    console.log('发送视频状态消息:', status, message);
+  }
+}, { 
+  immediate: false,
+  flush: 'post'
+});
+
+// 初始化状态跟踪
+watch.lastStatus = null;
 
 // 监听 props 变化
 watch(() => props.isRoomPublic, (newValue) => {
@@ -275,7 +456,7 @@ function playVideoWithUrl(url, options = {}) {
 }
 
 function confirmVideoUrl() {
-  playVideoWithUrl(videoUrlInput.value, { autoPlay: false });
+  playVideoWithUrl(internalVideoUrlInput.value, { autoPlay: false });
   const video = videoRef.value;
   if (video) {
     video.pause();
@@ -283,7 +464,7 @@ function confirmVideoUrl() {
   isPlaying.value = false;
   
   if (props.isOwner && props.roomId) {
-    emit('video-url-change', props.roomId, props.userId, videoUrlInput.value);
+    emit('video-url-change', props.roomId, props.userId, internalVideoUrlInput.value);
   }
 }
 
@@ -302,7 +483,7 @@ function handleShowToast(message) {
 }
 
 // 监听 URL 输入变化
-watch(videoUrlInput, (val) => {
+watch(internalVideoUrlInput, (val) => {
   if (!val) {
     videoStatusMsg.value = '';
     return;
@@ -320,7 +501,7 @@ watch(videoUrlInput, (val) => {
 // 暴露方法给父组件
 defineExpose({
   loadVideo: (url, options) => {
-    videoUrlInput.value = url;
+    internalVideoUrlInput.value = url;
     playVideoWithUrl(url, options);
     const video = videoRef.value;
     if (video) {
@@ -358,13 +539,25 @@ defineExpose({
       video.currentTime = safeTime;
     }  },
   // 暴露响应式变量
-  videoUrlInput,
+  videoUrlInput: internalVideoUrlInput,
   videoStatusMsg,
   isPlaying,
   currentTime,
   duration,
   volume,
-  bufferedRanges
+  bufferedRanges,
+  // 初始化用户视频状态
+  initializeUserVideoStatuses: (onlineUsers) => {
+    if (userVideoStatusRef.value && userVideoStatusRef.value.initializeUserStatuses) {
+      userVideoStatusRef.value.initializeUserStatuses(onlineUsers);
+    }
+  },
+  // 处理用户视频状态消息
+  handleUserVideoStatusMessage: (message) => {
+    if (userVideoStatusRef.value && userVideoStatusRef.value.handleVideoStatusMessage) {
+      userVideoStatusRef.value.handleVideoStatusMessage(message);
+    }
+  }
 });
 
 // 监听播放器状态变化，通知父组件

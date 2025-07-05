@@ -11,6 +11,7 @@
     <!-- 聊天输入区域 -->
     <ChatInput 
       :disabled="!canSendMessage"
+      :is-mobile="isMobile"
       @send="handleSendMessage"
     />
   </div>
@@ -36,6 +37,10 @@ const props = defineProps({
     required: true
   },
   loadingHistory: {
+    type: Boolean,
+    default: false
+  },
+  isMobile: {
     type: Boolean,
     default: false
   }

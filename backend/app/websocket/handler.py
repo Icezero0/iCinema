@@ -337,6 +337,43 @@ class WebSocketHandler:
                 }
                 await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
 
+        elif message_type == "video_status":
+            room_id = payload.get("room_id")
+            status = payload.get("status")
+            
+            if room_id and status:
+                room_id = int(room_id)
+                # 验证用户是否在该房间中
+                current_room = manager.get_user_current_room(user_id)
+                if current_room == room_id:
+                    # 更新用户视频状态
+                    manager.update_user_video_status(room_id, user_id, status)
+                    
+                    # 获取房间对象并转发消息给房主
+                    if room_id in manager.active_rooms:
+                        room = manager.active_rooms[room_id]
+                        if room.owner_id and room.owner_id != user_id:  # 不给自己发送
+                            # 只有房主在线时才发送
+                            if manager.is_online_user(room.owner_id):
+                                timestamp = datetime.now(timezone.utc).isoformat()
+                                ws_message = {
+                                    "type": "user_video_status",
+                                    "payload": {
+                                        "room_id": room_id,
+                                        "user_id": user_id,
+                                        "status": status,
+                                        "timestamp": timestamp
+                                    }
+                                }
+                                await manager.send_to_user(room.owner_id, ws_message)
+                                logger.info(f"Forwarded video status from user {user_id} to room owner {room.owner_id}")
+                    
+                    logger.info(f"User {user_id} video status updated to '{status}' in room {room_id}")
+                else:
+                    logger.warning(f"User {user_id} tried to update video status for room {room_id}, but is in room {current_room}")
+            else:
+                logger.warning(f"Invalid video_status message from user {user_id}: missing room_id or status")
+
         else:
             # 未知消息类型
             logger.warning(f"Unknown message type '{message_type}' from user {user_id}")

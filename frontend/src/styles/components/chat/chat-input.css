@@ -1,9 +1,15 @@
 /* 聊天输入区域样式 */
 .chat-input-area {
+  position: relative;
   display: flex;
+  flex-direction: column;
   padding: 0.5rem 1rem;
   border-top: 1px solid #eee;
   background: #fafbfc;
+}
+
+.input-controls {
+  display: flex;
   gap: var(--spacing-sm);
 }
 
@@ -98,4 +104,291 @@
 .room-page.dark-mode .chat-send-btn:disabled {
   background: #23283a;
   color: rgba(224, 230, 237, 0.66);
+}
+
+/* Emoji按钮样式 */
+.emoji-toggle-btn {
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+}
+
+.emoji-toggle-btn:hover {
+  background: var(--color-background-mute);
+  border-color: var(--primary-color);
+}
+
+.emoji-toggle-btn.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+/* Emoji选择器样式 */
+.emoji-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  max-width: 400px;
+  margin: 0 auto;
+  background: white;
+  border: 1px solid #e1e7ed;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  margin-bottom: 8px;
+  animation: emojiPickerSlideUp 0.2s ease-out;
+}
+
+@keyframes emojiPickerSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.emoji-header {
+  padding: 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.emoji-categories {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+.category-btn {
+  padding: 0.3rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  opacity: 0.6;
+}
+
+.category-btn:hover {
+  background: var(--color-background-mute);
+  opacity: 1;
+}
+
+.category-btn.active {
+  background: var(--primary-color);
+  opacity: 1;
+}
+
+.emoji-content {
+  padding: 0.5rem;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-bottom: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: #ccc transparent;
+}
+
+.emoji-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.emoji-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.emoji-grid::-webkit-scrollbar-thumb {
+  background-color: #ccc;
+  border-radius: 3px;
+}
+
+.emoji-grid::-webkit-scrollbar-thumb:hover {
+  background-color: #999;
+}
+
+/* 大屏幕优化 */
+@media (min-width: 1024px) {
+  .emoji-grid {
+    grid-template-columns: repeat(8, 1fr);
+    max-height: 240px;
+  }
+  
+  .emoji-btn {
+    font-size: 22px;
+    padding: 0.35rem;
+  }
+}
+
+.emoji-btn {
+  padding: 0.3rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: background-color;
+}
+
+.emoji-btn:hover {
+  background: var(--color-background-mute);
+}
+
+.emoji-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.page-btn {
+  padding: 0.2rem 0.4rem;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: var(--color-background-mute);
+  border-color: var(--primary-color);
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  min-width: 60px;
+  text-align: center;
+}
+
+/* 深色模式的Emoji样式 */
+.room-page.dark-mode .emoji-toggle-btn {
+  background: transparent;
+  border-color: #3a4050;
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .emoji-toggle-btn:hover {
+  background: #23283a;
+  border-color: #90caf9;
+}
+
+.room-page.dark-mode .emoji-toggle-btn.active {
+  background: #90caf9;
+  border-color: #90caf9;
+  color: #181c24;
+}
+
+.room-page.dark-mode .emoji-picker {
+  background: #23283a;
+  border-color: #3a4050;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.room-page.dark-mode .emoji-header {
+  border-bottom-color: #3a4050;
+}
+
+.room-page.dark-mode .category-btn:hover {
+  background: #181c24;
+}
+
+.room-page.dark-mode .category-btn.active {
+  background: #90caf9;
+  color: #181c24;
+}
+
+.room-page.dark-mode .emoji-btn:hover {
+  background: #181c24;
+}
+
+.room-page.dark-mode .emoji-grid {
+  scrollbar-color: #3a4050 transparent;
+}
+
+.room-page.dark-mode .emoji-grid::-webkit-scrollbar-thumb {
+  background-color: #3a4050;
+}
+
+.room-page.dark-mode .emoji-grid::-webkit-scrollbar-thumb:hover {
+  background-color: #4a5060;
+}
+
+.room-page.dark-mode .emoji-pagination {
+  border-top-color: #3a4050;
+}
+
+.room-page.dark-mode .page-btn {
+  border-color: #3a4050;
+  color: #e0e6ed;
+}
+
+.room-page.dark-mode .page-btn:hover:not(:disabled) {
+  background: #181c24;
+  border-color: #90caf9;
+}
+
+.room-page.dark-mode .page-info {
+  color: rgba(224, 230, 237, 0.7);
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .emoji-picker {
+    max-width: calc(100vw - 2rem);
+    left: 1rem;
+    right: 1rem;
+    margin: 0;
+  }
+  
+  .emoji-grid {
+    grid-template-columns: repeat(6, 1fr);
+    max-height: 180px;
+  }
+  
+  .emoji-btn {
+    font-size: 18px;
+    padding: 0.25rem;
+  }
+  
+  .category-btn {
+    font-size: 16px;
+    padding: 0.25rem 0.4rem;
+  }
 }

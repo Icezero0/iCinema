@@ -128,16 +128,9 @@ export function useHLS() {
         hlsInstance = new Hls();
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(videoElement);        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-          videoLoading.value = false;
-          videoStatusMsg.value = "";
+          // MANIFEST_PARSED只表示清单解析完成，不表示视频数据就绪
+          // 保持加载状态，等待实际视频数据加载完成
           resetErrorTracking(); // 重置错误跟踪
-          
-          // 检查视频元素状态，进一步确认是否真正就绪
-          setTimeout(() => {
-            if (videoElement.readyState >= 2 && videoElement.duration > 0) {
-              videoLoading.value = false;
-            }
-          }, 100);
           
           if (options.autoPlay) {
             videoElement.play().catch(e => {
@@ -146,11 +139,12 @@ export function useHLS() {
           }
         });
 
-        // 添加更多 HLS 就绪状态检测
+        // HLS 就绪状态检测 - 基于实际视频数据加载情况
         hlsInstance.on(Hls.Events.LEVEL_LOADED, () => {
-          // 播放列表加载完成，检查视频是否就绪
-          if (videoElement.readyState >= 2) {
+          // 播放列表加载完成，检查视频是否真正就绪
+          if (videoElement.readyState >= 2 && videoElement.duration > 0) {
             videoLoading.value = false;
+            videoStatusMsg.value = "";
           }
         });
 
@@ -158,8 +152,21 @@ export function useHLS() {
           // 第一个片段加载完成，通常表示可以播放
           if (videoElement.readyState >= 2 && videoElement.duration > 0) {
             videoLoading.value = false;
+            videoStatusMsg.value = "";
           }
-        });        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+        });
+
+        // 添加视频元素的 loadeddata 事件监听，作为备用就绪检测
+        const onLoadedData = () => {
+          if (videoElement.readyState >= 2 && videoElement.duration > 0) {
+            videoLoading.value = false;
+            videoStatusMsg.value = "";
+            videoElement.removeEventListener('loadeddata', onLoadedData);
+          }
+        };
+        videoElement.addEventListener('loadeddata', onLoadedData);
+
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
           console.log('HLS error:', data.type, 'fatal:', data.fatal);
           
           // 使用三状态错误处理逻辑

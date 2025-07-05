@@ -18,6 +18,12 @@ class ActiveRoom:
     # 用户管理
     online_users: Set[int] = field(default_factory=set)
     
+    # 用户视频状态管理 {user_id: "loading|ready|error"}
+    user_video_status: Dict[int, str] = field(default_factory=dict)
+    
+    # 房间基础信息
+    owner_id: Optional[int] = None
+    
     # 视频基础信息
     video_url: Optional[str] = None
     video_duration: Optional[float] = None
@@ -34,9 +40,19 @@ class ActiveRoom:
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     def to_dict(self) -> Dict:
-        """转换为字典格式，用于发送给前端"""
+        
+        # 构建在线用户列表及其视频状态
+        online_users_with_status = []
+        for user_id in self.online_users:
+            user_status = self.user_video_status.get(user_id, "unknown")
+            online_users_with_status.append({
+                "user_id": user_id,
+                "video_status": user_status
+            })
+        
         return {
             "online_users_count": len(self.online_users),
+            "online_users": online_users_with_status,
             "video_url": self.video_url,
             "video_duration": self.video_duration,
             "last_operation_type": self.last_operation_type,
@@ -99,6 +115,34 @@ class ConnectionManager:
         # 记录操作
         room.update_operation(operation_type, user_id, progress, kwargs)
     
+    def update_user_video_status(self, room_id: int, user_id: int, status: str):
+        """更新用户视频状态"""
+        if status not in ["loading", "ready", "error"]:
+            logger.warning(f"Invalid video status '{status}' for user {user_id} in room {room_id}")
+            return
+            
+        room = self.get_or_create_room(room_id)
+        # 只在用户在线时更新状态
+        if user_id in room.online_users:
+            room.user_video_status[user_id] = status
+            logger.info(f"Updated video status for user {user_id} in room {room_id}: {status}")
+    
+    def get_user_video_status(self, room_id: int, user_id: int) -> Optional[str]:
+        """获取用户视频状态"""
+        if room_id in self.active_rooms:
+            return self.active_rooms[room_id].user_video_status.get(user_id)
+        return None
+    
+    def get_room_video_status_summary(self, room_id: int) -> Dict[str, int]:
+        """获取房间视频状态统计"""
+        if room_id in self.active_rooms:
+            status_count = {"loading": 0, "ready": 0, "error": 0}
+            for status in self.active_rooms[room_id].user_video_status.values():
+                if status in status_count:
+                    status_count[status] += 1
+            return status_count
+        return {"loading": 0, "ready": 0, "error": 0}
+    
     def get_room_info(self, room_id: int) -> Optional[Dict]:
         """获取房间信息（用于发送给前端）"""
         if room_id in self.active_rooms:
@@ -126,6 +170,8 @@ class ConnectionManager:
             room = self.active_rooms[room_id]
             if user_id in room.online_users:
                 room.online_users.discard(user_id)
+                # 清理用户视频状态
+                room.user_video_status.pop(user_id, None)
                 # 如果房间没有在线用户了，标记为需要检查
                 if not room.online_users:
                     rooms_to_check.append(room_id)
@@ -221,6 +267,11 @@ class ConnectionManager:
                 # 获取或创建房间对象
                 room = self.get_or_create_room(room_id)
                 
+                # 确保房间的owner_id已设置
+                if room.owner_id is None:
+                    room.owner_id = room_db.owner_id
+                    logger.info(f"Set owner_id for room {room_id}: {room.owner_id}")
+                
                 # 检查房间是否是新激活的
                 was_empty = len(room.online_users) == 0
                 
@@ -255,6 +306,8 @@ class ConnectionManager:
         if room_id in self.active_rooms:
             room = self.active_rooms[room_id]
             room.online_users.discard(user_id)
+            # 清理用户视频状态
+            room.user_video_status.pop(user_id, None)
             
             # 如果房间变空了，保留在字典中但启动延迟停用定时器
             if not room.online_users:

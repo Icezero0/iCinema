@@ -23,15 +23,12 @@
   width: 100%;
   height: auto;
   aspect-ratio: 16 / 9;
-  min-width: 640px;
-  min-height: 360px;
   max-width: 100%;
-  max-height: 100%;
   background: #000;
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-lg);
   display: block;
-  margin-top: 0; /* 修改上边距为0 */
+  margin-top: 0;
   margin-bottom: var(--spacing-lg);
   transition: box-shadow var(--transition-normal);
 }

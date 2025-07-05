@@ -14,6 +14,7 @@
     <div v-if="!isMobile" class="room-main desktop-layout">
       <!-- 视频播放区域 -->
       <VideoArea 
+        key="desktop-video-area"
         ref="videoAreaComponentRef"
         :is-owner="isOwner"
         :room-id="roomId"
@@ -21,14 +22,21 @@
         :is-dark-mode="isDarkMode"
         :room-name="roomName"
         :is-room-public="isRoomPublic"
+        :is-mobile="false"
+        :video-url-input="videoUrlInput"
+        :external-video-status="externalVideoStatus"
+        :ws-connection="wsConnection"
+        :room-members="roomMembers"
         @video-play="handleVideoPlay"
         @video-pause="handleVideoPause"
         @video-seek="handleVideoSeek"
         @video-url-change="handleVideoUrlChange"
+        @status-update="handleStatusUpdate"
         @room-settings-save="handleRoomSettingsSave"
         @room-dissolve="handleRoomDissolve"
+        @video-url-input-change="handleVideoUrlInputChange"
+        @video-status-change="handleVideoStatusChange"
       />
-      
       <!-- 垂直分隔条 -->
       <DragDivider 
         direction="vertical"
@@ -63,6 +71,7 @@
           :room-id="roomId"
           :user-id="userId"
           :loading-history="loadingHistory"
+          :is-mobile="false"
           @send-message="handleSendMessage"
           @load-history-with-callback="handleLoadHistoryWithCallback"
           ref="chatAreaRef"
@@ -75,13 +84,19 @@
       <!-- 视频播放区域 (16:9) -->
       <div class="mobile-video-container">
         <VideoArea 
+          key="mobile-video-area"
           ref="videoAreaComponentRef"
           :is-owner="isOwner"
           :room-id="roomId"
           :user-id="userId"
           :is-dark-mode="isDarkMode"
           :room-name="roomName"
-          :is-room-public="isRoomPublic"          :is-mobile="true"
+          :is-room-public="isRoomPublic"
+          :is-mobile="true"
+          :video-url-input="videoUrlInput"
+          :external-video-status="externalVideoStatus"
+          :ws-connection="wsConnection"
+          :room-members="roomMembers"
           @video-play="handleVideoPlay"
           @video-pause="handleVideoPause"
           @video-seek="handleVideoSeek"
@@ -89,6 +104,8 @@
           @status-update="handleStatusUpdate"
           @room-settings-save="handleRoomSettingsSave"
           @room-dissolve="handleRoomDissolve"
+          @video-url-input-change="handleVideoUrlInputChange"
+          @video-status-change="handleVideoStatusChange"
         />
       </div>      <!-- 视频控制区域 -->
       <div class="mobile-controls">        <div class="mobile-control-buttons">          <button 
@@ -155,7 +172,7 @@
                   确认
                 </button>
               </div>
-              <div v-if="videoStatusMsg" class="mobile-status-msg">{{ videoStatusMsg }}</div>
+              <div v-if="externalVideoStatus" class="mobile-status-msg">{{ externalVideoStatus }}</div>
             </div>
           </div>
         </div>
@@ -288,6 +305,9 @@ const roomName = ref("");
 const isRoomPublic = ref(false);
 const roomMembers = ref([]);
 
+// WebSocket连接
+const wsConnection = computed(() => getWebSocket());
+
 // 响应式检测
 const { isMobile } = useResponsive();
 
@@ -297,23 +317,19 @@ const showMobileControls = ref(false); // 是否显示视频控制
 const showMobileMembers = ref(false); // 是否显示成员列表
 const showMobileSettings = ref(false); // 是否显示房间设置
 
-// 视频控制相关变量
+// 视频状态提升到Room层面管理
 const videoUrlInput = ref('');
-const videoStatusMsg = computed(() => videoAreaComponentRef.value?.videoStatusMsg || '');
+const externalVideoStatus = ref('');
 
-// 监听videoUrlInput变化，同步到VideoArea组件
-watch(videoUrlInput, (newValue) => {
-  if (videoAreaComponentRef.value && videoAreaComponentRef.value.videoUrlInput !== newValue) {
-    videoAreaComponentRef.value.videoUrlInput = newValue;
-  }
-});
+// 处理VideoArea组件的视频URL输入变化
+function handleVideoUrlInputChange(newUrl) {
+  videoUrlInput.value = newUrl;
+}
 
-// 从VideoArea组件同步videoUrlInput的值
-watch(() => videoAreaComponentRef.value?.videoUrlInput, (newValue) => {
-  if (newValue !== undefined && videoUrlInput.value !== newValue) {
-    videoUrlInput.value = newValue;
-  }
-});
+// 处理VideoArea组件的视频状态变化
+function handleVideoStatusChange(newStatus) {
+  externalVideoStatus.value = newStatus;
+}
 
 // 视频播放器状态
 const isPlaying = ref(false);
@@ -329,13 +345,11 @@ function handleStatusUpdate(status) {
   duration.value = status.duration;
   bufferedRanges.value = status.bufferedRanges;
   volume.value = status.volume;
-  console.log('Room.vue 状态更新:', status);
 }
 
 const playedPercent = computed(() => {
   if (!duration.value || duration.value <= 0) return 0;
   const percent = (currentTime.value / duration.value) * 100;
-  console.log('Room.vue playedPercent computed:', percent);
   return percent;
 });
 
@@ -739,6 +753,25 @@ async function getWebSocketAndEnterRoom() {
         } else if (msg.type === 'room_entered' && msg.payload) {
           console.log('已进入房间:', msg.payload.room_id, msg.payload.room_info);
           
+          // 初始化用户视频状态，为每个在线用户获取详细信息
+          if (msg.payload.room_info && msg.payload.room_info.online_users) {
+            const onlineUsersWithInfo = [];
+            for (const userInfo of msg.payload.room_info.online_users) {
+              const { user_id, video_status } = userInfo;
+              const detailedUserInfo = await useUserInfo(user_id);
+              
+              onlineUsersWithInfo.push({
+                user_id,
+                video_status,
+                userInfo: {
+                  username: detailedUserInfo?.username || `用户${user_id}`,
+                  avatar: detailedUserInfo?.avatarUrl || defaultAvatar
+                }
+              });
+            }
+            videoAreaComponentRef.value?.initializeUserVideoStatuses(onlineUsersWithInfo);
+          }
+          
           // 通过 VideoArea 组件处理房间状态恢复
           const videoControls = {
             loadVideo: (url, options) => {
@@ -756,6 +789,27 @@ async function getWebSocketAndEnterRoom() {
           
           // 使用专用的房间状态恢复函数
           await handleRoomStateRestore(msg.payload.room_info, videoControls);
+        } else if (msg.type === 'user_video_status' && msg.payload) {
+          // 处理用户视频状态消息
+          console.log('收到用户视频状态消息:', msg.payload);
+          
+          // 获取用户信息，然后传递给UserVideoStatus组件
+          const { user_id } = msg.payload;
+          const userInfo = await useUserInfo(user_id);
+          
+          // 将用户信息添加到消息中
+          const enhancedMessage = {
+            ...msg,
+            payload: {
+              ...msg.payload,
+              userInfo: {
+                username: userInfo?.username || `用户${user_id}`,
+                avatar: userInfo?.avatarUrl || defaultAvatar
+              }
+            }
+          };
+          
+          videoAreaComponentRef.value?.handleUserVideoStatusMessage(enhancedMessage);
         }
         // 未来可扩展其他type
       } catch (e) {
@@ -796,6 +850,13 @@ const chatBarRef = ref(null);
   height: 100vh;
   background: linear-gradient(to bottom, #e6f5f3, #c8e6e0);
   transition: background var(--transition-normal);
+}
+
+/* 桌面端布局调整 */
+.room-main.desktop-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0; /* 防止flex子项溢出 */
 }
 
 .room-page.dark-mode {
@@ -976,6 +1037,11 @@ const chatBarRef = ref(null);
     flex-shrink: 0;
     overflow: hidden; /* 防止内容溢出 */
     box-sizing: border-box;
+  }
+
+  .mobile-video-container .video-area {
+    width: 100%;
+    height: 100%;
   }
   /* 移动端控制区域 */
   .mobile-controls {
