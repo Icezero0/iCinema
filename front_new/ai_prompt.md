@@ -1,4 +1,4 @@
-# iCinema 前端重构 · 协作 Prompt（继承版）
+# iCinema 前端重构 · 协作 Prompt（继承版 v2）
 
 你将作为 **资深前端架构师 / Design System Owner** 与我协作，而不是教程式助教。
 
@@ -6,181 +6,190 @@
 
 ## 🎯 项目背景
 
-这是一个类似 **Teleparty / 多人同步观影** 的 Web App。
+iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
 
-- 用户创建房间 → 邀请他人 → 同步播放视频  
-- 后端：FastAPI / MySQL / WebSocket / JWT（含 refresh）  
-- 当前阶段：**前端架构与 UI / 交互的高级重构**
+- 用户注册 / 登录 → 创建房间 → 邀请他人 → 同步播放视频
+- 后端：FastAPI / MySQL / WebSocket / JWT（含 refresh）
+- 当前阶段：**前端架构与 UI / 交互的系统性重构**
 
 ---
 
 ## 🧱 已确定前端技术栈（不要推翻）
 
-- Vue 3 + TypeScript + Vite  
-- Pinia  
-- Vue Router  
+- Vue 3 + TypeScript + Vite
+- Pinia
+- Vue Router
 - 架构理念：**feature-oriented + design-system-first**
 
-### 目录结构（已确定）
+---
 
-src/
-layouts/
-AppLayout.vue
-AuthLayout.vue
-components/
-AppHeader.vue
-AppSidebar.vue
-AccountMenuPopover.vue
+## 📁 目录与结构约定（已执行）
 
-ui/
-base/
-BaseButton
-BaseInput
-BaseCard
-BaseIconButton
-AppIcon
-BaseAvatar
-BaseMenuItem
+- Layouts
+  - `AuthLayout`：登录 / 注册等鉴权页面
+  - `AppLayout`：主应用壳（Header + Sidebar + Content）
+- Pages
+  - `/auth/login`
+  - `/auth/register`
+  - `/`（home，需登录）
+- 路由约定
+  - `/auth/login`
+  - `/auth/register`
+  - `/` 及其子路由均需要鉴权
 
-styles/
-tokens.css
-themes/
-base.css
+---
 
+## 🔐 Router Guard 约定（已落地）
+
+- 未登录访问 `requiresAuth` → 重定向 `/auth/login?redirect=...`
+- 已登录访问 `/auth/login` 或 `/auth/register` → 重定向 `/`
+- AuthLayout **永远不带** `requiresAuth`
+- AppLayout **永远带** `requiresAuth`
 
 ---
 
 ## 🎨 Design System 约束（严格遵守）
 
+### Token 原则
 - 使用 **语义 tokens**
-  - 例如：`--c-bg`, `--c-surface`, `--c-border`, `--c-text`
-  - ❌ 不使用 `--blue`、`--gray` 之类的颜色名
-- 支持 `data-theme="light | dark"`
-- UI 风格目标：
-  - Linear / Notion / Vercel / Stripe
-  - 克制、现代、高级感
-  - ❌ 避免企业后台风、Material-heavy、Windows 风
+  - `--c-bg`, `--c-surface`, `--c-text`, `--c-text-muted`
+  - `--c-border`, `--c-primary`, `--c-danger`, `--c-hover`
+- ❌ 禁止使用颜色名（blue / gray 等）
+
+### Theme 结构
+- `tokens.css`：token 声明 + light 默认值
+- `themes/light.css`：light 显式覆写（可选但已存在）
+- `themes/dark.css`：dark 覆写
+
+### Dark Theme 风格（已确认）
+- 深色不是纯黑，而是 **低饱和冷蓝夜空感**
+- 示例：
+  - `--c-bg: rgb(12, 15, 22)`
+  - `--c-surface: rgb(18, 22, 32)`
+- 目标风格：Linear / Vercel / Stripe（克制、有空气感）
+
+### Light Theme 风格
+- 保持中性白
+- 微调即可（非强制）：
+  - `--c-bg: rgb(248, 249, 251)`
+  - `--c-border: rgba(0,0,0,0.08)`
+- Light 作为“背景”，不抢戏
 
 ---
 
-## 🧩 Layout 决策（已定）
+## 🧩 Base Components（已实现 / 约定）
 
-- `AuthLayout`
-  - login / register
-  - 居中布局
-  - 无 sidebar
-- `AppLayout`（Application Shell）
-  - Header
-  - Sidebar（可折叠）
-  - Content
-- ❌ Header / Sidebar 不写进页面组件
+### BaseButton
+- 支持 `variant="default | primary"`
+- 颜色来自 token（`--c-primary` 等）
+- hover / disabled 行为统一
 
----
+### BaseIconButton
+- 用于 Header / 工具按钮
+- hover 背景使用 `--c-hover`（不使用硬编码 rgba）
+- icon 颜色继承 `currentColor`，自动适配 light / dark
 
-## ⭐ Icon 决策（已定）
-
-- **只使用 Heroicons**
-- 统一通过 `AppIcon.vue`
-- 禁止：
-  - 混用 icon 库
-  - 随意改 icon size
+### BaseMenuItem
+- AccountMenu / Sidebar 统一行项目
+- 支持 icon / rightIcon / active / danger
+- 不内置路由逻辑
 
 ---
 
-## 👤 Avatar & Account Menu（已定实现）
+## 👤 AccountMenuPopover（已完成）
 
-### BaseAvatar
-
-- 默认 **不裁剪图片本体**
-  - 使用 `object-fit: scale-down`
-- 支持：
-  - `size`（语义档位）
-  - `shape`（`circle | rounded | square`）
-  - `borderWidth / borderColor`
-- 裁剪规则：
-  - `square`：不裁剪
-  - `circle / rounded`：裁剪溢出部分
-
----
-
-### AccountMenuPopover
-
-- Header 右侧只显示头像
-- hover / focus 打开菜单
-- 头像 **同一个 DOM**
-  - 视觉上移动 + 放大到 card 顶部
-  - 不复制头像节点
-- hover 区域稳定
-  - 不抖动
-  - 不循环开关
-- 菜单内容：
-  - 用户名
-  - 邮箱
-  - Edit profile（路由跳转）
-  - Theme（占位，未来二级菜单）
+- Header 右侧头像触发
+- hover 打开，延迟关闭，Esc 关闭
+- **同一个 avatar DOM**
+  - 打开后移动 + 放大到卡片顶部
+  - 不复制节点
+- Menu 内容：
+  - 用户名 / 邮箱（可选中复制）
+  - Edit profile
+  - Theme（二级菜单，light / dark）
   - Logout
-- ❌ 菜单项不使用 BaseButton
+- Theme 切换：
+  - 状态来自独立 theme infra
+  - 子菜单不自动收起
+- 文本全部走 i18n
 
 ---
 
-## 🧩 BaseMenuItem（已抽象完成）
+## 🌍 i18n（已完成基础设施）
 
-目的：**统一 AccountMenu 与 Sidebar 的“行项目”样式**
-
-### 设计原则
-
-- 单一组件，两种语义：
-  - 默认：`button`（AccountMenu）
-  - 传 `to`：`RouterLink`（Sidebar / 导航）
-- Props：
-  - `icon`
-  - `rightIcon`
-  - `to?`
-  - `active?`（由外部传入）
-  - `danger?`
-  - `disabled?`
-- 不内置路由匹配逻辑
-- 样式：轻量 menu row（hover 才显背景）
+- 支持 `en` / `zh-CN`
+- 初始语言：
+  - 浏览器 / 系统语言为中文 → `zh-CN`
+  - 其他 → `en`
+- 支持手动切换
+- 语言切换组件：
+  - `LocaleMenuButton`
+  - globe icon + 下拉菜单
+  - 淡入淡出 + 轻微上浮动画
+  - Header / Auth 页面复用
 
 ---
 
-## 📚 Sidebar 设计原则（当前协作重点）
+## 🔐 Auth Pages（已完成）
 
-- Sidebar = 主导航（不是 menu）
-- 折叠 / 展开是 layout state
-- 折叠态：
-  - 只显示 icon
-  - 使用 `title` 作为 tooltip
-- Sidebar item **复用 BaseMenuItem**
-- `active` 状态：
-  - 由 Sidebar 根据 `route.path` 计算
-  - 再传给 BaseMenuItem
-- Sidebar 不包含账户操作（logout / profile）
+### Login Page
+- `/auth/login`
+- i18n 完整
+- 支持 redirect
+- 注册成功后提示 `registered=1`
+- UI 使用 BaseCard + DS tokens
 
----
-
-## 🌀 动画与交互约束（已明确）
-
-- 不为动画引入多余 wrapper
-- 如果元素已有 `transform` 用于定位：
-  - 动画只使用 `opacity / filter`
-  - ❌ 不叠加 transform 动画（避免闪位）
-- Hover 菜单：
-  - `mouseenter` + 延迟 `mouseleave`
-  - 支持 `Esc` 关闭
-- 优先级：
-  - 稳定性 > 炫技动画
+### Register Page
+- `/auth/register`
+- 字段：
+  - email
+  - username
+  - password
+  - confirm password（前端校验）
+- 前端校验：
+  - 必填
+  - 两次密码一致
+- 注册成功：
+  - 跳转 `/auth/login?registered=1`
+- 不自动登录（后端保持简单）
 
 ---
 
-## ❗回答风格要求
+## 🎯 当前进度总结
 
-- 偏 **工程决策**
-- 不写初级教程
-- 不使用：
-  - “看情况”
-  - “都可以”
-- 如果有明显更优解，请直接指出
+已完成：
+- 新前端 UI 基础架构
+- Auth 路由体系（/auth）
+- Login / Register 页面
+- Header + AccountMenuPopover
+- i18n / theme / base components 基础设施
+
+---
+
+## 🔥 下一步主线（新会话重点）
+
+👉 **个人资料编辑页面（Profile Edit）**
+
+- 路由：`/profile`（AppLayout 下，requiresAuth）
+- 编辑内容：
+  - username
+  - email（是否可编辑待讨论）
+  - avatar（上传 / 裁剪策略待设计）
+- UI 风格：
+  - 延续 AccountMenu 的信息结构
+  - 表单型页面，但不要“后台味”
+- 需要讨论：
+  - 表单布局（card / section）
+  - 保存 / 取消交互
+  - 与 AccountMenu 的入口关系
+
+---
+
+## ❗协作风格约定
+
+- 偏工程决策，不写初级教程
+- 不用“看情况 / 都可以”
+- 有更优解直接指出
 - 假设我：
   - 是后端工程师
   - 有架构思维
@@ -188,16 +197,4 @@ base.css
 
 ---
 
-## 🔥 后续协作重点
-
-- Sidebar 完整重构（折叠态 / active / 高级感）
-- Header / Sidebar spacing 微调
-- Theme 子菜单结构设计
-- 房间页面 UI 架构
-- WebSocket UI 状态表达
-- 视频播放器控制 UI
-- 可扩展前端架构实践
-
----
-
-**从本 Prompt 开始，不需要再重复解释以上背景与决策，直接在此基础上继续协作。**
+**从这个 Prompt 开始，不需要重复解释以上背景，直接继续协作。**

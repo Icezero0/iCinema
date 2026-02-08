@@ -13,6 +13,20 @@ export default {
       missing: "请输入邮箱和密码。",
       invalid: "邮箱或密码不正确。",
     },
+    register: {
+      title: "创建账号",
+      email: "邮箱",
+      username: "用户名",
+      password: "密码",
+      confirmPassword: "确认密码",
+      passwordMismatch: "两次输入的密码不一致。",
+      submit: "创建账号",
+      submitting: "正在创建账号…",
+      missing: "请填写所有必填项。",
+      failed: "创建账号失败。",
+      haveAccount: "已经有账号？",
+      signIn: "去登录",
+    },
   },
   account: {
     menu: {

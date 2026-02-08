@@ -8,19 +8,27 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const auth = useAuthStore()
+  const auth = useAuthStore();
 
-  if (auth.status === 'unknown') {
-    await auth.init()
+  if (auth.status === "unknown") {
+    await auth.init();
   }
 
+  // 未登录 → 访问需要鉴权的页面
   if (to.meta.requiresAuth && !auth.isLoggedIn) {
-    return { path: '/login', query: { redirect: to.fullPath } }
+    return {
+      path: "/auth/login",
+      query: { redirect: to.fullPath },
+    };
   }
 
-  if (to.path === '/login' && auth.isLoggedIn) {
-    return '/'
+  // 已登录 → 不允许进入 auth pages
+  if (
+    auth.isLoggedIn &&
+    (to.path === "/auth/login" || to.path === "/auth/register")
+  ) {
+    return "/";
   }
-})
+});
 
 export default router

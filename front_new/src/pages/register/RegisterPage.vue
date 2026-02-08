@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
-import { useAuthStore } from "@/stores/auth.store";
 import { useI18n } from "vue-i18n";
 import LocaleMenuButton from "@/components/LocaleMenuButton.vue";
 
-const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
@@ -13,37 +11,36 @@ const { t } = useI18n();
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 const email = ref("");
+const username = ref("");
 const password = ref("");
+const confirmPassword = ref("");
 
 const isSubmitting = ref(false);
 const errorMsg = ref("");
 
-const showRegisteredHint = computed(() => route.query.registered === "1");
+const redirect = computed(() =>
+  typeof route.query.redirect === "string" ? route.query.redirect : "/",
+);
 
 function setError(msg: string) {
   errorMsg.value = msg;
 }
 
-async function loginRequest(payload: { email: string; password: string }) {
-  // 后端是 OAuth2 Password flow：x-www-form-urlencoded
-  const body = new URLSearchParams();
-  body.set("email", payload.email);
-  body.set("password", payload.password);
-
-  const res = await fetch(`${apiBase}/token`, {
+async function registerRequest(payload: {
+  email: string;
+  username: string;
+  password: string;
+}) {
+  const res = await fetch(`${apiBase}/users`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
-  // 401 / 422 都统一到表单错误（不弹窗）
   if (!res.ok) {
-    // 尽量解析后端 detail，但不做复杂联想
-    let msg = t("auth.login.invalid");
-
+    let msg = t("auth.register.failed");
     try {
       const data = await res.json();
-      // FastAPI 常见：{ detail: "..." } 或 { detail: [{ msg: "..." }, ...] }
       const detail = (data as any)?.detail;
       if (typeof detail === "string") msg = detail;
       else if (Array.isArray(detail) && detail[0]?.msg) msg = detail[0].msg;
@@ -53,11 +50,8 @@ async function loginRequest(payload: { email: string; password: string }) {
     throw new Error(msg);
   }
 
-  return (await res.json()) as {
-    access_token: string;
-    refresh_token?: string;
-    token_type?: string;
-  };
+  // 成功返回 User（但注册页通常不直接登录）
+  return await res.json();
 }
 
 async function submit() {
@@ -65,30 +59,30 @@ async function submit() {
   errorMsg.value = "";
 
   const e = email.value.trim();
+  const u = username.value.trim();
   const p = password.value;
 
-  if (!e || !p) {
-    setError(t("auth.login.missing"));
+  if (!e || !u || !p || !confirmPassword.value) {
+    setError(t("auth.register.missing"));
+    return;
+  }
+
+  if (p !== confirmPassword.value) {
+    setError(t("auth.register.passwordMismatch"));
     return;
   }
 
   isSubmitting.value = true;
   try {
-    const r = await loginRequest({ email: e, password: p });
+    await registerRequest({ email: e, username: u, password: p });
 
-    if (!r?.access_token) {
-      throw new Error("Login failed: missing access token.");
-    }
-
-    auth.setTokens(r.access_token, r.refresh_token);
-    await auth.init();
-
-    // 登录成功：优先回 redirect，其次回首页
-    const redirect =
-      typeof route.query.redirect === "string" ? route.query.redirect : "/";
-    await router.replace(redirect);
+    // 注册成功：回登录页，带上 registered=1（你 login 页已支持提示）
+    await router.replace({
+      path: "/auth/login",
+      query: { registered: "1", redirect: redirect.value },
+    });
   } catch (err: any) {
-    setError(err?.message || t("auth.login.invalid"));
+    setError(err?.message || t("auth.register.failed"));
   } finally {
     isSubmitting.value = false;
   }
@@ -96,20 +90,15 @@ async function submit() {
 </script>
 
 <template>
-  <BaseCard class="loginCard">
+  <BaseCard class="registerCard">
     <header class="header">
       <div class="headerRow">
         <div>
-          <h1 class="title">{{ t("auth.login.title") }}</h1>
-          <p class="subtitle">{{ t("auth.login.subtitle") }}</p>
+          <h1 class="title">{{ t("auth.register.title") }}</h1>
         </div>
         <LocaleMenuButton :size="20" />
       </div>
     </header>
-
-    <p v-if="showRegisteredHint" class="hint" role="status">
-      {{ t("auth.login.registeredHint") }}
-    </p>
 
     <form class="form" @submit.prevent="submit">
       <BaseInput
@@ -117,15 +106,31 @@ async function submit() {
         type="email"
         autocomplete="email"
         inputmode="email"
-        :placeholder="t('auth.login.email')"
+        :placeholder="t('auth.register.email')"
+        :disabled="isSubmitting"
+      />
+
+      <BaseInput
+        v-model="username"
+        type="text"
+        autocomplete="username"
+        :placeholder="t('auth.register.username')"
         :disabled="isSubmitting"
       />
 
       <BaseInput
         v-model="password"
         type="password"
-        autocomplete="current-password"
-        :placeholder="t('auth.login.password')"
+        autocomplete="new-password"
+        :placeholder="t('auth.register.password')"
+        :disabled="isSubmitting"
+      />
+
+      <BaseInput
+        v-model="confirmPassword"
+        type="password"
+        autocomplete="new-password"
+        :placeholder="t('auth.register.confirmPassword')"
         :disabled="isSubmitting"
       />
 
@@ -139,13 +144,20 @@ async function submit() {
         variant="primary"
         :disabled="isSubmitting"
       >
-        {{ isSubmitting ? t("auth.login.submitting") : t("auth.login.submit") }}
+        {{
+          isSubmitting
+            ? t("auth.register.submitting")
+            : t("auth.register.submit")
+        }}
       </BaseButton>
 
       <p class="foot">
-        <span class="muted">{{ t("auth.login.noAccount") }}</span>
-        <RouterLink class="link" to="/auth/register">
-          {{ t("auth.login.createOne") }}
+        <span class="muted">{{ t("auth.register.haveAccount") }}</span>
+        <RouterLink
+          class="link"
+          :to="{ path: '/auth/login', query: { redirect } }"
+        >
+          {{ t("auth.register.signIn") }}
         </RouterLink>
       </p>
     </form>
@@ -153,7 +165,7 @@ async function submit() {
 </template>
 
 <style scoped>
-.loginCard {
+.registerCard {
   width: min(420px, 92vw);
   padding: 22px;
   border-radius: 16px;
@@ -169,12 +181,11 @@ async function submit() {
   overflow: hidden;
 }
 
-.loginCard::before {
+.registerCard::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* 顶部一条非常淡的高光 */
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.08),
@@ -182,7 +193,7 @@ async function submit() {
   );
 }
 
-:global([data-theme="dark"]) .loginCard::before {
+:global([data-theme="dark"]) .registerCard::before {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.06),
@@ -213,16 +224,6 @@ async function submit() {
   color: var(--c-text-muted);
 }
 
-.hint {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--c-border);
-  background: var(--c-bg);
-  color: var(--c-text);
-  font-size: 13px;
-}
-
 .form {
   display: flex;
   flex-direction: column;
@@ -233,11 +234,9 @@ async function submit() {
 .error {
   margin: 2px 0 0;
   font-size: 13px;
-  /* 如果你 tokens 里有 danger，就用；没有也不强依赖 */
   color: var(--c-danger, var(--c-text));
 }
 
-/* 不假设 BaseButton 内部结构，只保证占满宽度 */
 .primaryBtn {
   margin-top: 6px;
 }

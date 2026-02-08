@@ -13,6 +13,20 @@ export default {
       missing: "Please enter your email and password.",
       invalid: "Invalid email or password.",
     },
+    register: {
+      title: "Create your account",
+      email: "Email",
+      username: "Username",
+      password: "Password",
+      confirmPassword: "Confirm password",
+      passwordMismatch: "Passwords do not match.",
+      submit: "Create account",
+      submitting: "Creating account…",
+      missing: "Please fill in all required fields.",
+      failed: "Failed to create account.",
+      haveAccount: "Already have an account?",
+      signIn: "Sign in",
+    },
   },
   account: {
     menu: {

@@ -1,10 +1,12 @@
 :root[data-theme="dark"] {
-  --c-bg: rgb(10, 12, 14);
-  --c-surface: rgb(18, 20, 24);
-  --c-border: rgba(255,255,255,0.12);
+  --c-bg: rgb(12, 15, 22);
 
-  --c-text: rgba(255,255,255,0.90);
-  --c-text-muted: rgba(255,255,255,0.62);
+  --c-surface: rgb(18, 22, 32);
+
+  --c-border: rgba(255, 255, 255, 0.10);
+
+  --c-text: rgba(255, 255, 255, 0.90);
+  --c-text-muted: rgba(255, 255, 255, 0.62);
 
   --c-danger: rgb(248, 113, 113);
 

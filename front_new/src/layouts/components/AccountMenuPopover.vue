@@ -59,7 +59,7 @@ function closeLater() {
 
 function logout() {
   auth.logout();
-  router.replace("/login");
+  router.replace("/auth/login");
 }
 
 function onKeydown(e: KeyboardEvent) {
