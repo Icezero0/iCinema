@@ -247,10 +247,13 @@ class WebSocketHandler:
         #         }
         #         await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
 
-        elif message_type == "set_vedio_url":
+        # 广播设置视频URL
+        elif message_type == "set_video_url":
             room_id = int(payload.get("room_id"))
             url = payload.get("url")
             duration = payload.get("duration")  # 可选的视频时长
+            exclude_user = set(payload.get("exclude_user"))  # 排除的用户ID列表
+            exclude_user.add(user_id)  # 确保不向自己发送
             if room_id and url:
                 # 更新后端状态
                 manager.update_room_video_operation(
@@ -261,7 +264,7 @@ class WebSocketHandler:
                 # 广播给其他用户
                 timestamp = datetime.now(timezone.utc).isoformat()
                 ws_message = {
-                    "type": "set_vedio_url",
+                    "type": "set_video_url",
                     "payload": {
                         "room_id": room_id,
                         "sender_id": user_id,
@@ -269,9 +272,17 @@ class WebSocketHandler:
                         "timestamp": timestamp
                     }
                 }
-                await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
+                await manager.broadcast_to_room(room_id, ws_message, exclude_user=exclude_user)
+        
+        # 设置指定用户的视频URL
+        elif message_type == "set_user_video_url":
+            # room_id = int(payload.get("room_id"))
+            # user_video_url = payload.get("user_video_url", {})
+            pass
 
-        elif message_type == "set_vedio_start":
+
+        # 广播视频开始播放
+        elif message_type == "set_video_start":
             room_id = int(payload.get("room_id"))
             progress = float(payload.get("progress", 0.0))  # 开始播放时的进度
             if room_id:
@@ -281,7 +292,7 @@ class WebSocketHandler:
                 # 广播给其他用户
                 timestamp = datetime.now(timezone.utc).isoformat()
                 ws_message = {
-                    "type": "set_vedio_start",
+                    "type": "set_video_start",
                     "payload": {
                         "room_id": room_id,
                         "sender_id": user_id,
@@ -291,7 +302,8 @@ class WebSocketHandler:
                 }
                 await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
 
-        elif message_type == "set_vedio_pause":
+        # 广播视频暂停
+        elif message_type == "set_video_pause":
             room_id = int(payload.get("room_id"))
             progress = float(payload.get("progress", 0.0))  # 暂停时的进度
             if room_id:
@@ -301,7 +313,7 @@ class WebSocketHandler:
                 # 广播给其他用户
                 timestamp = datetime.now(timezone.utc).isoformat()
                 ws_message = {
-                    "type": "set_vedio_pause",
+                    "type": "set_video_pause",
                     "payload": {
                         "room_id": room_id,
                         "sender_id": user_id,
@@ -311,8 +323,8 @@ class WebSocketHandler:
                 }
                 await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
 
-                
-        elif message_type == "set_vedio_jump":
+        # 广播视频跳转
+        elif message_type == "set_video_jump":
             room_id = int(payload.get("room_id"))
             video_time_offset = float(payload.get("video_time_offset", 0.0))
             continue_playing = payload.get("playing", False)  # 跳转后是否继续播放
@@ -326,7 +338,7 @@ class WebSocketHandler:
                 
                 # 广播给其他用户
                 ws_message = {
-                    "type": "set_vedio_jump",
+                    "type": "set_video_jump",
                     "payload": {
                         "room_id": room_id,
                         "sender_id": user_id,
@@ -337,6 +349,7 @@ class WebSocketHandler:
                 }
                 await manager.broadcast_to_room(room_id, ws_message, exclude_user=user_id)
 
+        # 广播视频状态更新
         elif message_type == "video_status":
             room_id = payload.get("room_id")
             status = payload.get("status")

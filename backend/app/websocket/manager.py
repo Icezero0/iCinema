@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ActiveRoom:
-    """活跃房间状态类 - 仅存储数据，不包含计算逻辑"""
     # 用户管理
     online_users: Set[int] = field(default_factory=set)
     
@@ -27,6 +26,9 @@ class ActiveRoom:
     # 视频基础信息
     video_url: Optional[str] = None
     video_duration: Optional[float] = None
+
+    # 额外附加信息
+    additional_info: Optional[Dict] = None
     
     # 最后操作快照（供前端计算使用）
     last_operation_type: Optional[str] = None      # "play", "pause", "seek", "set_url"
@@ -288,6 +290,15 @@ class ConnectionManager:
                     await crud.rooms.update_room_active_status(db, room_id, True)
                     await db.commit()
                     logger.info(f"Room {room_id} became active")
+
+                # 如果该房间的房主在线，则通过ws消息通知房主用户进入
+                if room.owner_id and room.owner_id in self.connections:
+                    owner_websocket = self.connections[room.owner_id]
+                    await owner_websocket.send_json({
+                        "type": "user_join",
+                        "user_id": user_id,
+                        "room_id": room_id
+                    })
                 
                 logger.info(f"User {user_id} entered room {room_id}")
                 
@@ -314,10 +325,19 @@ class ConnectionManager:
                 # 保持房间在字典中，用户集合为空表示正在延迟停用
                 await self._schedule_room_deactivation(room_id)
                 logger.info(f"Room {room_id} entered delayed deactivation state (empty but in dict)")
+            
+            # 如果房间的房主在线，则通过ws消息通知房主用户离开
+            if room.owner_id and room.owner_id in self.connections:
+                owner_websocket = self.connections[room.owner_id]
+                await owner_websocket.send_json({
+                    "type": "user_leave",
+                    "user_id": user_id,
+                    "room_id": room_id
+                })
                 
         logger.info(f"User {user_id} left room {room_id}")
 
-    async def broadcast_to_room(self, room_id: int, message: dict, exclude_user: Optional[int] = None) -> int:
+    async def broadcast_to_room(self, room_id: int, message: dict, exclude_user: Optional[Set[int]] = None) -> int:
         """广播消息到房间所有在线成员"""
         if room_id not in self.active_rooms:
             return 0
@@ -325,7 +345,7 @@ class ConnectionManager:
         room = self.active_rooms[room_id]
         sent_count = 0
         for user_id in room.online_users.copy():
-            if user_id != exclude_user:
+            if user_id not in exclude_user:
                 if await self.send_to_user(user_id, message):
                     sent_count += 1
         
