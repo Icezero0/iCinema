@@ -57,6 +57,12 @@ function closeLater() {
   }, 120);
 }
 
+function goProfile() {
+  open.value = false;
+  themeOpen.value = false;
+  router.push("/profile");
+}
+
 function logout() {
   auth.logout();
   router.replace("/auth/login");
@@ -99,7 +105,7 @@ const hasEmail = computed(() => !!props.email);
           <div class="divider" />
 
           <div class="actions">
-            <BaseMenuItem :icon="PencilSquareIcon">
+            <BaseMenuItem :icon="PencilSquareIcon" @click="goProfile">
               {{ t("account.menu.editProfile") }}
             </BaseMenuItem>
             <BaseMenuItem

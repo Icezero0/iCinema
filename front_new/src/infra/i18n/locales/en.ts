@@ -37,4 +37,42 @@ export default {
       themeDark: "Dark",
     },
   },
+  profile: {
+    title: "Profile",
+    avatarHint: "Click the avatar to upload",
+    username: "Username",
+    email: "Email",
+    emailReadonlyHint: "Email cannot be changed for now.",
+    newPassword: "New password",
+    confirmNewPassword: "Confirm new password",
+    noChange: "No change",
+    save: "Save",
+    cancel: "Cancel",
+    toast: {
+      saved: "Saved",
+      saveFailed: "Failed to save",
+      avatarFailed: "Failed to load the image",
+    },
+    errors: {
+      usernameRequired: "Please enter a username",
+      passwordMismatch: "Passwords do not match",
+      emailMissing: "Email is missing",
+    },
+    confirmLeave: "You have unsaved changes. Leave without saving?",
+    unsaved: {
+      title: "Unsaved changes",
+      message:
+        "You have changes that haven't been saved. Leave without saving?",
+      stay: "Stay",
+      leave: "Leave",
+    },
+    crop: {
+      title: "Crop photo",
+      reset: "Reset",
+      use: "Use photo",
+    },
+  },
+  common: {
+    cancel: "Cancel",
+  },
 };

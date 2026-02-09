@@ -37,4 +37,42 @@ export default {
       themeDark: "暗夜",
     },
   },
+  profile: {
+    title: "个人资料",
+    avatarHint: "点击头像上传图片",
+    username: "用户名",
+    email: "邮箱",
+    emailReadonlyHint: "邮箱暂不可修改",
+    newPassword: "新密码",
+    confirmNewPassword: "确认新密码",
+    noChange: "不修改",
+    save: "保存",
+    cancel: "取消",
+    toast: {
+      saved: "已保存",
+      saveFailed: "保存失败",
+      avatarFailed: "图片读取失败",
+    },
+    errors: {
+      usernameRequired: "请输入用户名",
+      passwordMismatch: "两次密码不一致",
+      emailMissing: "邮箱缺失",
+    },
+    confirmLeave: "你有未保存的修改，确定要离开吗？",
+    unsaved: {
+      title: "未保存的修改",
+      message: "你有未保存的修改，确定要离开吗？",
+      stay: "留在此页",
+      leave: "离开",
+    },
+    crop: {
+      title: "图像裁剪",
+      reset: "重置",
+      use: "使用",
+    },
+  },
+  common: {
+    cancel: "取消",
+  },
+
 };

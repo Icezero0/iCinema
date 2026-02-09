@@ -28,4 +28,10 @@ export default [
       },
     ],
   },
+  {
+    path: "/profile",
+    component: () => import("@/pages/profile/ProfileEditPage.vue"),
+    meta: { requiresAuth: true },
+  }
+
 ];

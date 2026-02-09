@@ -7,12 +7,24 @@ export type MeResponse = {
   avatar_path: string | null
   created_at: string
   auto_accept: boolean
-  // rooms_owned / rooms_joined 你可以先用 any 或后面再精确建模
   rooms_owned?: any
   rooms_joined?: any
 }
 
 export async function getMe() {
   const { data } = await http.get<MeResponse>('/users/me')
+  return data
+}
+
+export type UserUpdatePayload = {
+  email: string
+  username?: string | null
+  password?: string | null
+  avatar_base64?: string | null
+  auto_accept?: boolean | null
+}
+
+export async function updateMe(payload: UserUpdatePayload) {
+  const { data } = await http.put<MeResponse>('/users/me', payload)
   return data
 }

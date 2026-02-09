@@ -1,19 +1,31 @@
 <script setup lang="ts">
-defineProps<{
-  type?: "button" | "submit";
-  disabled?: boolean;
-  variant?: "default" | "primary";
-}>();
+withDefaults(
+  defineProps<{
+    type?: "button" | "submit";
+    disabled?: boolean;
+    loading?: boolean;
+    variant?: "default" | "primary" | "danger";
+  }>(),
+  {
+    type: "button",
+    variant: "default",
+    disabled: false,
+    loading: false,
+  }
+);
 </script>
 
 <template>
   <button
     class="btn"
-    :class="variant ?? 'default'"
-    :type="type ?? 'button'"
-    :disabled="disabled"
+    :class="variant"
+    :type="type"
+    :disabled="disabled || loading"
   >
-    <slot />
+    <span class="content" :class="{ hidden: loading }">
+      <slot />
+    </span>
+    <span v-if="loading" class="loading" aria-hidden="true" />
   </button>
 </template>
 
@@ -25,7 +37,8 @@ defineProps<{
   cursor: pointer;
 
   font-weight: 500;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  position: relative;
 }
 
 .btn.default {
@@ -33,7 +46,6 @@ defineProps<{
   background: var(--c-surface);
   color: var(--c-text);
 }
-
 .btn.default:hover:not(:disabled) {
   background: var(--c-hover);
 }
@@ -43,13 +55,43 @@ defineProps<{
   background: var(--c-primary);
   color: var(--c-primary-text);
 }
-
 .btn.primary:hover:not(:disabled) {
   background: var(--c-primary-hover);
+}
+
+.btn.danger {
+  border: 1px solid transparent;
+  background: var(--c-danger);
+  color: var(--c-danger-text, var(--c-primary-text));
+}
+.btn.danger:hover:not(:disabled) {
+  background: var(--c-danger-hover, var(--c-danger));
 }
 
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.content.hidden {
+  opacity: 0;
+}
+
+.loading {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

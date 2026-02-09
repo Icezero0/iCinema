@@ -17,6 +17,11 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
+    setMe(me: MeResponse) {
+      this.me = me
+      this.status = 'authenticated'
+    },
+
     setTokens(accessToken: string, refreshToken?: string) {
       this.accessToken = accessToken
       localStorage.setItem('access_token', accessToken)
