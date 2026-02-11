@@ -26,12 +26,17 @@ export default [
         name: "home",
         component: () => import("@/pages/home/HomePage.vue"),
       },
+      {
+        path: "profile",
+        name: "profile",
+        component: () => import("@/pages/profile/ProfileEditPage.vue"),
+      },
+      {
+        path: "notifications",
+        name: "notifications",
+        component: () =>
+          import("@/pages/notifications/NotificationsPage.vue"),
+      },
     ],
   },
-  {
-    path: "/profile",
-    component: () => import("@/pages/profile/ProfileEditPage.vue"),
-    meta: { requiresAuth: true },
-  }
-
 ];

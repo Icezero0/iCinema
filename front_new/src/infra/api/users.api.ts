@@ -11,6 +11,27 @@ export type MeResponse = {
   rooms_joined?: any
 }
 
+export type User = {
+  id: number;
+  email: string;
+  username: string;
+  avatar_path: string | null;
+  created_at: string;
+  auto_accept?: boolean;
+};
+
+export type UserListResponse = {
+  items: User[];
+  total: number;
+};
+
+export async function getUserById(userId: number) {
+  const { data } = await http.get<UserListResponse>("/users", {
+    params: { userid: userId },
+  });
+  return data.items?.[0] ?? null;
+}
+
 export async function getMe() {
   const { data } = await http.get<MeResponse>('/users/me')
   return data

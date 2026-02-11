@@ -32,3 +32,7 @@
   --auth-tint-2: rgba(80, 180, 200, 0.06);
   --auth-tint-3: rgba(80, 180, 200, 0.04);
 }
+
+html {
+  scrollbar-gutter: stable;
+}

@@ -25,9 +25,12 @@ declare module 'vue' {
     BaseIconButton: typeof import('./src/ui/base/BaseIconButton.vue')['default']
     BaseInput: typeof import('./src/ui/base/BaseInput.vue')['default']
     BaseLayout: typeof import('./src/ui/layout/BaseLayout.vue')['default']
+    BaseList: typeof import('./src/ui/base/BaseList.vue')['default']
+    BaseListItem: typeof import('./src/ui/base/BaseListItem.vue')['default']
     BaseMenuItem: typeof import('./src/ui/base/BaseMenuItem.vue')['default']
     BaseToast: typeof import('./src/ui/base/BaseToast.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    RowListItem: typeof import('./src/ui/base/RowListItem.vue')['default']
   }
 }

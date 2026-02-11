@@ -1,4 +1,9 @@
 export default {
+  common: {
+    cancel: "Cancel",
+    loading: "Loading…",
+    backHome: "Back to Home",
+  },
   auth: {
     login: {
       title: "Welcome back",
@@ -72,7 +77,13 @@ export default {
       use: "Use photo",
     },
   },
-  common: {
-    cancel: "Cancel",
+  notifications: {
+    title: "Notifications",
+    empty: {
+      title: "No notifications",
+      hint: "Invitations and requests will show up here.",
+    },
+    inviteYouToJoin: "invited you to join {room}",
   },
+
 };

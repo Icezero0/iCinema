@@ -1,4 +1,10 @@
 export default {
+
+  common: {
+    cancel: "取消",
+    loading: "加载中…",
+    backHome: "返回首页",
+  },
   auth: {
     login: {
       title: "欢迎回来",
@@ -71,8 +77,13 @@ export default {
       use: "使用",
     },
   },
-  common: {
-    cancel: "取消",
+  notifications: {
+    title: "通知",
+    empty: {
+      title: "暂无通知",
+      hint: "新的邀请或申请会在这里显示。",
+    },
+    inviteYouToJoin: "邀请您加入 {room}",
   },
 
 };
