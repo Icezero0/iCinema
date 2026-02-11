@@ -1,4 +1,4 @@
-# iCinema 前端重构 · 协作 Prompt（继承版 v2）
+# iCinema 前端重构 · 协作 Prompt（继承版 v3）
 
 你将作为 **资深前端架构师 / Design System Owner** 与我协作，而不是教程式助教。
 
@@ -32,6 +32,7 @@ iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
   - `/auth/login`
   - `/auth/register`
   - `/`（home，需登录）
+  - `/profile`（个人资料编辑，需登录）
 - 路由约定
   - `/auth/login`
   - `/auth/register`
@@ -58,7 +59,7 @@ iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
 
 ### Theme 结构
 - `tokens.css`：token 声明 + light 默认值
-- `themes/light.css`：light 显式覆写（可选但已存在）
+- `themes/light.css`：light 显式覆写
 - `themes/dark.css`：dark 覆写
 
 ### Dark Theme 风格（已确认）
@@ -70,7 +71,7 @@ iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
 
 ### Light Theme 风格
 - 保持中性白
-- 微调即可（非强制）：
+- 微调即可：
   - `--c-bg: rgb(248, 249, 251)`
   - `--c-border: rgba(0,0,0,0.08)`
 - Light 作为“背景”，不抢戏
@@ -81,18 +82,22 @@ iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
 
 ### BaseButton
 - 支持 `variant="default | primary"`
-- 颜色来自 token（`--c-primary` 等）
+- 颜色来自 token
 - hover / disabled 行为统一
 
 ### BaseIconButton
 - 用于 Header / 工具按钮
-- hover 背景使用 `--c-hover`（不使用硬编码 rgba）
-- icon 颜色继承 `currentColor`，自动适配 light / dark
+- hover 背景使用 `--c-hover`
+- icon 颜色继承 `currentColor`
 
 ### BaseMenuItem
 - AccountMenu / Sidebar 统一行项目
 - 支持 icon / rightIcon / active / danger
 - 不内置路由逻辑
+
+### BaseDialog / BaseConfirmDialog
+- Teleport + overlay + Esc / overlay 行为统一
+- ConfirmDialog 仅用于确认语义（不可复用为复杂内容）
 
 ---
 
@@ -102,15 +107,11 @@ iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
 - hover 打开，延迟关闭，Esc 关闭
 - **同一个 avatar DOM**
   - 打开后移动 + 放大到卡片顶部
-  - 不复制节点
 - Menu 内容：
   - 用户名 / 邮箱（可选中复制）
   - Edit profile
   - Theme（二级菜单，light / dark）
   - Logout
-- Theme 切换：
-  - 状态来自独立 theme infra
-  - 子菜单不自动收起
 - 文本全部走 i18n
 
 ---
@@ -119,14 +120,11 @@ iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
 
 - 支持 `en` / `zh-CN`
 - 初始语言：
-  - 浏览器 / 系统语言为中文 → `zh-CN`
+  - 中文系统 → `zh-CN`
   - 其他 → `en`
 - 支持手动切换
-- 语言切换组件：
-  - `LocaleMenuButton`
-  - globe icon + 下拉菜单
-  - 淡入淡出 + 轻微上浮动画
-  - Header / Auth 页面复用
+- Header / Auth / Profile 统一复用
+- 公共文案（如 cancel）开始收敛到 `common.*`
 
 ---
 
@@ -134,67 +132,170 @@ iCinema 是一个类似 **Teleparty / 多人同步观影** 的 Web App。
 
 ### Login Page
 - `/auth/login`
-- i18n 完整
-- 支持 redirect
-- 注册成功后提示 `registered=1`
-- UI 使用 BaseCard + DS tokens
+- redirect 支持
+- 注册成功提示 `registered=1`
 
 ### Register Page
 - `/auth/register`
-- 字段：
-  - email
-  - username
-  - password
-  - confirm password（前端校验）
-- 前端校验：
-  - 必填
-  - 两次密码一致
-- 注册成功：
-  - 跳转 `/auth/login?registered=1`
-- 不自动登录（后端保持简单）
+- 前端完整校验
+- 成功后跳转 login，不自动登录
 
 ---
 
-## 🎯 当前进度总结
+## 👤 Profile Edit 页面（已完成）
 
-已完成：
-- 新前端 UI 基础架构
-- Auth 路由体系（/auth）
-- Login / Register 页面
-- Header + AccountMenuPopover
-- i18n / theme / base components 基础设施
-
----
-
-## 🔥 下一步主线（新会话重点）
-
-👉 **个人资料编辑页面（Profile Edit）**
-
-- 路由：`/profile`（AppLayout 下，requiresAuth）
+- 路由：`/profile`（AppLayout + requiresAuth）
+- 单 Card 表单布局（非后台风格）
 - 编辑内容：
-  - username
-  - email（是否可编辑待讨论）
-  - avatar（上传 / 裁剪策略待设计）
-- UI 风格：
-  - 延续 AccountMenu 的信息结构
-  - 表单型页面，但不要“后台味”
-- 需要讨论：
-  - 表单布局（card / section）
-  - 保存 / 取消交互
-  - 与 AccountMenu 的入口关系
+  - username（可编辑）
+  - email（只读展示，提交必带）
+  - password / confirm（可选，含不一致提示）
+  - avatar（上传 + 裁剪）
+- 行为设计：
+  - 字段级 dirty 标记（label `*`）
+  - 未保存修改点击 Cancel → ConfirmDialog
+  - 确认后返回首页
+- 状态管理：
+  - 保存成功后同步 `auth.me`
+  - 清理 dirty 状态
+- 头像裁剪：
+  - 使用 `vue-advanced-cropper`
+  - 固定 1:1
+  - 支持旋转 / reset / 滚轮缩放
+  - 输出 `data:image/...` dataURL（兼容后端 `avatar_base64`）
+  - 裁剪背景与遮罩统一 Design System 风格
+- 完整适配 light / dark + i18n
+
+---
+
+## 🧠 对使用者（我）的协作认知（如实记录）
+
+- 后端背景，具备架构意识
+- 前端基础不扎实，对 Vue 生态 / DOM / CSS 细节不熟
+- 会频繁在实现层面卡住（尤其是 UI / 第三方库）
+- 需要：
+  - 明确的工程决策
+  - 可直接替换的完整代码
+  - 避免抽象教程和“看情况”式建议
+- 可以接受被指出“方向错了 / 库选错了”，并愿意重构
 
 ---
 
 ## ❗协作风格约定
 
-- 偏工程决策，不写初级教程
-- 不用“看情况 / 都可以”
+- 偏工程决策，不写入门教程
 - 有更优解直接指出
-- 假设我：
-  - 是后端工程师
-  - 有架构思维
-  - 正在学习前端，但不需要科普
+- 允许并鼓励「推翻当前实现」
+- 输出以 **可复制代码 / 可落地结论** 为主
 
 ---
 
-**从这个 Prompt 开始，不需要重复解释以上背景，直接继续协作。**
+# 📘 作业进度记录（Homework Log）
+
+## 2026-02-09
+
+### 本次提交内容（自上次记录以来）
+
+- 完成 Profile Edit 页面整体实现
+- 设计并落地：
+  - 字段级 dirty 判定与 UI 提示
+  - 未保存修改的离开确认流程
+- 重构头像裁剪方案：
+  - 放弃 cropperjs（在 Dialog / 缩放场景下渲染不稳定）
+  - 迁移至 `vue-advanced-cropper`
+  - 解决滚轮缩放渲染缺失问题
+- AvatarCropDialog：
+  - 旋转 / reset / use photo
+  - 输出 dataURL
+  - 文案接入 i18n
+  - 背景与遮罩统一 Design System token
+- 清理不必要的 hack / deep CSS / 强制 reflow
+- Profile 页面达到「功能完成 + 体验可接受 + 可维护」状态
+
+### 当前状态
+
+- Profile 模块 **完成**
+
+
+## 🔥 下一步主线：消息页面（Messages）
+
+目标：实现一个“像产品一样”的消息中心，包括 Header 未读数角标、消息列表、已读状态与基础交互。
+
+---
+
+### ✅ 范围与交互定义（本轮做）
+
+#### 1) Header 消息按钮 + 未读角标
+- Header 右侧新增 **Message 按钮**（BaseIconButton 风格）
+- 显示未读数 badge：
+  - `0` 不显示
+  - `1–99` 显示数字
+  - `>=100` 显示 `99+`
+- 点击跳转到 `/messages`
+- 进入 `/messages` 页面时：
+  - 可选策略 A：仅展示列表，不自动全读
+  - 可选策略 B：打开页面自动“全部标记已读”
+  - 默认建议：**不自动全读**，由用户点击或逐条进入详情触发已读（更符合产品直觉）
+
+#### 2) Messages 页面（AppLayout 下）
+- 路由：`/messages`（requiresAuth）
+- UI：单 Card 列表，不做“后台表格”
+- 列表项结构（沿用 BaseMenuItem / DS tokens）：
+  - 标题（或摘要）
+  - 时间（右侧，muted）
+  - 未读点（左侧或右上角）
+- 空状态：友好文案 + 轻提示（无需插图）
+- 交互：
+  - 点击单条 → 标记已读 + 可跳转关联页面（若有 deep link）
+  - 支持 “Mark all as read”（可放右上角小按钮）
+
+---
+
+### 🧱 前端结构建议（符合你当前目录习惯，不强行引入 features/）
+
+新增：
+- `src/pages/messages/MessagesPage.vue`
+- `src/infra/api/messages.api.ts`（或沿用 `infra/api` 组织方式）
+- `src/stores/messages.store.ts`
+- （可选）`src/ui/base/BaseBadge.vue`（用于未读角标，避免在 Header 硬写样式）
+
+Header 改动：
+- 在 `Header` 组件中新增 MessageIconButton + badge，badge 值来自 `messages.store`
+
+---
+
+### 🔌 数据与实时性（按优先级）
+
+#### MVP（先跑通）
+- 页面加载时请求：
+  - `GET /messages?limit=...`（列表）
+  - `GET /messages/unread_count`（未读数）或在列表里计算
+- Header 初始化时拉一次 unread_count
+- 在执行“标记已读”后，本地更新 store 并刷新 unread_count
+
+#### 进阶（后续）
+- WebSocket 推送新消息：
+  - 收到新消息 → 列表 prepend + unread_count++
+  - Header badge 即时更新
+
+---
+
+### 🎨 Design System 约束
+- badge 背景用语义 token（建议：`--c-danger` 或新增 `--c-accent`，但默认先用 danger）
+- hover / active 使用 `--c-hover`
+- 文字层级：title `--c-text`，meta/time `--c-text-muted`
+
+---
+
+### 📌 本轮交付清单（Done Definition）
+- `/messages` 页面可访问、可展示列表（含空状态）
+- Header 消息按钮可见，未读数 badge 正确显示
+- 标记已读（单条 / 全部）能正确更新 badge 与列表状态
+- i18n：页面标题、空状态、按钮文案、badge 的 `99+` 不需要翻译但格式统一
+- light/dark 主题一致（不出现硬编码颜色）
+
+---
+
+## 多设备支持考虑
+
+目前做的内容全都是以pc平台网页为前提开展的，如果用户使用手机或者平板使用该web应用，需要另外考虑画面显示效果，操作逻辑等

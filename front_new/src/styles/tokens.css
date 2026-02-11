@@ -1,4 +1,6 @@
 :root {
+  --bp-compact: 640px;
+
   /* typography */
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;

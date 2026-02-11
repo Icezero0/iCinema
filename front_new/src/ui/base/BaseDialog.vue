@@ -101,21 +101,46 @@ const dialogStyle = computed(() => ({ maxWidth: `${props.maxWidth}px` }));
 </template>
 
 <style scoped>
-/* overlay：中性透明黑即可 */
 .overlay {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 16px;
+
+  padding:
+    calc(16px + env(safe-area-inset-top))
+    calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-left));
+
   background: rgb(0 0 0 / 0.45);
+
+  overflow: auto;
 }
 
 .dialog {
-  width: min(100%, 100%);
+  width: 100%;
+  max-width: min(100%, var(--dialog-maxw, 520px));
+
+  overflow: hidden;
+
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
 
-/* 动画：克制、Linear 风格 */
+@media (max-width: 640px) {
+  .overlay {
+    padding:
+      calc(12px + env(safe-area-inset-top))
+      calc(12px + env(safe-area-inset-right))
+      calc(12px + env(safe-area-inset-bottom))
+      calc(12px + env(safe-area-inset-left));
+  }
+
+  .dialog {
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 180ms ease;

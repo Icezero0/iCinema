@@ -147,20 +147,22 @@ function usePhoto() {
       </div>
 
       <div class="toolbar">
-        <BaseButton variant="default" @click="rotateLeft">⟲</BaseButton>
-        <BaseButton variant="default" @click="rotateRight">⟳</BaseButton>
-        <BaseButton variant="default" @click="reset">
-          {{ t("profile.crop.reset") }}
-        </BaseButton>
+        <div class="toolRow">
+          <BaseButton variant="default" @click="rotateLeft">⟲</BaseButton>
+          <BaseButton variant="default" @click="rotateRight">⟳</BaseButton>
+          <BaseButton variant="default" @click="reset">
+            {{ t("profile.crop.reset") }}
+          </BaseButton>
+        </div>
 
-        <div class="spacer" />
-
-        <BaseButton variant="default" @click="onCancel">
-          {{ t("common.cancel") }}
-        </BaseButton>
-        <BaseButton variant="primary" @click="usePhoto">
-          {{ t("profile.crop.use") }}
-        </BaseButton>
+        <div class="actionRow">
+          <BaseButton variant="default" @click="onCancel">
+            {{ t("common.cancel") }}
+          </BaseButton>
+          <BaseButton variant="primary" @click="usePhoto">
+            {{ t("profile.crop.use") }}
+          </BaseButton>
+        </div>
       </div>
     </BaseCard>
   </BaseDialog>
@@ -173,6 +175,7 @@ function usePhoto() {
   background: var(--c-surface);
   border-radius: 16px;
   box-shadow: var(--shadow-lg, 0 10px 30px rgb(0 0 0 / 0.18));
+  container-type: inline-size;
 }
 
 .top {
@@ -217,12 +220,48 @@ function usePhoto() {
 .toolbar {
   margin-top: 12px;
   display: flex;
-  gap: 10px;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
 }
 
-.spacer {
-  flex: 1;
+.toolRow,
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+
+@container (max-width: 500px) {
+  .toolbar {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .toolRow,
+  .actionRow {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .toolRow {
+    justify-content: center;
+  }
+
+  .actionRow {
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 640px) {
+  .cropArea { height: min(56dvh, 420px); }
+}
+@media (max-width: 420px) {
+  .cropArea { height: min(52dvh, 380px); }
+}
+
 </style>

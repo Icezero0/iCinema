@@ -32,9 +32,15 @@ withDefaults(
 <style scoped>
 .btn {
   height: 40px;
+  min-height: 40px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0 14px;
   border-radius: var(--r-2);
   cursor: pointer;
+  gap: 8px;
 
   font-weight: 500;
   transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;

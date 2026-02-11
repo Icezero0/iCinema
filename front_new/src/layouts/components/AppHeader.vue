@@ -61,6 +61,7 @@ function toggleSidebar() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   padding: 0 var(--s-4);
   border-bottom: 1px solid var(--c-border);
   background: var(--c-surface);
@@ -74,29 +75,38 @@ function toggleSidebar() {
   display: flex;
   align-items: center;
   gap: var(--s-2);
+  min-width: 0; 
 }
 
 .brand {
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12rem;
 }
 
 .accountPopover {
-  margin-right: 6px; 
+  margin-right: var(--s-1);
 }
 
-.account {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  user-select: none;
-}
+@media (max-width: 640px) {
+  .header {
+    padding: 0 var(--s-2);
+  }
 
-.accountName {
-  color: var(--c-muted);
-  font-size: 1rem;
-}
+  .left,
+  .right {
+    gap: var(--s-1);
+  }
 
-.name {
-  color: var(--c-muted);
+  .accountPopover {
+    margin-right: 0;
+  }
+
+  .brand {
+    max-width: 7rem;
+    font-size: 0.95rem;
+  }
 }
 </style>
