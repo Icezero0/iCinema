@@ -14,15 +14,14 @@ router.beforeEach(async (to) => {
     await auth.init();
   }
 
-  // 未登录 → 访问需要鉴权的页面
-  if (to.meta.requiresAuth && !auth.isLoggedIn) {
+
+  if (to.matched.some(record => record.meta.requiresAuth) && !auth.isLoggedIn) {
     return {
       path: "/auth/login",
       query: { redirect: to.fullPath },
     };
   }
 
-  // 已登录 → 不允许进入 auth pages
   if (
     auth.isLoggedIn &&
     (to.path === "/auth/login" || to.path === "/auth/register")
