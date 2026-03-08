@@ -39,7 +39,8 @@ async def patch_my_avatar(
 ) -> AvatarUploadResponse:
     updated = await user_service.update_avatar(db, current_user, file)
     if not updated.avatar_key:
-        return AvatarUploadResponse(avatar_url="")
+        return AvatarUploadResponse(avatar_url=None)
+
     return AvatarUploadResponse(
         avatar_url=f"{settings.avatar_public_prefix}/{updated.avatar_key}"
     )

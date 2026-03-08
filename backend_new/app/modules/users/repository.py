@@ -23,9 +23,9 @@ class UserRepository:
         *,
         email: str,
         username: str | None,
-        password_hash: str,
+        hashed_password: str,
     ) -> User:
-        user = User(email=email, username=username, password_hash=password_hash)
+        user = User(email=email, username=username, hashed_password=hashed_password)
         db.add(user)
         await db.flush()
         await db.refresh(user)

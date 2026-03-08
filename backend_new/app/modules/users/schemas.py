@@ -31,6 +31,7 @@ class UserResponse(BaseModel):
     def avatar_url(self) -> str | None:
         if not self.avatar_key:
             return None
+        print(settings.avatar_public_prefix)
         return f"{settings.avatar_public_prefix}/{self.avatar_key}"
 
 
@@ -39,5 +40,4 @@ class UserMeResponse(UserResponse):
 
 
 class AvatarUploadResponse(BaseModel):
-    avatar_key: str
-    avatar_url: str
+    avatar_url: str | None

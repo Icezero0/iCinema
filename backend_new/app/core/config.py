@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = Field(7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
 
     # 头像文件路径前缀
-    avatar_public_prefix: str = Field("/avatars", alias="AVATAR_PUBLIC_PREFIX")
+    avatar_public_prefix: str = Field("/avatar", alias="AVATAR_PUBLIC_PREFIX")
 
     # WS
     ws_auth_timeout_seconds: int = 30
