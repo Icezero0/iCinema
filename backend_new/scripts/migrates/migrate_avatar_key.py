@@ -28,7 +28,7 @@ def extract_filename(avatar_path: str) -> str | None:
 
 
 def main() -> None:
-    db = Path("../data/iCinema.db").resolve()
+    db = (Path(__file__).resolve().parents[3] / "data" / "iCinema.db").resolve()
     print("DB:", db)
 
     conn = sqlite3.connect(str(db))
