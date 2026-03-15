@@ -37,7 +37,29 @@ if not exist requirements.txt (
 )
 
 :: -------------------------------------------------
-:: 3️⃣ 创建虚拟环境
+:: 3️⃣ 初始化 .env
+:: -------------------------------------------------
+if not exist .env (
+    if exist .env.development (
+        echo [INFO] 未检测到 .env，正在从 .env.development 复制...
+        copy /Y .env.development .env >nul
+        if errorlevel 1 (
+            echo [ERROR] .env 初始化失败
+            pause
+            exit /b 1
+        )
+        echo [INFO] 已生成 .env
+    ) else (
+        echo [WARN] 未找到 .env，也未找到 .env.development
+    )
+) else (
+    echo [INFO] .env 已存在，跳过初始化
+)
+
+echo.
+
+:: -------------------------------------------------
+:: 4️⃣ 创建虚拟环境
 :: -------------------------------------------------
 set VENV_DIR=venv
 
@@ -56,7 +78,7 @@ if not exist %VENV_DIR%\Scripts\activate.bat (
 echo.
 
 :: -------------------------------------------------
-:: 4️⃣ 激活虚拟环境
+:: 5️⃣ 激活虚拟环境
 :: -------------------------------------------------
 call %VENV_DIR%\Scripts\activate.bat
 if errorlevel 1 (
@@ -66,7 +88,7 @@ if errorlevel 1 (
 )
 
 :: -------------------------------------------------
-:: 5️⃣ 安装依赖
+:: 6️⃣ 安装依赖
 :: -------------------------------------------------
 echo [INFO] 升级 pip...
 python -m pip install --upgrade pip
@@ -88,7 +110,7 @@ echo ==========================================
 echo.
 
 :: -------------------------------------------------
-:: 6️⃣ 启动服务
+:: 7️⃣ 启动服务
 :: -------------------------------------------------
 echo [INFO] 启动 uvicorn...
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
