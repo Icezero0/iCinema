@@ -61,11 +61,12 @@ echo.
 :: -------------------------------------------------
 :: 4️⃣ 创建虚拟环境
 :: -------------------------------------------------
-set VENV_DIR=venv
+set "VENV_DIR=venv"
+set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
 
-if not exist %VENV_DIR%\Scripts\activate.bat (
+if not exist "%VENV_PYTHON%" (
     echo [INFO] 创建虚拟环境...
-    python -m venv %VENV_DIR%
+    python -m venv "%VENV_DIR%"
     if errorlevel 1 (
         echo [ERROR] 虚拟环境创建失败
         pause
@@ -78,24 +79,32 @@ if not exist %VENV_DIR%\Scripts\activate.bat (
 echo.
 
 :: -------------------------------------------------
-:: 5️⃣ 激活虚拟环境
+:: 5️⃣ 使用 venv 中的 Python
 :: -------------------------------------------------
-call %VENV_DIR%\Scripts\activate.bat
-if errorlevel 1 (
-    echo [ERROR] 虚拟环境激活失败
+if not exist "%VENV_PYTHON%" (
+    echo [ERROR] 未找到虚拟环境中的 python: %VENV_PYTHON%
     pause
     exit /b 1
 )
+
+echo [INFO] 当前使用虚拟环境 Python:
+"%VENV_PYTHON%" --version
+echo.
 
 :: -------------------------------------------------
 :: 6️⃣ 安装依赖
 :: -------------------------------------------------
 echo [INFO] 升级 pip...
-python -m pip install --upgrade pip
+"%VENV_PYTHON%" -m pip install --upgrade pip
+if errorlevel 1 (
+    echo [ERROR] pip 升级失败
+    pause
+    exit /b 1
+)
 
 echo.
 echo [INFO] 安装依赖...
-pip install -r requirements.txt
+"%VENV_PYTHON%" -m pip install -r requirements.txt
 if errorlevel 1 (
     echo.
     echo [ERROR] 依赖安装失败
@@ -113,6 +122,6 @@ echo.
 :: 7️⃣ 启动服务
 :: -------------------------------------------------
 echo [INFO] 启动 uvicorn...
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+"%VENV_PYTHON%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 endlocal
