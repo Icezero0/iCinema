@@ -56,7 +56,11 @@ async def get_room(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RoomResponse:
-    room = await room_service.get_room_by_id(db, room_id=room_id, user=current_user)
+    room = await room_service.get_accessible_room_by_id(
+        db,
+        room_id=room_id,
+        user=current_user,
+    )
     return RoomResponse.model_validate(room)
 
 

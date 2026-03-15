@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
+from app.core.validators import normalize_email
 from app.modules.users.avatar_service import AvatarService
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
@@ -17,36 +18,34 @@ class UserService:
         if await self.repo.get_by_email(db, payload.email):
             raise ConflictError("Email already exists")
 
-        if payload.username and await self.repo.get_by_username(db, payload.username):
-            raise ConflictError("Username already exists")
-
         user = await self.repo.create(
             db,
-            email=payload.email.strip().lower(),
+            email=payload.email,
             username=payload.username,
             hashed_password=hash_password(payload.password),
         )
         await db.commit()
         return user
 
-    async def get_user_or_404(self, db: AsyncSession, user_id: int) -> User:
-        user = await self.repo.get_by_id(db, user_id)
+    async def find_user_by_id(self, db: AsyncSession, user_id: int) -> User | None:
+        return await self.repo.get_by_id(db, user_id)
+
+    async def get_user_by_id(self, db: AsyncSession, user_id: int) -> User:
+        user = await self.find_user_by_id(db, user_id)
         if not user:
             raise NotFoundError("User not found")
         return user
+
+    async def find_user_by_email(self, db: AsyncSession, email: str) -> User | None:
+        return await self.repo.get_by_email(db, normalize_email(email))
 
     async def patch_me(self, db: AsyncSession, user: User, payload: UserPatch) -> User:
         updates = payload.model_dump(exclude_unset=True)
 
         if "username" in updates:
-            new_username = updates["username"]
-            if new_username and new_username != user.username:
-                existed = await self.repo.get_by_username(db, new_username)
-                if existed and existed.id != user.id:
-                    raise ConflictError("Username already exists")
-            user.username = new_username
+            user.username = updates["username"]
 
-        if "password" in updates and updates["password"]:
+        if "password" in updates:
             user.hashed_password = hash_password(updates["password"])
 
         if "auto_accept" in updates:

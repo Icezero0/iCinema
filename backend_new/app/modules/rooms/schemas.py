@@ -1,18 +1,30 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.validators import normalize_optional_non_empty_str, normalize_required_str
+from app.modules.rooms.constants import RoomRole
 
 class RoomCreate(BaseModel):
     name: str
     is_public: bool | None = True
     config: str | None = None
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        return normalize_required_str(value, field_name="Room name")
+
 
 class RoomPatch(BaseModel):
     name: str | None = None
     is_public: bool | None = None
     config: str | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def validate_name(cls, value: str | None) -> str | None:
+        return normalize_optional_non_empty_str(value, field_name="Room name")
 
 
 class RoomMemberUserResponse(BaseModel):
@@ -29,7 +41,7 @@ class RoomMemberResponse(BaseModel):
     room_id: int
     user_id: int
     joined_at: datetime | None
-    role: str
+    role: RoomRole
     user: RoomMemberUserResponse | None = None
 
 
@@ -41,7 +53,6 @@ class RoomResponse(BaseModel):
     owner_id: int
     is_public: bool | None
     config: str | None
-    created_at: datetime | None
 
 
 class RoomListResponse(BaseModel):

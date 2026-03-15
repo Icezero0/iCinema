@@ -31,8 +31,13 @@ async def get_current_user(
     if not sub:
         raise UnauthorizedError("Invalid token payload")
 
+    try:
+        user_id = int(sub)
+    except (TypeError, ValueError) as e:
+        raise UnauthorizedError("Invalid token payload") from e
+
     repo = UserRepository()
-    user = await repo.get_by_id(db, int(sub))
+    user = await repo.get_by_id(db, user_id)
     if not user:
         raise UnauthorizedError("User not found")
 

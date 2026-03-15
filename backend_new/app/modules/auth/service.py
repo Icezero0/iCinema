@@ -1,5 +1,3 @@
-# app/modules/auth/service.py
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import UnauthorizedError
@@ -16,7 +14,6 @@ class AuthService:
         self.user_repo = UserRepository()
 
     async def login(self, db: AsyncSession, *, email: str, password: str) -> dict:
-        email = email.strip().lower()
         user = await self.user_repo.get_by_email(db, email)
         if not user or not verify_password(password, user.hashed_password):
             raise UnauthorizedError("Invalid email or password")
