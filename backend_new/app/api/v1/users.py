@@ -1,13 +1,18 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.users.models import User
-from app.modules.users.schemas import AvatarUploadResponse, UserMeResponse, UserPatch
+from app.modules.users.schemas import (
+    AvatarUploadResponse,
+    UserListResponse,
+    UserMeResponse,
+    UserPatch,
+    UserResponse,
+)
 from app.modules.users.service import UserService
-
-from app.core.config import get_settings
 
 settings = get_settings()
 
@@ -44,3 +49,38 @@ async def patch_my_avatar(
     return AvatarUploadResponse(
         avatar_url=f"{settings.avatar_public_prefix}/{updated.avatar_key}"
     )
+
+
+@router.get("", response_model=UserListResponse)
+async def get_users(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    username: str | None = Query(default=None),
+    email: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserListResponse:
+    data = await user_service.get_users(
+        db,
+        page=page,
+        page_size=page_size,
+        username=username,
+        email=email,
+    )
+    return UserListResponse(
+        items=[UserResponse.model_validate(user) for user in data["items"]],
+        total=data["total"],
+        page=data["page"],
+        page_size=data["page_size"],
+        total_pages=data["total_pages"],
+    )
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
+    user = await user_service.get_user_by_id(db, user_id)
+    return UserResponse.model_validate(user)

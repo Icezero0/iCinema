@@ -1,3 +1,5 @@
+from math import ceil
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
@@ -38,6 +40,36 @@ class UserService:
 
     async def find_user_by_email(self, db: AsyncSession, email: str) -> User | None:
         return await self.repo.get_by_email(db, normalize_email(email))
+
+    async def get_users(
+        self,
+        db: AsyncSession,
+        *,
+        page: int,
+        page_size: int,
+        username: str | None = None,
+        email: str | None = None,
+    ) -> dict:
+        username = username.strip() if username else None
+        email = email.strip().lower() if email else None
+
+        items, total = await self.repo.get_users(
+            db,
+            page=page,
+            page_size=page_size,
+            username=username,
+            email=email,
+        )
+
+        total_pages = ceil(total / page_size) if total > 0 else 0
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
 
     async def patch_me(self, db: AsyncSession, user: User, payload: UserPatch) -> User:
         updates = payload.model_dump(exclude_unset=True)

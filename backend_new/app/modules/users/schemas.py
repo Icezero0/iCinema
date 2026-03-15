@@ -71,3 +71,11 @@ class UserMeResponse(UserResponse):
 
 class AvatarUploadResponse(BaseModel):
     avatar_url: str | None
+
+
+class UserListResponse(BaseModel):
+    items: list[UserResponse] = Field(default_factory=list)
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
