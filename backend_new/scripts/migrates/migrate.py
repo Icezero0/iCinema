@@ -15,7 +15,7 @@ def main() -> None:
     scripts_dir = Path(__file__).resolve().parent
 
     scripts = [
-        scripts_dir / "migrate_avatar_key.py",
+        scripts_dir / "migrate_user_domain.py",
         scripts_dir / "migrate_room_domain.py",
     ]
 
