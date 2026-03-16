@@ -28,6 +28,11 @@ def add_role_column(conn: sqlite3.Connection) -> None:
 
 
 def backfill_role_from_user_type(conn: sqlite3.Connection) -> None:
+    """
+    Backfill role from user_type only when role is empty.
+    role is normalized to lowercase.
+    user_type is kept unchanged.
+    """
     cur = conn.cursor()
     cur.execute("SELECT room_id, user_id, user_type, role FROM room_members")
     rows = cur.fetchall()
@@ -45,24 +50,50 @@ def backfill_role_from_user_type(conn: sqlite3.Connection) -> None:
             skipped_no_user_type += 1
             continue
 
+        normalized_role = str(user_type).strip().lower()
+
         cur.execute(
             """
             UPDATE room_members
             SET role = ?
             WHERE room_id = ? AND user_id = ?
             """,
-            (str(user_type).strip(), room_id, user_id),
+            (normalized_role, room_id, user_id),
         )
         updated += 1
 
     conn.commit()
 
-    print("migrated room_members.role rows:", updated)
+    print("backfilled room_members.role rows:", updated)
     print("skipped (already has role):", skipped_has_role)
     print("skipped (no user_type):", skipped_no_user_type)
 
 
+def normalize_role_case(conn: sqlite3.Connection) -> None:
+    """
+    Normalize existing role values to lowercase.
+    Only touches role, does not modify user_type.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE room_members
+        SET role = LOWER(TRIM(role))
+        WHERE role IS NOT NULL AND TRIM(role) <> ''
+        """
+    )
+    updated = cur.rowcount
+    conn.commit()
+
+    print("normalized room_members.role rows:", updated)
+
+
 def rebuild_room_members_make_user_type_nullable(conn: sqlite3.Connection) -> None:
+    """
+    Rebuild room_members so that user_type becomes nullable.
+    Keep user_type original values untouched.
+    Normalize role to lowercase during copy.
+    """
     cur = conn.cursor()
 
     print("Rebuilding room_members to make user_type nullable ...")
@@ -88,7 +119,12 @@ def rebuild_room_members_make_user_type_nullable(conn: sqlite3.Connection) -> No
     cur.execute(
         """
         INSERT INTO room_members_new (room_id, user_id, joined_at, user_type, role)
-        SELECT room_id, user_id, joined_at, user_type, role
+        SELECT
+            room_id,
+            user_id,
+            joined_at,
+            user_type,
+            LOWER(TRIM(role))
         FROM room_members
         """
     )
@@ -116,10 +152,13 @@ def main() -> None:
             add_role_column(conn)
             print("Added column room_members.role.")
 
-        # 2) Copy user_type -> role (only fill empty role)
+        # 2) Copy user_type -> role (only fill empty role), and normalize to lowercase
         backfill_role_from_user_type(conn)
 
-        # 3) Ensure user_type is nullable
+        # 3) Normalize all existing role values to lowercase
+        normalize_role_case(conn)
+
+        # 4) Ensure user_type is nullable, but keep user_type values unchanged
         user_type_info = get_column_info(conn, "room_members", "user_type")
         if user_type_info is None:
             print("Column room_members.user_type does not exist, skip nullable migration.")
