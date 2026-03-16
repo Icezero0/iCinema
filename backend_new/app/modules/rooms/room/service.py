@@ -4,16 +4,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.modules.rooms.constants import RoomPermission, RoomRole
-from app.modules.rooms.models import Room, RoomMember
+from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.permissions import require_room_permission
-from app.modules.rooms.repository import RoomRepository
-from app.modules.rooms.schemas import RoomCreate, RoomPatch
+from app.modules.rooms.models import Room
+from app.modules.rooms.room.repository import RoomRepository
+from app.modules.rooms.room.schemas import RoomCreate, RoomPatch
 from app.modules.users.models import User
 
 
 class RoomService:
     def __init__(self) -> None:
         self.repo = RoomRepository()
+        self.membership_service = RoomMembershipService()
 
     async def find_room_by_id(self, db: AsyncSession, room_id: int) -> Room | None:
         return await self.repo.get_room_by_id(db, room_id)
@@ -23,31 +25,6 @@ class RoomService:
         if not room:
             raise NotFoundError("Room not found")
         return room
-
-    async def find_room_member(
-        self,
-        db: AsyncSession,
-        *,
-        room_id: int,
-        user_id: int,
-    ) -> RoomMember | None:
-        return await self.repo.get_member(db, room_id=room_id, user_id=user_id)
-
-    async def find_room_role(
-        self,
-        db: AsyncSession,
-        *,
-        room_id: int,
-        user_id: int,
-    ) -> RoomRole | None:
-        member = await self.find_room_member(db, room_id=room_id, user_id=user_id)
-        if not member:
-            return None
-
-        try:
-            return RoomRole(member.role)
-        except ValueError:
-            return None
 
     async def get_accessible_room_by_id(
         self,
@@ -61,7 +38,11 @@ class RoomService:
         if room.is_public:
             return room
 
-        role = await self.find_room_role(db, room_id=room.id, user_id=user.id)
+        role = await self.membership_service.find_room_role(
+            db,
+            room_id=room.id,
+            user_id=user.id,
+        )
         if role is None:
             raise ForbiddenError("You do not have permission to perform this action")
 
@@ -83,7 +64,7 @@ class RoomService:
             config=payload.config,
         )
 
-        await self.repo.create_member(
+        await self.membership_service.repo.create_member(
             db,
             room_id=room.id,
             user_id=user.id,
@@ -121,27 +102,6 @@ class RoomService:
             "total_pages": total_pages,
         }
 
-    async def get_room_members(
-        self,
-        db: AsyncSession,
-        *,
-        room_id: int,
-        user: User,
-    ) -> dict:
-        room = await self.get_room_by_id(db, room_id)
-
-        role = await self.find_room_role(db, room_id=room.id, user_id=user.id)
-        if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
-
-        require_room_permission(role, RoomPermission.VIEW_MEMBERS)
-
-        items = await self.repo.get_members_by_room_id(db, room_id=room.id)
-        return {
-            "items": items,
-            "total": len(items),
-        }
-
     async def patch_room(
         self,
         db: AsyncSession,
@@ -151,7 +111,11 @@ class RoomService:
         payload: RoomPatch,
     ) -> Room:
         room = await self.get_room_by_id(db, room_id)
-        role = await self.find_room_role(db, room_id=room.id, user_id=user.id)
+        role = await self.membership_service.find_room_role(
+            db,
+            room_id=room.id,
+            user_id=user.id,
+        )
         if role is None:
             raise ForbiddenError("You do not have permission to perform this action")
 
@@ -181,7 +145,11 @@ class RoomService:
         user: User,
     ) -> None:
         room = await self.get_room_by_id(db, room_id)
-        role = await self.find_room_role(db, room_id=room.id, user_id=user.id)
+        role = await self.membership_service.find_room_role(
+            db,
+            room_id=room.id,
+            user_id=user.id,
+        )
         if role is None:
             raise ForbiddenError("You do not have permission to perform this action")
 

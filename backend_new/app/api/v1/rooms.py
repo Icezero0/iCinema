@@ -3,19 +3,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.modules.auth.deps import get_current_user
-from app.modules.rooms.schemas import (
-    RoomCreate,
-    RoomListResponse,
+from app.modules.rooms.membership.schemas import (
     RoomMemberListResponse,
     RoomMemberResponse,
+)
+from app.modules.rooms.membership.service import RoomMembershipService
+from app.modules.rooms.room.schemas import (
+    RoomCreate,
+    RoomListResponse,
     RoomPatch,
     RoomResponse,
 )
-from app.modules.rooms.service import RoomService
+from app.modules.rooms.room.service import RoomService
 from app.modules.users.models import User
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
+
 room_service = RoomService()
+membership_service = RoomMembershipService()
 
 
 @router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
@@ -72,7 +77,9 @@ async def get_room_members(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RoomMemberListResponse:
-    data = await room_service.get_room_members(
+    await room_service.get_room_by_id(db, room_id)
+
+    data = await membership_service.get_room_members(
         db,
         room_id=room_id,
         user=current_user,

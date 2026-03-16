@@ -1,15 +1,6 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.validators import normalize_optional_non_empty_str, normalize_required_str
-from app.modules.rooms.constants import RoomRole
-from app.modules.users.schemas import UserBriefResponse
-
-from app.core.config import get_settings
-
-
-settings = get_settings()
 
 
 class RoomCreate(BaseModel):
@@ -32,21 +23,6 @@ class RoomPatch(BaseModel):
     @classmethod
     def validate_name(cls, value: str | None) -> str | None:
         return normalize_optional_non_empty_str(value, field_name="Room name")
-
-
-class RoomMemberResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    room_id: int
-    user_id: int
-    joined_at: datetime | None
-    role: RoomRole
-    user: UserBriefResponse | None = None
-
-
-class RoomMemberListResponse(BaseModel):
-    items: list[RoomMemberResponse] = Field(default_factory=list)
-    total: int
 
 
 class RoomResponse(BaseModel):
