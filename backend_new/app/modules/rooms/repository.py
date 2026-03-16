@@ -112,6 +112,20 @@ class RoomRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_members_by_room_id(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+    ) -> list[RoomMember]:
+        result = await db.execute(
+            select(RoomMember)
+            .where(RoomMember.room_id == room_id)
+            .order_by(RoomMember.joined_at.asc(), RoomMember.user_id.asc())
+            .options(selectinload(RoomMember.user))
+        )
+        return list(result.scalars().all())
+
     async def save_room(self, db: AsyncSession, room: Room) -> Room:
         db.add(room)
         await db.flush()

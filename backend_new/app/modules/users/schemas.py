@@ -1,4 +1,11 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 from app.core.config import get_settings
 from app.core.validators import (
@@ -47,13 +54,12 @@ class UserPatch(BaseModel):
         return normalize_optional_non_empty_str(value, field_name="Password")
 
 
-class UserResponse(BaseModel):
+class UserBriefResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     email: EmailStr
     username: str | None
-    auto_accept: bool
 
     avatar_key: str | None = Field(default=None, exclude=True)
 
@@ -63,6 +69,10 @@ class UserResponse(BaseModel):
         if not self.avatar_key:
             return None
         return f"{settings.avatar_public_prefix}/{self.avatar_key}"
+
+
+class UserResponse(UserBriefResponse):
+    auto_accept: bool
 
 
 class UserMeResponse(UserResponse):

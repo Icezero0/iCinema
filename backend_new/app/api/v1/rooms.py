@@ -6,6 +6,8 @@ from app.modules.auth.deps import get_current_user
 from app.modules.rooms.schemas import (
     RoomCreate,
     RoomListResponse,
+    RoomMemberListResponse,
+    RoomMemberResponse,
     RoomPatch,
     RoomResponse,
 )
@@ -62,6 +64,23 @@ async def get_room(
         user=current_user,
     )
     return RoomResponse.model_validate(room)
+
+
+@router.get("/{room_id}/members", response_model=RoomMemberListResponse)
+async def get_room_members(
+    room_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RoomMemberListResponse:
+    data = await room_service.get_room_members(
+        db,
+        room_id=room_id,
+        user=current_user,
+    )
+    return RoomMemberListResponse(
+        items=[RoomMemberResponse.model_validate(member) for member in data["items"]],
+        total=data["total"],
+    )
 
 
 @router.patch("/{room_id}", response_model=RoomResponse)

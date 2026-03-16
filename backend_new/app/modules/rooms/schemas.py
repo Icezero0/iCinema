@@ -1,9 +1,16 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 
 from app.core.validators import normalize_optional_non_empty_str, normalize_required_str
 from app.modules.rooms.constants import RoomRole
+from app.modules.users.schemas import UserBriefResponse
+
+from app.core.config import get_settings
+
+
+settings = get_settings()
+
 
 class RoomCreate(BaseModel):
     name: str
@@ -27,14 +34,6 @@ class RoomPatch(BaseModel):
         return normalize_optional_non_empty_str(value, field_name="Room name")
 
 
-class RoomMemberUserResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    username: str | None
-    email: str
-
-
 class RoomMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,7 +41,12 @@ class RoomMemberResponse(BaseModel):
     user_id: int
     joined_at: datetime | None
     role: RoomRole
-    user: RoomMemberUserResponse | None = None
+    user: UserBriefResponse | None = None
+
+
+class RoomMemberListResponse(BaseModel):
+    items: list[RoomMemberResponse] = Field(default_factory=list)
+    total: int
 
 
 class RoomResponse(BaseModel):
