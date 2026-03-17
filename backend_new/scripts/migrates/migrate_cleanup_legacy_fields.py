@@ -18,9 +18,6 @@ def get_columns(conn: sqlite3.Connection, table: str) -> list[str]:
 
 
 def cleanup_users_table(conn: sqlite3.Connection) -> None:
-    """
-    Remove users.avatar_path, keep avatar_key.
-    """
     if not table_exists(conn, "users"):
         print("Table users does not exist, skipped.")
         return
@@ -39,11 +36,11 @@ def cleanup_users_table(conn: sqlite3.Connection) -> None:
             """
             CREATE TABLE users_new (
                 id INTEGER PRIMARY KEY NOT NULL,
-                email VARCHAR NOT NULL,
-                username VARCHAR,
-                hashed_password VARCHAR NOT NULL,
-                auto_accept BOOLEAN,
-                created_at DATETIME,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                username VARCHAR(64),
+                hashed_password VARCHAR(255) NOT NULL,
+                auto_accept BOOLEAN NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 avatar_key TEXT
             )
             """
@@ -51,12 +48,11 @@ def cleanup_users_table(conn: sqlite3.Connection) -> None:
 
         old_cols = set(cols)
 
-        # 兼容 avatar_key 可能已经存在，也可能还没迁移成功
         if "avatar_key" in old_cols:
             cur.execute(
                 """
                 INSERT INTO users_new (id, email, username, hashed_password, auto_accept, created_at, avatar_key)
-                SELECT id, email, username, hashed_password, auto_accept, created_at, avatar_key
+                SELECT id, email, username, hashed_password, COALESCE(auto_accept, 0), COALESCE(created_at, CURRENT_TIMESTAMP), avatar_key
                 FROM users
                 """
             )
@@ -64,13 +60,15 @@ def cleanup_users_table(conn: sqlite3.Connection) -> None:
             cur.execute(
                 """
                 INSERT INTO users_new (id, email, username, hashed_password, auto_accept, created_at, avatar_key)
-                SELECT id, email, username, hashed_password, auto_accept, created_at, NULL
+                SELECT id, email, username, hashed_password, COALESCE(auto_accept, 0), COALESCE(created_at, CURRENT_TIMESTAMP), NULL
                 FROM users
                 """
             )
 
         cur.execute("DROP TABLE users")
         cur.execute("ALTER TABLE users_new RENAME TO users")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)")
+        cur.execute("CREATE INDEX IF NOT EXISTS ix_users_id ON users (id)")
 
         conn.commit()
         print("Cleaned users table successfully.")
@@ -80,9 +78,6 @@ def cleanup_users_table(conn: sqlite3.Connection) -> None:
 
 
 def cleanup_room_members_table(conn: sqlite3.Connection) -> None:
-    """
-    Remove room_members.user_type, keep role.
-    """
     if not table_exists(conn, "room_members"):
         print("Table room_members does not exist, skipped.")
         return
@@ -102,8 +97,8 @@ def cleanup_room_members_table(conn: sqlite3.Connection) -> None:
             CREATE TABLE room_members_new (
                 room_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL,
-                joined_at DATETIME,
-                role VARCHAR(16),
+                joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                role VARCHAR(16) NOT NULL,
                 PRIMARY KEY (room_id, user_id)
             )
             """
@@ -115,16 +110,15 @@ def cleanup_room_members_table(conn: sqlite3.Connection) -> None:
             cur.execute(
                 """
                 INSERT INTO room_members_new (room_id, user_id, joined_at, role)
-                SELECT room_id, user_id, joined_at, role
+                SELECT room_id, user_id, COALESCE(joined_at, CURRENT_TIMESTAMP), LOWER(TRIM(role))
                 FROM room_members
                 """
             )
         else:
-            # 理论上 cleanup 前应已完成 role 迁移，这里仅兜底
             cur.execute(
                 """
                 INSERT INTO room_members_new (room_id, user_id, joined_at, role)
-                SELECT room_id, user_id, joined_at, user_type
+                SELECT room_id, user_id, COALESCE(joined_at, CURRENT_TIMESTAMP), LOWER(TRIM(user_type))
                 FROM room_members
                 """
             )
@@ -140,9 +134,6 @@ def cleanup_room_members_table(conn: sqlite3.Connection) -> None:
 
 
 def cleanup_rooms_table(conn: sqlite3.Connection) -> None:
-    """
-    Remove rooms.is_active.
-    """
     if not table_exists(conn, "rooms"):
         print("Table rooms does not exist, skipped.")
         return
@@ -162,9 +153,9 @@ def cleanup_rooms_table(conn: sqlite3.Connection) -> None:
             CREATE TABLE rooms_new (
                 id INTEGER PRIMARY KEY NOT NULL,
                 name VARCHAR NOT NULL,
-                created_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 owner_id INTEGER NOT NULL,
-                is_public BOOLEAN,
+                is_public BOOLEAN NOT NULL DEFAULT 0,
                 config VARCHAR
             )
             """
@@ -176,7 +167,7 @@ def cleanup_rooms_table(conn: sqlite3.Connection) -> None:
             cur.execute(
                 """
                 INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, created_at, owner_id, is_public, config
+                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, COALESCE(is_public, 0), config
                 FROM rooms
                 """
             )
@@ -184,7 +175,7 @@ def cleanup_rooms_table(conn: sqlite3.Connection) -> None:
             cur.execute(
                 """
                 INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, created_at, owner_id, is_public, NULL
+                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, COALESCE(is_public, 0), NULL
                 FROM rooms
                 """
             )
@@ -192,7 +183,7 @@ def cleanup_rooms_table(conn: sqlite3.Connection) -> None:
             cur.execute(
                 """
                 INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, created_at, owner_id, NULL, config
+                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, 0, config
                 FROM rooms
                 """
             )
@@ -200,7 +191,7 @@ def cleanup_rooms_table(conn: sqlite3.Connection) -> None:
             cur.execute(
                 """
                 INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, created_at, owner_id, NULL, NULL
+                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, 0, NULL
                 FROM rooms
                 """
             )

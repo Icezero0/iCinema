@@ -10,6 +10,15 @@ def ensure_column_exists(conn: sqlite3.Connection, table: str, column: str) -> b
     return column in cols
 
 
+def get_column_info(conn: sqlite3.Connection, table: str, column: str):
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table})")
+    for row in cur.fetchall():
+        if row[1] == column:
+            return row
+    return None
+
+
 def add_avatar_key_column(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
     cur.execute("ALTER TABLE users ADD COLUMN avatar_key TEXT")
@@ -17,7 +26,6 @@ def add_avatar_key_column(conn: sqlite3.Connection) -> None:
 
 
 def extract_filename(avatar_path: str) -> str | None:
-    # e.g. "/avatars/xxx.jpg" -> "xxx.jpg"
     p = (avatar_path or "").strip()
     if not p:
         return None
@@ -40,14 +48,8 @@ def get_index_columns(conn: sqlite3.Connection, index_name: str) -> list[str]:
 
 
 def username_has_unique_constraint(conn: sqlite3.Connection) -> bool:
-    """
-    Detect whether users.username still has a unique index/constraint.
-    SQLite auto-created unique indexes also show up in PRAGMA index_list.
-    """
     indexes = get_indexes(conn, "users")
     for row in indexes:
-        # PRAGMA index_list(users) columns:
-        # seq, name, unique, origin, partial
         index_name = row[1]
         is_unique = row[2]
         if not is_unique:
@@ -59,12 +61,22 @@ def username_has_unique_constraint(conn: sqlite3.Connection) -> bool:
     return False
 
 
-def rebuild_users_table_without_username_unique(conn: sqlite3.Connection) -> None:
+def created_at_missing_default(conn: sqlite3.Connection) -> bool:
+    info = get_column_info(conn, "users", "created_at")
+    if info is None:
+        return True
+    default = info[4]
+    return default != "CURRENT_TIMESTAMP"
+
+
+def rebuild_users_table(conn: sqlite3.Connection) -> None:
     """
-    Rebuild users table to remove UNIQUE constraint from username.
-    Keep email unique.
-    Keep avatar_key column.
-    Try to preserve existing data.
+    Rebuild users table to:
+    - remove UNIQUE constraint from username
+    - ensure created_at defaults to CURRENT_TIMESTAMP
+    - keep email unique
+    - keep avatar_key column
+    - preserve existing data
     """
     cur = conn.cursor()
 
@@ -107,7 +119,7 @@ def rebuild_users_table_without_username_unique(conn: sqlite3.Connection) -> Non
                 avatar_path,
                 avatar_key,
                 COALESCE(auto_accept, 0),
-                created_at
+                COALESCE(created_at, CURRENT_TIMESTAMP)
             FROM users
             """
         )
@@ -115,7 +127,6 @@ def rebuild_users_table_without_username_unique(conn: sqlite3.Connection) -> Non
         cur.execute("DROP TABLE users")
         cur.execute("ALTER TABLE users_new RENAME TO users")
 
-        # Recreate common indexes
         cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)")
         cur.execute("CREATE INDEX IF NOT EXISTS ix_users_id ON users (id)")
 
@@ -133,7 +144,6 @@ def main() -> None:
 
     conn = sqlite3.connect(str(db))
     try:
-        # 1) Ensure avatar_key column exists
         if ensure_column_exists(conn, "users", "avatar_key"):
             print("Column users.avatar_key already exists.")
         else:
@@ -141,7 +151,6 @@ def main() -> None:
             add_avatar_key_column(conn)
             print("Added column users.avatar_key.")
 
-        # 2) Migrate avatar_path -> avatar_key (only fill empty avatar_key)
         cur = conn.cursor()
         cur.execute("SELECT id, avatar_path, avatar_key FROM users")
         rows = cur.fetchall()
@@ -178,13 +187,13 @@ def main() -> None:
         print("skipped (no avatar_path):", skipped_no_path)
         print("skipped (bad avatar_path):", skipped_bad_path)
 
-        # 3) Remove UNIQUE constraint from users.username if still exists
-        if username_has_unique_constraint(conn):
-            print("Detected UNIQUE constraint/index on users.username, rebuilding users table...")
-            rebuild_users_table_without_username_unique(conn)
-            print("Rebuilt users table, removed UNIQUE constraint from username.")
+        needs_rebuild = username_has_unique_constraint(conn) or created_at_missing_default(conn)
+        if needs_rebuild:
+            print("Rebuilding users table to normalize constraints/defaults ...")
+            rebuild_users_table(conn)
+            print("Rebuilt users table successfully.")
         else:
-            print("No UNIQUE constraint/index detected on users.username, skip rebuilding.")
+            print("users table constraints/defaults already match target, skip rebuilding.")
 
     finally:
         conn.close()
