@@ -6,6 +6,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.modules.users.models import User
 
+from app.modules.rooms.constants import (
+    RoomJoinRequestSource,
+    RoomJoinRequestStatus,
+    RoomJoinRequestAction,
+)
+
 
 class Room(Base):
     __tablename__ = "rooms"
@@ -54,3 +60,77 @@ class RoomMember(Base):
 
     room: Mapped["Room"] = relationship("Room", back_populates="members")
     user: Mapped["User"] = relationship("User")
+
+
+class RoomJoinRequest(Base):
+    __tablename__ = "room_join_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    room_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("rooms.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    initiator_user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    source: Mapped[RoomJoinRequestSource] = mapped_column(
+        String(16),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[RoomJoinRequestStatus] = mapped_column(
+        String(16),
+        nullable=False,
+        index=True,
+        default=RoomJoinRequestStatus.PENDING,
+    )
+
+    room_action: Mapped[RoomJoinRequestAction] = mapped_column(
+        String(16),
+        nullable=False,
+        default=RoomJoinRequestAction.PENDING,
+    )
+
+    target_action: Mapped[RoomJoinRequestAction] = mapped_column(
+        String(16),
+        nullable=False,
+        default=RoomJoinRequestAction.PENDING,
+    )
+
+    room_action_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    room: Mapped["Room"] = relationship("Room")
+    initiator: Mapped["User"] = relationship("User", foreign_keys=[initiator_user_id])
+    target: Mapped["User"] = relationship("User", foreign_keys=[target_user_id])
+    room_action_by: Mapped["User | None"] = relationship(
+        "User",
+        foreign_keys=[room_action_by_user_id],
+    )

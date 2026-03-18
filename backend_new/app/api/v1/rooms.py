@@ -17,10 +17,22 @@ from app.modules.rooms.room.schemas import (
 from app.modules.rooms.room.service import RoomService
 from app.modules.users.models import User
 
+from app.modules.rooms.constants import (
+    RoomJoinRequestSource,
+    RoomJoinRequestStatus,
+)
+from app.modules.rooms.join_request.schemas import (
+    RoomJoinRequestCreate,
+    RoomJoinRequestListResponse,
+    RoomJoinRequestResponse,
+)
+from app.modules.rooms.join_request.service import RoomJoinRequestService
+
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
 room_service = RoomService()
 membership_service = RoomMembershipService()
+join_request_service = RoomJoinRequestService()
 
 
 @router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
@@ -114,3 +126,69 @@ async def delete_room(
 ) -> Response:
     await room_service.delete_room(db, room_id=room_id, user=current_user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{room_id}/join-requests", response_model=RoomJoinRequestListResponse)
+async def get_room_join_requests(
+    room_id: int,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    status_: RoomJoinRequestStatus | None = Query(default=None, alias="status"),
+    source: RoomJoinRequestSource | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RoomJoinRequestListResponse:
+    data = await join_request_service.get_room_join_requests(
+        db,
+        room_id=room_id,
+        user=current_user,
+        page=page,
+        page_size=page_size,
+        status=status_,
+        source=source,
+    )
+    return RoomJoinRequestListResponse(
+        items=[RoomJoinRequestResponse.model_validate(item) for item in data["items"]],
+        total=data["total"],
+        page=data["page"],
+        page_size=data["page_size"],
+        total_pages=data["total_pages"],
+    )
+
+
+@router.post(
+    "/{room_id}/join-requests/apply",
+    response_model=RoomJoinRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def apply_room_join_request(
+    room_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RoomJoinRequestResponse:
+    await join_request_service.create_apply_request(
+        db,
+        room_id=room_id,
+        user=current_user,
+    )
+    return Response(status_code=status.HTTP_200_OK)
+
+
+@router.post(
+    "/{room_id}/join-requests/invite",
+    response_model=RoomJoinRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def invite_room_join_request(
+    room_id: int,
+    payload: RoomJoinRequestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RoomJoinRequestResponse:
+    await join_request_service.create_invite_request(
+        db,
+        room_id=room_id,
+        target_user_id=payload.target_user_id,
+        user=current_user,
+    )
+    return Response(status_code=status.HTTP_200_OK)

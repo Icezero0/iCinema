@@ -55,3 +55,18 @@ class RoomMembershipService:
             "items": items,
             "total": len(items),
         }
+
+    async def add_member(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+        user_id: int,
+        role: str = "member",
+    ) -> RoomMember:
+        return await self.repo.create_member(
+            db,
+            room_id=room_id,
+            user_id=user_id,
+            role=role,
+        )

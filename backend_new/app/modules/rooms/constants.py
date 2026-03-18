@@ -15,3 +15,20 @@ class RoomPermission(StrEnum):
     REVIEW_JOIN_REQUEST = "review_join_request"
     MANAGE_MEMBERS = "manage_members"
     SET_MANAGER = "set_manager"
+
+class RoomJoinRequestSource(StrEnum):
+    APPLY = "apply"
+    INVITE = "invite"
+    MEMBER_INVITE = "member_invite"
+
+
+class RoomJoinRequestStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+class RoomJoinRequestAction(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
