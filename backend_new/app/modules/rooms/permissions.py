@@ -10,7 +10,7 @@ ROLE_PERMISSIONS: dict[RoomRole, set[RoomPermission]] = {
         RoomPermission.INVITE_USER,
         RoomPermission.REVIEW_JOIN_REQUEST,
         RoomPermission.MANAGE_MEMBERS,
-        RoomPermission.SET_MANAGER,
+        RoomPermission.MANAGE_MANAGERS,
     },
     RoomRole.MANAGER: {
         RoomPermission.UPDATE_ROOM,

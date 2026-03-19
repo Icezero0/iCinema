@@ -123,7 +123,7 @@ async def delete_room(
     room_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Response:
+) -> None:
     await room_service.delete_room(db, room_id=room_id, user=current_user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -158,37 +158,51 @@ async def get_room_join_requests(
 
 @router.post(
     "/{room_id}/join-requests/apply",
-    response_model=RoomJoinRequestResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
 )
 async def apply_room_join_request(
     room_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> RoomJoinRequestResponse:
+) -> None:
     await join_request_service.create_apply_request(
         db,
         room_id=room_id,
         user=current_user,
     )
-    return Response(status_code=status.HTTP_200_OK)
 
 
 @router.post(
     "/{room_id}/join-requests/invite",
-    response_model=RoomJoinRequestResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
 )
 async def invite_room_join_request(
     room_id: int,
     payload: RoomJoinRequestCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> RoomJoinRequestResponse:
+) -> None:
     await join_request_service.create_invite_request(
         db,
         room_id=room_id,
         target_user_id=payload.target_user_id,
         user=current_user,
     )
-    return Response(status_code=status.HTTP_200_OK)
+
+
+@router.delete(
+    "/{room_id}/members/{target_user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_room_member(
+    room_id: int,
+    target_user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    await membership_service.remove_room_member(
+        db,
+        room_id=room_id,
+        target_user_id=target_user_id,
+        current_user=current_user,
+    )

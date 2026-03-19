@@ -53,11 +53,17 @@ class RoomMembershipRepository:
         )
         return list(result.scalars().all())
 
-    async def delete_members_by_room_id(
+    async def delete_members_by_room_and_user_id(
         self,
         db: AsyncSession,
         *,
         room_id: int,
+        user_id: int,
     ) -> None:
-        await db.execute(delete(RoomMember).where(RoomMember.room_id == room_id))
+        await db.execute(
+            delete(RoomMember).where(
+                RoomMember.room_id == room_id,
+                RoomMember.user_id == user_id
+            )
+        )
         await db.flush()

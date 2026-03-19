@@ -7,4 +7,4 @@ class NotificationType(StrEnum):
 
 
 class NotificationRelatedType(StrEnum):
-    ROOM_MEMBERSHIP_REQUEST = "room_membership_request"
+    ROOM_JOIN_REQUEST = "room_join_request"

@@ -160,7 +160,7 @@ class RoomJoinRequestService:
     ) -> RoomJoinRequest:
         request = await self.get_join_request_by_id(db, request_id)
 
-        if user.id in {request.initiator_user_id, request.target_user_id}:
+        if user.id == request.target_user_id:
             return request
 
         await self._ensure_can_review_by_room(
@@ -406,7 +406,7 @@ class RoomJoinRequestService:
         ):
             request.status = RoomJoinRequestStatus.APPROVED
 
-            await self.membership_service.add_member(
+            await self.membership_service.add_room_member(
                 db,
                 room_id=request.room_id,
                 user_id=request.target_user_id,
