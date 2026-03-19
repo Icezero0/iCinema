@@ -10,20 +10,16 @@ class NotificationRepository:
         self,
         db: AsyncSession,
         *,
-        recipient_id: int,
-        sender_id: int | None,
+        recipient_user_id: int,
+        actor_user_id: int | None,
         notification_type: str,
-        title: str,
-        content: str | None,
         related_type: str | None,
         related_id: int | None,
     ) -> Notification:
         notification = Notification(
-            recipient_id=recipient_id,
-            sender_id=sender_id,
+            recipient_user_id=recipient_user_id,
+            actor_user_id=actor_user_id,
             notification_type=notification_type,
-            title=title,
-            content=content,
             related_type=related_type,
             related_id=related_id,
         )
@@ -32,7 +28,7 @@ class NotificationRepository:
         await db.refresh(notification)
         return notification
 
-    async def get_notification_by_id(
+    async def find_notification_by_id(
         self,
         db: AsyncSession,
         notification_id: int,
@@ -40,7 +36,7 @@ class NotificationRepository:
         result = await db.execute(
             select(Notification)
             .where(Notification.id == notification_id)
-            .options(selectinload(Notification.sender))
+            .options(selectinload(Notification.actor))
         )
         return result.scalar_one_or_none()
 
@@ -48,7 +44,7 @@ class NotificationRepository:
         self,
         db: AsyncSession,
         *,
-        recipient_id: int,
+        recipient_user_id: int,
         page: int,
         page_size: int,
         is_read: bool | None = None,
@@ -56,15 +52,11 @@ class NotificationRepository:
     ) -> tuple[list[Notification], int]:
         stmt = (
             select(Notification)
-            .where(
-                Notification.recipient_id == recipient_id,
-                Notification.is_deleted.is_(False),
-            )
-            .options(selectinload(Notification.sender))
+            .where(Notification.recipient_user_id == recipient_user_id)
+            .options(selectinload(Notification.actor))
         )
         count_stmt = select(func.count()).select_from(Notification).where(
-            Notification.recipient_id == recipient_id,
-            Notification.is_deleted.is_(False),
+            Notification.recipient_user_id == recipient_user_id
         )
 
         if is_read is not None:
@@ -73,7 +65,9 @@ class NotificationRepository:
 
         if notification_type is not None:
             stmt = stmt.where(Notification.notification_type == notification_type)
-            count_stmt = count_stmt.where(Notification.notification_type == notification_type)
+            count_stmt = count_stmt.where(
+                Notification.notification_type == notification_type
+            )
 
         stmt = (
             stmt.order_by(Notification.created_at.desc(), Notification.id.desc())
@@ -91,11 +85,10 @@ class NotificationRepository:
         self,
         db: AsyncSession,
         *,
-        recipient_id: int,
+        recipient_user_id: int,
     ) -> int:
         stmt = select(func.count()).select_from(Notification).where(
-            Notification.recipient_id == recipient_id,
-            Notification.is_deleted.is_(False),
+            Notification.recipient_user_id == recipient_user_id,
             Notification.is_read.is_(False),
         )
         total = await db.scalar(stmt)
@@ -105,16 +98,18 @@ class NotificationRepository:
         self,
         db: AsyncSession,
         *,
-        recipient_id: int,
+        recipient_user_id: int,
     ) -> None:
         await db.execute(
             update(Notification)
             .where(
-                Notification.recipient_id == recipient_id,
-                Notification.is_deleted.is_(False),
+                Notification.recipient_user_id == recipient_user_id,
                 Notification.is_read.is_(False),
             )
-            .values(is_read=True)
+            .values(
+                is_read=True,
+                read_at=func.now(),
+            )
         )
         await db.flush()
 

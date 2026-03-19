@@ -4,7 +4,7 @@ from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from app.modules.rooms.constants import RoomPermission, RoomRole
 from app.modules.rooms.models import RoomMember
 from app.modules.rooms.membership.repository import RoomMembershipRepository
-from app.modules.rooms.permissions import require_room_permission
+from app.modules.rooms.permissions import require_room_permission, has_room_permission
 from app.modules.users.models import User
 
 
@@ -70,6 +70,26 @@ class RoomMembershipService:
             user_id=user_id,
             role=role,
         )
+    
+    async def get_room_user_ids_by_permission(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+        permission: RoomPermission,
+    ) -> list[int]:
+        members = await self.repo.get_members_by_room_id(db, room_id=room_id)
+        user_ids = []
+        for member in members:
+            try:
+                role = RoomRole(member.role)
+            except ValueError:
+                continue
+
+            if has_room_permission(role=role, permission=permission):
+                user_ids.append(member.user_id)
+
+        return user_ids
 
     async def remove_room_member(
         self,
@@ -116,3 +136,4 @@ class RoomMembershipService:
             room_id=room_id,
             user_id=target_user_id,
         )
+        await db.commit()

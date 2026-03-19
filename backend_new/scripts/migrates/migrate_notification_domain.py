@@ -24,51 +24,36 @@ def create_notifications_table(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            recipient_id INTEGER NOT NULL,
-            sender_id INTEGER NULL,
+            recipient_user_id INTEGER NOT NULL,
+            actor_user_id INTEGER NULL,
             notification_type VARCHAR(32) NOT NULL,
-            title VARCHAR(255) NOT NULL,
-            content TEXT NULL,
-            is_read BOOLEAN NOT NULL DEFAULT 0,
-            is_deleted BOOLEAN NOT NULL DEFAULT 0,
             related_type VARCHAR(64) NULL,
             related_id INTEGER NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE SET NULL
+            is_read BOOLEAN NOT NULL DEFAULT 0,
+            read_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(recipient_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL
         )
         """
     )
 
-    cur.execute("CREATE INDEX IF NOT EXISTS ix_notifications_id ON notifications (id)")
     cur.execute(
         """
-        CREATE INDEX IF NOT EXISTS ix_notifications_recipient_id
-        ON notifications (recipient_id)
+        CREATE INDEX IF NOT EXISTS ix_notifications_recipient_user_id
+        ON notifications (recipient_user_id)
         """
     )
     cur.execute(
         """
-        CREATE INDEX IF NOT EXISTS ix_notifications_sender_id
-        ON notifications (sender_id)
+        CREATE INDEX IF NOT EXISTS ix_notifications_actor_user_id
+        ON notifications (actor_user_id)
         """
     )
     cur.execute(
         """
         CREATE INDEX IF NOT EXISTS ix_notifications_notification_type
         ON notifications (notification_type)
-        """
-    )
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS ix_notifications_is_read
-        ON notifications (is_read)
-        """
-    )
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS ix_notifications_is_deleted
-        ON notifications (is_deleted)
         """
     )
     cur.execute(
@@ -85,8 +70,32 @@ def create_notifications_table(conn: sqlite3.Connection) -> None:
     )
     cur.execute(
         """
+        CREATE INDEX IF NOT EXISTS ix_notifications_is_read
+        ON notifications (is_read)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_notifications_created_at
+        ON notifications (created_at)
+        """
+    )
+    cur.execute(
+        """
         CREATE INDEX IF NOT EXISTS ix_notifications_related_type_related_id
         ON notifications (related_type, related_id)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_notifications_recipient_user_id_created_at
+        ON notifications (recipient_user_id, created_at)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_notifications_recipient_user_id_is_read_created_at
+        ON notifications (recipient_user_id, is_read, created_at)
         """
     )
 
@@ -99,6 +108,8 @@ def main() -> None:
 
     conn = sqlite3.connect(str(db))
     try:
+        conn.execute("PRAGMA foreign_keys = ON")
+
         print("Rebuilding notifications table...")
 
         if table_exists(conn, "notifications"):

@@ -1,3 +1,4 @@
+from datetime import datetime
 from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +20,7 @@ class NotificationService:
         db: AsyncSession,
         notification_id: int,
     ) -> Notification | None:
-        return await self.repo.get_notification_by_id(db, notification_id)
+        return await self.repo.find_notification_by_id(db, notification_id)
 
     async def get_notification_by_id(
         self,
@@ -29,10 +30,10 @@ class NotificationService:
         user: User,
     ) -> Notification:
         notification = await self.find_notification_by_id(db, notification_id)
-        if not notification or notification.is_deleted:
+        if notification is None:
             raise NotFoundError("Notification not found")
 
-        if notification.recipient_id != user.id:
+        if notification.recipient_user_id != user.id:
             raise ForbiddenError("You do not have permission to perform this action")
 
         return notification
@@ -46,10 +47,10 @@ class NotificationService:
         page_size: int,
         is_read: bool | None = None,
         notification_type: NotificationType | None = None,
-    ) -> dict:
+    ) -> dict[str, object]:
         items, total = await self.repo.get_notifications(
             db,
-            recipient_id=user.id,
+            recipient_user_id=user.id,
             page=page,
             page_size=page_size,
             is_read=is_read,
@@ -72,7 +73,10 @@ class NotificationService:
         *,
         user: User,
     ) -> int:
-        return await self.repo.count_unread_notifications(db, recipient_id=user.id)
+        return await self.repo.count_unread_notifications(
+            db,
+            recipient_user_id=user.id,
+        )
 
     async def create_notification(
         self,
@@ -82,11 +86,9 @@ class NotificationService:
     ) -> Notification:
         notification = await self.repo.create_notification(
             db,
-            recipient_id=payload.recipient_id,
-            sender_id=payload.sender_id,
+            recipient_user_id=payload.recipient_user_id,
+            actor_user_id=payload.actor_user_id,
             notification_type=payload.notification_type.value,
-            title=payload.title,
-            content=payload.content,
             related_type=payload.related_type.value if payload.related_type else None,
             related_id=payload.related_id,
         )
@@ -108,6 +110,7 @@ class NotificationService:
 
         if not notification.is_read:
             notification.is_read = True
+            notification.read_at = datetime.utcnow()
             notification = await self.repo.save_notification(db, notification)
             await db.commit()
 
@@ -119,21 +122,8 @@ class NotificationService:
         *,
         user: User,
     ) -> None:
-        await self.repo.mark_all_as_read(db, recipient_id=user.id)
-        await db.commit()
-
-    async def delete_notification(
-        self,
-        db: AsyncSession,
-        *,
-        notification_id: int,
-        user: User,
-    ) -> None:
-        notification = await self.get_notification_by_id(
+        await self.repo.mark_all_as_read(
             db,
-            notification_id=notification_id,
-            user=user,
+            recipient_user_id=user.id,
         )
-        notification.is_deleted = True
-        await self.repo.save_notification(db, notification)
         await db.commit()

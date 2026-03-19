@@ -8,3 +8,4 @@ class NotificationType(StrEnum):
 
 class NotificationRelatedType(StrEnum):
     ROOM_JOIN_REQUEST = "room_join_request"
+    ANNOUNCEMENT = "announcement"

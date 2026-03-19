@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -73,23 +73,8 @@ async def mark_notification_as_read(
 async def mark_all_notifications_as_read(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Response:
+) -> None:
     await notification_service.mark_all_as_read(
         db,
         user=current_user,
     )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_notification(
-    notification_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> Response:
-    await notification_service.delete_notification(
-        db,
-        notification_id=notification_id,
-        user=current_user,
-    )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

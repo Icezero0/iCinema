@@ -23,6 +23,12 @@ from app.modules.rooms.room.service import RoomService
 from app.modules.users.models import User
 from app.modules.users.service import UserService
 
+from app.modules.notifications.constants import (
+    NotificationRelatedType,
+    NotificationType,
+)
+from app.modules.notifications.service import NotificationService
+from app.modules.notifications.schemas import NotificationCreate
 
 class RoomJoinRequestService:
     def __init__(self) -> None:
@@ -30,6 +36,7 @@ class RoomJoinRequestService:
         self.membership_service = RoomMembershipService()
         self.room_service = RoomService()
         self.user_service = UserService()
+        self.notification_service = NotificationService()
 
     # =========================
     # create
@@ -64,8 +71,23 @@ class RoomJoinRequestService:
             room_action=RoomJoinRequestAction.PENDING,
             target_action=RoomJoinRequestAction.APPROVED,
         )
+        
+        reviewer_user_ids = await self.membership_service.get_room_user_ids_by_permission(
+            db,
+            room_id=room_id,
+            permission=RoomPermission.REVIEW_JOIN_REQUEST,
+        )
 
-        # TODO: notify room side
+        for reviewer_user_id in reviewer_user_ids:
+            if reviewer_user_id == user.id:
+                continue
+            await self._notify_room_join_request_updated(
+                db,
+                recipient_user_id=reviewer_user_id,
+                actor_user_id=user.id,
+                request_id=request.id,
+            )
+
         await db.commit()
         await db.refresh(request)
         return request
@@ -124,6 +146,13 @@ class RoomJoinRequestService:
             room_action=room_action,
             target_action=RoomJoinRequestAction.PENDING,
             room_action_by_user_id=room_action_by_user_id,
+        )
+
+        await self._notify_room_join_request_updated(
+            db,
+            recipient_user_id=target_user_id,
+            actor_user_id=user.id,
+            request_id=request.id,
         )
 
         await db.commit()
@@ -386,6 +415,25 @@ class RoomJoinRequestService:
 
         require_room_permission(role, RoomPermission.REVIEW_JOIN_REQUEST)
 
+    async def _notify_room_join_request_updated(
+        self,
+        db: AsyncSession,
+        *,
+        recipient_user_id: int,
+        actor_user_id: int | None,
+        request_id: int,
+    ) -> None:
+        await self.notification_service.create_notification(
+            db,
+            payload=NotificationCreate(
+                recipient_user_id=recipient_user_id,
+                actor_user_id=actor_user_id,
+                notification_type=NotificationType.WORKFLOW,
+                related_type=NotificationRelatedType.ROOM_JOIN_REQUEST,
+                related_id=request_id,
+            ),
+        )
+
     async def _finalize(
         self,
         db: AsyncSession,
@@ -396,9 +444,18 @@ class RoomJoinRequestService:
             or request.target_action == RoomJoinRequestAction.REJECTED
         ):
             request.status = RoomJoinRequestStatus.REJECTED
+            request = await self.repo.save_request(db, request)
 
-            # TODO: notify the side which did not reject
-            return await self.repo.save_request(db, request)
+            actor_user_id = request.room_action_by_user_id
+                
+            if request.target_action != RoomJoinRequestAction.REJECTED:
+                await self._notify_room_join_request_updated(
+                    db,
+                    recipient_user_id=request.target_user_id,
+                    actor_user_id=actor_user_id,
+                    request_id=request.id,
+                )
+            return request
 
         if (
             request.room_action == RoomJoinRequestAction.APPROVED
@@ -413,7 +470,18 @@ class RoomJoinRequestService:
                 role=RoomRole.MEMBER,
             )
 
-            # TODO: notify success
-            return await self.repo.save_request(db, request)
+            request = await self.repo.save_request(db, request)
+
+            actor_user_id = request.room_action_by_user_id
+            if request.target_action == RoomJoinRequestAction.APPROVED:
+                actor_user_id = request.target_user_id
+
+            await self._notify_room_join_request_updated(
+                db,
+                recipient_user_id=request.target_user_id,
+                actor_user_id=actor_user_id,
+                request_id=request.id,
+            )
+            return request
 
         return await self.repo.save_request(db, request)
