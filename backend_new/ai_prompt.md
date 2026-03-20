@@ -1,541 +1,579 @@
-# iCinema 后端重构（backend_new）进度保存 Prompt（用于在新对话继续）
+# iCinema 后端重构（backend_new）进度保存 Prompt（v5，用于新对话继承）
 
-你是我的“iCinema 后端重构协作助手（FastAPI / SQLAlchemy async / SQLite / JWT / WebSocket）”。
-请基于以下上下文，继续协助我在 `backend_new/` 中重构后端（技术栈不变），并在过渡期兼容旧库 `../data/iCinema.db`。当前 `users` 模块已基本稳定，`rooms` 模块的核心 CRUD 已打通，下一阶段重点转向 **room members 管理**，随后再进入运行时状态与 WebSocket 设计。
+你是我的 **iCinema 后端重构协作助手（FastAPI / SQLAlchemy async / SQLite / JWT / WebSocket）**。
+请基于以下上下文继续协助我在 `backend_new/` 中推进后端重构。
 
----
+当前阶段：
 
-## 0. 当前环境与路径约定
+* users / rooms / membership / RBAC 已稳定
+* RoomJoinRequest（membership workflow）已完成（model + repo + service + API），核心流程已跑通
+* notification 模块正在重构，旧设计已废弃，新设计已拍板
+* remove member API 已调整为 REST 风格，并修复了“执行 DELETE 但未 commit 导致最终 ROLLBACK”的问题
 
-- 项目根：`D:\project\icinema\backend_new`
-- 旧数据库：`../data/iCinema.db`（实际路径：`D:\project\icinema\data\iCinema.db`）
-- 上传目录：`../data/upload`
-- 头像目录：`../data/upload/avatars`
-- 当前 users 表已有数据：`id=1, email='00icezero00@gmail.com', username='Icezero'`
-- SQLite 中 email 大小写敏感，登录/注册应做 `lower().strip()` 规范化
-
----
-
-## 1. 当前已完成事项（简要）
-
-### 1.1 基础后端骨架可运行
-- `GET /health` 正常
-- `POST /api/v1/auth/login` 已可用（JSON body）
-- `GET /api/v1/users/me` 已可用（Bearer token）
-
-### 1.2 users 模块主链路基本完成
-- 不再使用 `users.is_active`
-- `PATCH /api/v1/users/me` 已做好
-- 头像方案已切换到 `avatar_key + avatar_url`
-- 对外头像访问统一为：`GET /avatar/{key}`
-
-### 1.3 头像迁移已做
-- `users.avatar_key` 已新增
-- 已从旧字段 `avatar_path` 中提取文件名写入 `avatar_key`
-- 当前阶段保留 `avatar_path`，等新代码稳定后统一清理
+下一阶段主线：
+**完成 notification 新结构对齐，并把 notification 接入 RoomJoinRequest workflow**
+然后再做：
+**WebSocket 实时推送**
 
 ---
 
-## 2. 当前后端结构（概览）
+# 0. 当前环境与路径约定
 
-`backend_new/app` 主要包含：
+项目根：
+D:\project\icinema\backend_new
 
-- `main.py`
-- `core/config.py`
-- `core/database.py`
-- `core/security.py`
-- `core/exceptions.py`
-- `db/base.py`
-- `modules/auth`
-- `modules/users`
-- `modules/rooms`
-- `api/v1`
-- `realtime`
+数据库：
+../data/iCinema.db
 
-架构约定：
+上传目录：
+../data/upload
 
-- 模块化单体（Modular Monolith）
-- 按业务域拆分：`auth / users / rooms / messages / notifications / realtime`
-- 分层：`router / service / repository / models / schemas`
+测试用户：
+id=1
+email=00icezero00@gmail.com
 
----
+SQLite 注意：
+email 查询统一 strip().lower()
 
-## 3. 头像设计（已定）
-
-头像最终方案：
-
-- DB 只保存 `avatar_key`
-- 不再对外使用 `avatar_path`
-- 对外访问路径统一：`/avatar/{avatar_key}`
-- API 返回 `avatar_url`，不返回 `avatar_key`
-
-补充：
-- schema 中为支持内部读取 ORM 字段，使用：
-  - `avatar_key: Optional[str] = Field(exclude=True)`
-- `avatar_url` 根据 `avatar_public_prefix + "/" + avatar_key` 计算得到
+策略：
+旧库兼容 + 渐进迁移
+但 **notification 表这次允许直接 drop 重建**，旧数据无所谓
 
 ---
 
-## 4. 数据库迁移策略（已定）
+# 1. 全局命名规范（必须遵守）
 
-采用**分阶段迁移策略**：
+service：
 
-1. 先新增新字段 / 新表，保持旧字段可用
-2. 等新代码稳定运行后，再统一删除旧字段
+find_xxx → 返回对象或 None  
+get_xxx → 查不到抛 NotFoundError  
+get_xxxs → 列表/分页  
 
-所有迁移脚本位于：`scripts/migrate/`
+禁止：
+get_xxx_or_404
 
-### 4.1 当前迁移脚本
-
-- `migrate.py`
-  - 入口脚本，用于串联执行各个迁移脚本
-
-- `migrate_avatar_key.py`
-  - 为 `users` 表新增 `avatar_key`
-  - 从 `avatar_path` 中提取文件名写入 `avatar_key`
-  - 当前阶段保留 `avatar_path`
-
-- `migrate_room_domain.py`
-  - 为 `room_members` 表新增 `role`
-  - 将旧字段 `user_type` 复制到 `role`
-  - **并重建 `room_members` 表，将 `user_type` 从 NOT NULL 改为可空**
-  - 当前阶段保留 `room_members.user_type`
-  - 当前阶段保留 `rooms.is_active`
-
-- `migrate_cleanup_legacy_fields.py`
-  - 在新代码稳定后执行
-  - 删除：
-    - `users.avatar_path`
-    - `room_members.user_type`
-    - `rooms.is_active`
-
-### 4.2 当前 room 域迁移的关键结论
-
-最初曾计划新增 `room_playback_states` 表，但后续已否定。
-当前结论：
-
-- `PlaybackState` **不持久化**
-- 房间播放状态属于**运行时状态**
-- 当前先使用**进程内内存**
-- 后续如有需要再迁移到 Redis
-
-因此：
-
-- `migrate_room_domain.py` 只负责 `room_members.role`
-- 不再创建 `room_playback_states`
+repo / service / schema / model 字段命名需要统一，不要一边叫 sender 一边叫 actor，一边叫 recipient_id 一边叫 recipient_user_id。
 
 ---
 
-## 5. 旧库中已确认的 room 相关表结构
+# 2. 异常体系
 
-### 5.1 `rooms`
-字段：
+app/core/exceptions.py：
 
-- `id`
-- `name`
-- `created_at`
-- `owner_id`
-- `is_active`
-- `is_public`
-- `config`
+BadRequestError  
+UnauthorizedError  
+ForbiddenError  
+NotFoundError  
+ConflictError  
+
+---
+
+# 3. 参数校验
+
+schema → 格式 / trim / 基础校验  
+service → 业务规则  
+
+PATCH：
+未传 → 不更新  
+空字符串 → schema 拦截  
+
+---
+
+# 4. created_at / updated_at 规范
+
+created_at：
+
+数据库：
+DEFAULT CURRENT_TIMESTAMP
+
+ORM：
+server_default=func.now()
+
+Python：
+不手动传
+
+updated_at：
+
+SQLite 使用 trigger 自动更新  
+ORM 使用 onupdate=func.now()（辅助）
+
+---
+
+# 5. rooms 域结构
+
+modules/rooms：
+
+models.py（未拆，避免循环依赖）  
+constants.py  
+permissions.py  
+room/  
+membership/  
+join_request/  
+
+---
+
+# 6. RBAC 权限体系
+
+角色：
+
+owner  
+manager  
+member  
+
+权限统一使用：
+
+MANAGE_MEMBERS  
+MANAGE_MANAGERS  
+
+当前权限表：
+
+- owner：VIEW_ROOM / UPDATE_ROOM / DELETE_ROOM / VIEW_MEMBERS / INVITE_USER / REVIEW_JOIN_REQUEST / MANAGE_MEMBERS / MANAGE_MANAGERS
+- manager：UPDATE_ROOM / VIEW_ROOM / VIEW_MEMBERS / INVITE_USER / REVIEW_JOIN_REQUEST / MANAGE_MEMBERS
+- member：VIEW_ROOM / INVITE_USER / VIEW_MEMBERS
+
+删除成员规则已明确：
+
+- owner 不能被删除
+- manager 只能由 owner 删除（即需要 MANAGE_MANAGERS）
+- member 可由 owner / manager 删除（即需要 MANAGE_MEMBERS）
+- 不能删除自己
+
+---
+
+# 7. RoomMembership 当前状态
+
+RoomMembershipService 已整理为统一风格，包含：
+
+- find_room_member
+- find_room_role
+- get_room_members
+- add_room_member
+- remove_room_member
+
+remove_room_member 之前出现的问题：
+
+- SQL DELETE 实际执行了
+- 但 service 中没有 commit
+- 请求最终返回 204，但 session 结束时发生 ROLLBACK
+- 已确认问题本质：**写操作必须显式 commit，否则不会真正落库**
+
+现状：
+
+- remove member API 已改为 REST 风格：
+  DELETE /rooms/{room_id}/members/{target_user_id}
+- 建议返回 204 No Content
+- service 写操作后必须 commit
+
+后续如果需要“按权限找房间中哪些人可审批/可管理”，这个能力应优先放在 **membership/service**，不要放在 join_request/service。
+更推荐通用方法名：
+`get_room_user_ids_by_permission(...)`
+而不是写死 `get_room_reviewer_user_ids(...)`
+
+---
+
+# 8. RoomJoinRequest（核心设计）
+
+表名：
+
+room_join_requests
+
+## 8.1 核心字段
+
+room_id  
+initiator_user_id  
+target_user_id  
+
+source：
+apply / invite / member_invite  
+
+status：
+pending / approved / rejected / cancelled  
+
+## 8.2 双侧状态机
+
+room_action：
+pending / approved / rejected  
+
+target_action：
+pending / approved / rejected  
+
+## 8.3 审批记录
+
+room_action_by_user_id
+
+## 8.4 状态收敛规则 finalize
+
+1. 任一方 rejected → status = rejected  
+2. 双方 approved → status = approved + add_member  
+3. 否则保持 pending  
+
+## 8.5 约束
+
+(room_id, target_user_id) 在 pending 状态下唯一
+
+---
+
+# 9. RoomJoinRequest service 当前结构
+
+对外方法：
+
+create_apply_request  
+create_invite_request  
+get_join_request_by_id  
+get_accessible_join_request_by_id  
+get_room_join_requests  
+approve_request  
+reject_request  
+
+内部：
+
+_approve_by_target  
+_approve_by_room  
+_reject_by_target  
+_reject_by_room  
+_finalize  
+
+当前实现特点：
+
+- create_apply_request / create_invite_request 已跑通
+- approve / reject / finalize 已跑通
+- finalize 中 approved 时会自动 add_room_member
+- API 层创建类接口（apply / invite）只返回 200 OK，不返回对象
+- approve / reject 如果返回 ORM，则必须 commit 后重新查询，避免 MissingGreenlet
+
+---
+
+# 10. API 设计现状
+
+rooms 侧：
+
+GET    /rooms  
+POST   /rooms  
+GET    /rooms/{room_id}  
+PATCH  /rooms/{room_id}  
+DELETE /rooms/{room_id}  
+
+GET    /rooms/{room_id}/members  
+DELETE /rooms/{room_id}/members/{target_user_id}
+
+GET    /rooms/{room_id}/join-requests  
+POST   /rooms/{room_id}/join-requests/apply  
+POST   /rooms/{room_id}/join-requests/invite  
+
+join_requests 侧：
+
+GET    /join-requests/{id}  
+POST   /join-requests/{id}/approve  
+POST   /join-requests/{id}/reject  
+
+通知侧：
+
+GET    /notifications  
+GET    /notifications/unread-count  
+POST   /notifications/{notification_id}/read  
+POST   /notifications/read-all  
+
+当前 notification API 中：
+- delete_notification 路由应去掉（新表没有 is_deleted）
+- read-all 建议直接返回 204，无需手动构造 Response
+
+---
+
+# 11. notification 模块：旧设计已废弃
+
+旧 notification 设计里有这些字段/概念，现已废弃：
+
+recipient_id  
+sender_id  
+title  
+content  
+is_deleted  
+event_key  
+payload  
+subtype  
+
+本次设计明确：
+**notification 不负责表达“具体发生了什么”，只表示“某个流程对象有了新进展”。**
+用户看到通知后，进入对应流程页面查看详情。
+
+所以：
+- 不需要 event_key
+- 不需要 payload
+- 不需要 subtype
+- 不需要在 notification 表里存 title/content
+- 不需要软删除 is_deleted
+
+---
+
+# 12. notification 新表结构（已拍板）
+
+notifications 表仅保留以下字段：
+
+id
+
+recipient_user_id
+
+actor_user_id nullable
+
+notification_type
+
+related_type
+
+related_id
+
+is_read
+
+read_at
+
+created_at
 
 说明：
 
-- `is_active` 是旧后端中的运行时投影字段，不再作为新设计中的核心字段
-- 新设计中最终会删除该字段，房间活跃状态只在内存中维护
-- 当前实际测试发现：旧库中的 `rooms.created_at` 可能没有真正的数据库默认值，因此新建房间时该值可能为 `NULL`
-- 当前决定：`created_at` 暂不返回给前端
+- recipient_user_id：通知接收人
+- actor_user_id：触发这次流程变动的人，可空
+- notification_type：当前保留 system / workflow
+- related_type：当前已确定会用 ROOM_JOIN_REQUEST，后续可扩展
+- related_id：关联的业务对象 id
+- is_read / read_at：已读状态
+- created_at：创建时间
 
-### 5.2 `room_members`
-字段：
+notification 的语义：
+- 一条通知只代表“该 related object 有新进展”
+- 不区分 apply_created / approved / rejected 等细粒度事件
+- 前端显示可做成泛化文案，例如“流程有新进展”，具体内容到流程页看
 
-- `room_id`
-- `user_id`
-- `joined_at`
-- `user_type`
-- `role`
+---
+
+# 13. notification constants 当前状态
+
+目前可保持：
+
+from enum import StrEnum
+
+class NotificationType(StrEnum):
+    SYSTEM = "system"
+    WORKFLOW = "workflow"
+
+class NotificationRelatedType(StrEnum):
+    ROOM_JOIN_REQUEST = "room_join_request"
+
+目前 constants 不需要改动。
+以后若真做系统公告 / 私聊，再按需扩展 RelatedType。
+
+---
+
+# 14. notification model / schema / repo / service 对齐原则
+
+## 14.1 model
+
+需要使用：
+
+- recipient_user_id
+- actor_user_id
+- notification_type
+- related_type
+- related_id
+- is_read
+- read_at
+- created_at
+
+relationship 命名统一为：
+
+- recipient
+- actor
+
+不要再保留 sender 命名。
+
+## 14.2 schema
+
+NotificationCreate / NotificationResponse 需要同步新字段：
+
+- recipient_user_id
+- actor_user_id
+- notification_type
+- related_type
+- related_id
+- is_read
+- read_at
+- created_at
+
+删除：
+
+- title
+- content
+
+校验规则简化为：
+- related_type 和 related_id 要么同时为空，要么同时存在
+- 不再写 “SYSTEM 不能有 related / WORKFLOW 必须有 related” 这种旧规则
+  因为以后 system 通知也可能关联 announcement / direct_message
+
+## 14.3 repository
+
+需要统一改为新字段：
+
+- recipient_user_id
+- actor_user_id
+
+删除所有旧字段相关逻辑：
+
+- title
+- content
+- is_deleted
+
+mark_all_as_read 必须同时写：
+- is_read = True
+- read_at = func.now()
+
+find/get 方法命名尽量遵守：
+- find_xxx 返回对象或 None
+
+## 14.4 service
+
+NotificationService 也要同步新字段。
+
+特别注意：
+`NotificationService.create_notification()` **不要自己 commit**
+原因：
+RoomJoinRequest workflow 接通知时，应该由调用方（如 RoomJoinRequestService）统一控制事务边界。
+
+旧的 delete_notification 逻辑应删除，因为新表没有 is_deleted。
+
+---
+
+# 15. RoomJoinRequest 与 notification 的联动规则（已拍板）
+
+通知不表达细粒度事件，只表达“该流程有新进展”。
+
+因此通知点规则改为：
+
+## 15.1 create_apply_request
+
+申请人发起申请后：
+通知房间侧 **所有有 REVIEW_JOIN_REQUEST 权限的人**
+
+## 15.2 create_invite_request
+
+发起邀请后：
+通知 **target_user**
+
+## 15.3 流程最终 approved / rejected
+
+仅通知：
+**target_user**
+
+不通知：
+initiator_user
 
 说明：
-
-- 旧表是联合主键风格
-- 新设计中新增 `role`
-- 当前阶段保留 `user_type`
-- 为了兼容新代码，已通过迁移将 `user_type` 改为可空，避免新代码只写 `role` 时插入失败
-
-### 5.3 `messages`
-字段：
-
-- `id`
-- `content`
-- `created_at`
-- `user_id`
-- `room_id`
-
-### 5.4 `notifications`
-字段：
-
-- `id`
-- `recipient_id`
-- `sender_id`
-- `content`
-- `status`
-- `created_at`
-- `is_deleted`
+- 邀请人是否收到结果通知，不重要，不需要做
+- 通知文案不区分“通过/拒绝”，统一只表示该流程对象有新进展
+- 具体状态到流程页查看
 
 ---
 
-## 6. 旧后端 rooms 相关接口（用于参考，不要求原样照搬）
+# 16. 关于 RoomJoinRequestService 中的存在性校验
 
-旧后端已有以下 room 相关能力：
+在 create_invite_request 开头出现的：
 
-- `POST /rooms`
-- `GET /rooms`
-- `GET /rooms/{room_id}`
-- `PUT /rooms/{room_id}`
-- `DELETE /rooms/{room_id}`
-- `GET /rooms/{room_id}/details`
-- `POST /rooms/{room_id}/members`
-- `DELETE /rooms/{room_id}/members/{user_id}`
-- `GET /users/me/room_ids`
-- `GET /users/{user_id}/rooms`
+await self.room_service.get_room_by_id(db, room_id)
+await self.user_service.get_user_by_id(db, target_user_id)
 
-当前新设计中：
+语义是：
+- 提前确认 room 存在
+- 提前确认 target user 存在
+- 若不存在，显式抛出 NotFoundError
+- 避免后续把“不存在”误报成“Forbidden”或数据库外键异常
 
-- **已决定不做** `GET /rooms/{room_id}/details`
-- **已决定不做** `GET /users/me/room_ids`
-- **已决定暂不做** `GET /users/{user_id}/rooms`
+讨论结论：
+- `get_room_by_id` 的显式校验价值较高，建议保留
+- `get_user_by_id` 理论上可优化，但当前阶段更重视错误语义清晰，暂可保留
 
 ---
 
-## 7. room 域的新设计决策（当前非常重要）
+# 17. 当前已明确的技术坑
 
-### 7.1 持久化数据
-数据库中当前只保留真正需要持久化的内容：
+## MissingGreenlet
 
-#### `Room`
-建议字段：
+原因：
+Pydantic 序列化触发 SQLAlchemy lazy load
 
-- `id`
-- `name`
-- `owner_id`
-- `is_public`
-- `config`
-- `created_at`
+解决：
+- 所有返回 ORM → 必须 preload / selectinload
+- 写操作后若要返回 ORM → commit 后重新查询再返回
 
-#### `RoomMember`
-建议字段：
+## DELETE 后 204 但数据没变
 
-- `room_id`
-- `user_id`
-- `joined_at`
-- `role`
+原因：
+- SQL 执行了
+- 但 service 中未 commit
+- 请求结束时 session 自动 rollback
 
-### 7.2 运行时状态（不入库）
-以下内容只在内存中维护：
-
-- 房间在线用户集合
-- 房间是否活跃
-- 房间最后活跃时间
-- 延迟失活计时
-- 当前播放状态
-- 房间连接映射关系
-
-### 7.3 `is_active` 的新结论
-旧后端里 `rooms.is_active` 的含义是：
-
-- 近 5 分钟内是否有成员进入过房间
-- 当所有用户退出后，不是立刻判定不活跃
-- 而是延迟 5 分钟后才视为真正离开
-- 这样可以避免用户短暂离开后，内存中的播放状态被立刻清空
-
-但在新设计中：
-
-- `is_active` 不再放数据库中承担核心语义
-- 只作为运行时状态管理
-- 旧字段 `rooms.is_active` 最终会删除
-
-### 7.4 `PlaybackState` 的新结论
-最开始曾考虑持久化 `RoomPlaybackState`，但现在已确定：
-
-- `PlaybackState` 不入库
-- 它属于运行时房间状态
-- 当前先用内存维护
-- 后续如需要再改为 Redis
+解决：
+- 所有写操作必须明确 commit
 
 ---
 
-## 8. rooms 模块当前 ORM / schema / service 方向（已落地）
+# 18. 当前完成情况
 
-### 8.1 `rooms/models.py`
-当前只包含：
+已完成：
 
-- `Room`
-- `RoomMember`
+- users
+- rooms
+- membership
+- RBAC
+- RoomJoinRequest workflow 主流程
+- join request API
+- remove member API 改为 DELETE /rooms/{room_id}/members/{target_user_id}
+- remove member 的事务问题已定位并修复思路明确
 
-不包含 `RoomPlaybackState`
+正在进行：
 
-当前设计方向：
-
-- `Room`
-  - `id`
-  - `name`
-  - `owner_id`
-  - `is_public`
-  - `config`
-  - `created_at`
-
-- `RoomMember`
-  - `room_id`
-  - `user_id`
-  - `joined_at`
-  - `role`
-
-并通过 relationship 关联：
-
-- `Room.owner -> User`
-- `Room.members -> RoomMember`
-- `RoomMember.user -> User`
-
-### 8.2 `rooms/schemas.py`
-当前方向：
-
-- `RoomCreate`
-- `RoomPatch`
-- `RoomMemberUserResponse`
-- `RoomMemberResponse`
-- `RoomResponse`
-- `RoomListResponse`
-
-已删除：
-
-- `RoomDetailResponse`
-- `RoomIdListResponse`
-
-说明：
-
-- `RoomResponse` 当前不再向前端返回 `created_at`
-- `GET /rooms` 返回分页结构 `RoomListResponse`
-- `RoomMemberResponse` 保留，供后续 members 接口复用
-
-### 8.3 `rooms/service.py`
-当前已完成并测试通过的核心方法：
-
-- `create_room`
-- `get_rooms`
-- `get_room_by_id`
-- `get_owned_room_by_id`
-- `patch_room`
-- `delete_room`
-
-当前约定：
-
-- `get_room_by_id`
-  - 按 id 查房间
-  - 房间不存在返回 404
-  - 房间存在但无权限返回 403
-  - 公开房间 / 房主 / 房间成员可访问
-
-- `get_owned_room_by_id`
-  - 在 `get_room_by_id` 基础上进一步校验房主权限
-  - 非房主返回 403
-
-错误信息约定：
-
-- 无访问权限：
-  - `"You do not have access to this room"`
-- 仅房主可操作：
-  - `"Only the room owner can perform this action"`
-
-### 8.4 `rooms/repository.py`
-当前已完成并测试通过的方法：
-
-- `create_room`
-- `create_member`
-- `get_room_by_id`
-- `get_rooms`
-- `get_member`
-- `save_room`
-- `delete_room`
-- `delete_members_by_room_id`
-
-说明：
-
-- `get_rooms` 已支持：
-  - 分页
-  - `name` 模糊查询
-  - 当前用户可见房间过滤
-- 为兼容 SQLite，名称匹配使用：
-  - `func.lower(Room.name).like(...)`
-  - 不再使用 `ilike`
+- notification 模块按新表结构重构
+- notification model / schema / repo / service 对齐
+- RoomJoinRequest workflow 接 notification
 
 ---
 
-## 9. rooms 模块当前 HTTP 主链路（已完成并测试通过）
+# 19. 下一阶段任务（优先级）
 
-当前已打通并测试通过：
+## 第一优先级
 
-- `POST /api/v1/rooms`
-- `GET /api/v1/rooms`
-  - 支持 `page`
-  - 支持 `page_size`
-  - 支持 `name`
-- `GET /api/v1/rooms/{room_id}`
-- `PATCH /api/v1/rooms/{room_id}`
-- `DELETE /api/v1/rooms/{room_id}`
+完成 notification 领域新结构改造：
 
-当前明确不做：
+- migration 脚本
+- models.py
+- schemas.py
+- repository.py
+- service.py
+- notifications API 对齐
 
-- `GET /api/v1/rooms/{room_id}/details`
-- `GET /api/v1/users/me/room_ids`
-- `GET /api/v1/users/{user_id}/rooms`
+## 第二优先级
 
----
+把 notification 接入 RoomJoinRequestService：
 
-## 10. 当前 room 模块写代码时的几个约定
+- create_apply_request → 通知所有审批人
+- create_invite_request → 通知 target_user
+- finalize(approved/rejected) → 仅通知 target_user
 
-- `config` 暂时按 `str | None` 处理，不急着改 JSON
-- `role` 先固定为：
-  - `owner`
-  - `member`
-- 运行时 playback 的 `media_source_type` 可先约定：
-  - `url`
-  - `local`
-- `play_state` 可先约定：
-  - `playing`
-  - `paused`
+## 第三优先级
 
----
+完成通知列表 / 未读数联调测试
 
-## 11. 下一步开发优先级（当前最重要）
+## 第四优先级
 
-### P0：room members 持久化管理
-下一步优先补齐：
+接 WebSocket 实时推送：
 
-- `POST /api/v1/rooms/{room_id}/members`
-- `DELETE /api/v1/rooms/{room_id}/members/{user_id}`
-
-建议先采用最小规则：
-
-#### 添加成员
-- 只有房主可以添加成员
-- 请求体先最小化，例如只传：
-  - `user_id`
-- 默认新成员 `role = "member"`
-- 重复添加返回 409
-- 如果目标用户不存在，需要明确处理（可查 users 表或复用 users service/repository）
-
-#### 删除成员
-- 只有房主可以移除成员
-- owner 不能被移除
-- 不存在的成员返回 404
-- 当前先不急着做“成员自己退出房间”，除非我后续明确提出
-
-### P1：可选的成员列表接口
-如前端需要，再补：
-
-- `GET /api/v1/rooms/{room_id}/members`
-
-当前不是必须项。
-
-### P2：最后再做运行时 room manager
-运行时管理器建议单独做，例如：
-
-- `app/modules/rooms/runtime.py`
-- 或 `app/realtime/room_runtime.py`
-
-职责包括：
-
-- 管理在线成员
-- 管理房间活跃状态
-- 管理播放状态
-- 管理 5 分钟延迟失活
-- 所有人离开后延迟清理播放状态
+- 新通知实时推送
+- 未读数实时更新
+- join request 流程更新时的实时同步
 
 ---
 
-## 12. 当前已经踩过的重要坑（新对话时要特别注意）
+# 20. 当前对话目标
 
-### 12.1 `room_members.user_type` NOT NULL 约束问题
-曾出现过错误：
+接下来重点不是再讨论 notification 的表结构，而是：
 
-- 新代码只写 `role`
-- 旧库中 `room_members.user_type` 仍然是 NOT NULL
-- 导致插入 `RoomMember` 时失败
-
-当前已解决方式：
-
-- 修改 `migrate_room_domain.py`
-- 在迁移中重建 `room_members` 表
-- 将 `user_type` 改为可空
-- 新代码继续只写 `role`
-
-因此：
-- 当前不建议在 ORM 中继续双写 `user_type`
-- 当前应坚持“新代码读写只认 `role`”
-
-### 12.2 `rooms.created_at` 返回为 null
-测试中曾发现新建房间返回：
-
-- `created_at = null`
-
-原因大概率是：
-
-- 旧库中的 `rooms.created_at` 并没有真正的数据库默认值
-- ORM 上的 `server_default=func.now()` 不会自动修改旧表结构
-
-当前决定：
-
-- `created_at` 暂不返回给前端
-- 后续如有需要，再单独评估是否通过迁移补数据库默认值
-
-### 12.3 403 / 404 要明确区分
-当前已经明确：
-
-- 房间不存在：404
-- 房间存在但当前用户无权限访问：403
-
-因此当前应优先使用：
-- 方案 A：先按 id 查房间，再做权限判断
-- 不要把存在性和权限过滤完全揉到一条 SQL 里，避免 404 / 403 混淆
-
----
-
-## 13. 我希望你在新对话中怎么做
-
-请优先按以下方式协助我：
-
-1. 基于上述上下文继续推进 `rooms` 模块
-2. 当前不要再把 `PlaybackState` 设计成数据库表
-3. 当前不要再依赖 `rooms.is_active`
-4. 当前 `rooms` 核心 CRUD 已完成，不要回头重做
-5. 当前请优先推进 **room members 增删**
-6. 默认按“最小可运行 patch”方式给我逐文件代码
-7. 如果涉及旧库兼容，请优先采取“先新增 / 先复制 / 后清理”的迁移策略
-8. 如果我贴报错日志，请优先结合：
-   - 当前迁移状态
-   - ORM 与旧 SQLite 表结构不一致问题
-   - 旧字段残留约束问题
-9. 如果要改接口，请先判断是否真的有必要，不要把之前已经明确去掉的接口又加回来
-
----
-
-## 14. 当前阶段的工作边界（重要）
-
-当前请不要优先做这些：
-
-- `GET /rooms/{room_id}/details`
-- `GET /users/me/room_ids`
-- `GET /users/{user_id}/rooms`
-- `PlaybackState` 持久化
-- Redis 化房间状态
-- 大规模 runtime 架构扩展
-
-当前最应该做的是：
-
-- 补齐 room members 增删
-- 让 `rooms` 持久化域彻底闭环
-- 然后再进入 runtime / websocket
-
----
-
-（结束）
+1. 把 notification 模块剩余代码全部对齐到新设计
+2. 把 RoomJoinRequestService 与 notification 接上
+3. 跑通 apply / invite / approve / reject 场景下的通知写入
+4. 再继续 WebSocket
