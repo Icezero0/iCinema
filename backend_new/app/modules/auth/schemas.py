@@ -18,6 +18,15 @@ class LoginRequest(BaseModel):
         return normalize_required_str(value, field_name="Password")
 
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+    @field_validator("refresh_token", mode="before")
+    @classmethod
+    def validate_refresh_token(cls, value: str) -> str:
+        return normalize_required_str(value, field_name="Refresh token")
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
