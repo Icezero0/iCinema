@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { getMe, type MeResponse } from '@/infra/api/users.api'
+import { getMe, type UserMeResponse } from '@/infra/api/users.api'
 import { refreshAccessToken } from '@/infra/api/auth.api'
 
 type AuthStatus = 'unknown' | 'authenticated' | 'anonymous'
@@ -9,7 +9,7 @@ export const useAuthStore = defineStore('auth', {
     accessToken: localStorage.getItem('access_token') || '',
     refreshToken: localStorage.getItem('refresh_token') || '',
     status: 'unknown' as AuthStatus,
-    me: null as MeResponse | null,
+    me: null as UserMeResponse | null,
   }),
 
   getters: {
@@ -17,7 +17,7 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
-    setMe(me: MeResponse) {
+    setMe(me: UserMeResponse) {
       this.me = me
       this.status = 'authenticated'
     },
@@ -26,50 +26,67 @@ export const useAuthStore = defineStore('auth', {
       this.accessToken = accessToken
       localStorage.setItem('access_token', accessToken)
 
-      if (refreshToken) {
+      if (refreshToken !== undefined) {
         this.refreshToken = refreshToken
-        localStorage.setItem('refresh_token', refreshToken)
+        if (refreshToken) {
+          localStorage.setItem('refresh_token', refreshToken)
+        } else {
+          localStorage.removeItem('refresh_token')
+        }
       }
     },
 
-    logout() {
+    clearTokens() {
       this.accessToken = ''
       this.refreshToken = ''
-      this.me = null
-      this.status = 'anonymous'
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
     },
 
+    logout() {
+      this.clearTokens()
+      this.me = null
+      this.status = 'anonymous'
+    },
+
+    async fetchMe() {
+      const me = await getMe()
+      this.setMe(me)
+      return me
+    },
+
     async init() {
-      // 无 token：直接匿名
-      if (!this.accessToken) {
+      this.accessToken = localStorage.getItem('access_token') || ''
+      this.refreshToken = localStorage.getItem('refresh_token') || ''
+
+      if (!this.accessToken && !this.refreshToken) {
         this.status = 'anonymous'
         return
       }
 
-      // 有 token：尝试确认
-      try {
-        this.me = await getMe()
-        this.status = 'authenticated'
-        return
-      } catch (e) {
-        // access token 无效：尝试 refresh
+      if (this.accessToken) {
+        try {
+          await this.fetchMe()
+          return
+        } catch {
+          // 这里 fetchMe 失败时，client.ts 很可能已经尝试过自动 refresh
+          // 下面只把 refresh_token 作为最终兜底
+        }
       }
 
-      if (!this.refreshToken) {
-        this.logout()
-        return
+      if (this.refreshToken) {
+        try {
+          const r = await refreshAccessToken(this.refreshToken)
+          this.setTokens(r.access_token, r.refresh_token)
+          await this.fetchMe()
+          return
+        } catch {
+          this.logout()
+          return
+        }
       }
 
-      try {
-        const r = await refreshAccessToken(this.refreshToken)
-        this.setTokens(r.access_token) // refresh 不会返回 refresh_token
-        this.me = await getMe()
-        this.status = 'authenticated'
-      } catch {
-        this.logout()
-      }
+      this.logout()
     },
   },
 })

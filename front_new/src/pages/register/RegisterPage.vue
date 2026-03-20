@@ -3,12 +3,11 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { useI18n } from "vue-i18n";
 import LocaleMenuButton from "@/components/LocaleMenuButton.vue";
+import { register } from "@/infra/api/auth.api";
 
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
-
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 const email = ref("");
 const username = ref("");
@@ -26,32 +25,14 @@ function setError(msg: string) {
   errorMsg.value = msg;
 }
 
-async function registerRequest(payload: {
-  email: string;
-  username: string;
-  password: string;
-}) {
-  const res = await fetch(`${apiBase}/users`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+function extractErrorMessage(err: any) {
+  const detail = err?.response?.data?.detail;
 
-  if (!res.ok) {
-    let msg = t("auth.register.failed");
-    try {
-      const data = await res.json();
-      const detail = (data as any)?.detail;
-      if (typeof detail === "string") msg = detail;
-      else if (Array.isArray(detail) && detail[0]?.msg) msg = detail[0].msg;
-    } catch {
-      // ignore
-    }
-    throw new Error(msg);
-  }
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+  if (typeof err?.message === "string" && err.message) return err.message;
 
-  // 成功返回 User（但注册页通常不直接登录）
-  return await res.json();
+  return t("auth.register.failed");
 }
 
 async function submit() {
@@ -61,28 +42,32 @@ async function submit() {
   const e = email.value.trim();
   const u = username.value.trim();
   const p = password.value;
+  const c = confirmPassword.value;
 
-  if (!e || !u || !p || !confirmPassword.value) {
+  if (!e || !u || !p || !c) {
     setError(t("auth.register.missing"));
     return;
   }
 
-  if (p !== confirmPassword.value) {
+  if (p !== c) {
     setError(t("auth.register.passwordMismatch"));
     return;
   }
 
   isSubmitting.value = true;
   try {
-    await registerRequest({ email: e, username: u, password: p });
+    await register({
+      email: e,
+      username: u,
+      password: p,
+    });
 
-    // 注册成功：回登录页，带上 registered=1（你 login 页已支持提示）
     await router.replace({
       path: "/auth/login",
       query: { registered: "1", redirect: redirect.value },
     });
   } catch (err: any) {
-    setError(err?.message || t("auth.register.failed"));
+    setError(extractErrorMessage(err));
   } finally {
     isSubmitting.value = false;
   }

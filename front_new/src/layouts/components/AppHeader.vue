@@ -5,6 +5,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useNotificationsStore } from "@/stores/notifications.store";
 
 import AppIcon from "@/ui/base/AppIcon.vue";
+import BaseIconButton from "@/ui/base/BaseIconButton.vue";
 import { Bars3Icon, BellIcon } from "@heroicons/vue/24/outline";
 import AccountMenuPopover from "@/layouts/components/AccountMenuPopover.vue";
 import LocaleMenuButton from "@/components/LocaleMenuButton.vue";
@@ -16,17 +17,17 @@ const router = useRouter();
 const auth = useAuthStore();
 const notifications = useNotificationsStore();
 
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
 
 const userEmail = computed(() => auth.me?.email || "null@example.com");
 const userName = computed(() => auth.me?.username || "User");
-const avatarPath = computed(() => auth.me?.avatar_path || "/avatars/default.jpg");
+const avatarPath = computed(() => auth.me?.avatar_url || "");
 
 const avatarUrl = computed(() => {
   if (!avatarPath.value) return "";
   return avatarPath.value.startsWith("http")
     ? avatarPath.value
-    : `${apiBase}${avatarPath.value}`;
+    : `${apiOrigin}${avatarPath.value}`;
 });
 
 function toggleSidebar() {
@@ -38,17 +39,14 @@ function goNotifications() {
 }
 
 const badgeText = computed(() => {
-  const n = notifications.total;
+  const n = notifications.unreadCount;
   if (!n || n <= 0) return "";
   if (n >= 100) return "99+";
   return String(n);
 });
 
 onMounted(() => {
-  // Header badge：AppLayout mounted 时拉一次 total
-  // 这里 Header 通常在 AppLayout 内，所以放这里也OK
-  // 如果你之后想更“纯”，可以挪到 AppLayout.vue 的 onMounted 里调用
-  notifications.fetchTotal();
+  notifications.fetchUnreadCount();
 });
 </script>
 
@@ -119,13 +117,11 @@ onMounted(() => {
   margin-right: var(--s-1);
 }
 
-/* notification button wrapper (for badge positioning) */
 .notiBtn {
   position: relative;
   display: inline-flex;
 }
 
-/* badge */
 .badge {
   position: absolute;
   top: -6px;

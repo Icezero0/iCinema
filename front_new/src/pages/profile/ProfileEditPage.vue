@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
-import { updateMe } from "@/infra/api/users.api";
+import { patchMe, patchMyAvatar } from "@/infra/api/users.api";
 
 import BaseCard from "@/ui/base/BaseCard.vue";
 import BaseButton from "@/ui/base/BaseButton.vue";
@@ -14,16 +14,16 @@ const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
 
 const me = computed(() => auth.me);
 
-const avatarPath = computed(() => me.value?.avatar_path ?? "");
+const avatarPath = computed(() => me.value?.avatar_url ?? "");
 const avatarUrl = computed(() => {
   if (!avatarPath.value) return "";
   return avatarPath.value.startsWith("http")
     ? avatarPath.value
-    : `${apiBase}${avatarPath.value}`;
+    : `${apiOrigin}${avatarPath.value}`;
 });
 
 // 初始值（用来判断 dirty）
@@ -34,15 +34,15 @@ const initial = ref({
 
 const form = reactive({
   username: initial.value.username,
-  email: initial.value.email, // UI 禁用，但提交必须带上
+  email: initial.value.email, // 只读展示，不参与提交
   newPassword: "",
   confirmNewPassword: "",
 });
 
-// 头像：预览 src + dataURL（裁剪后生成，跟随 Save 提交）
+// 头像：预览 src + File（裁剪后生成，跟随 Save 提交）
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const avatarPreviewSrc = ref<string>(""); // dataURL（裁剪结果）优先；否则用 avatarUrl
-const avatarDataUrl = ref<string | null>(null); // data:image/...;base64,...
+const avatarPreviewSrc = ref<string>("");
+const avatarFile = ref<File | null>(null);
 
 // crop dialog
 const cropOpen = ref(false);
@@ -50,6 +50,12 @@ const pickedFile = ref<File | null>(null);
 
 // leave confirm dialog
 const leaveDialogOpen = ref(false);
+
+function revokeLocalAvatarPreview() {
+  if (avatarPreviewSrc.value.startsWith("blob:")) {
+    URL.revokeObjectURL(avatarPreviewSrc.value);
+  }
+}
 
 watch(
   () => me.value,
@@ -59,11 +65,15 @@ watch(
     form.username = initial.value.username;
     form.email = initial.value.email;
 
-    // 注意：不要在 me 更新时清掉用户正在裁剪/预览的本地头像
-    // avatarPreviewSrc / avatarDataUrl 只在保存成功或用户重新选择时变更
+    // 不要在 me 更新时清掉用户正在本地预览的头像
+    // avatarPreviewSrc / avatarFile 只在保存成功或重新选择时变更
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  revokeLocalAvatarPreview();
+});
 
 const isSubmitting = ref(false);
 const errorMsg = ref<string | null>(null);
@@ -74,7 +84,6 @@ const passwordTouched = computed(
   () => !!form.newPassword || !!form.confirmNewPassword,
 );
 
-// 只要确认框有输入，不一致就提示
 const showConfirmMismatch = computed(() => {
   if (!form.confirmNewPassword) return false;
   return form.newPassword !== form.confirmNewPassword;
@@ -89,7 +98,7 @@ const passwordMismatch = computed(() => {
 const isUsernameDirty = computed(
   () => form.username !== initial.value.username,
 );
-const isAvatarDirty = computed(() => !!avatarDataUrl.value);
+const isAvatarDirty = computed(() => !!avatarFile.value);
 const isPasswordDirty = computed(() => passwordTouched.value);
 
 const isDirty = computed(
@@ -133,12 +142,10 @@ function onPickAvatar(ev: Event) {
   input.value = "";
 }
 
-function onCropDone(dataUrl: string) {
-  // 裁剪结果：dataURL（带 data:image 头部）
-  avatarPreviewSrc.value = dataUrl;
-  avatarDataUrl.value = dataUrl;
-
-  // 清理 pickedFile（可选）
+function onCropDone(file: File) {
+  revokeLocalAvatarPreview();
+  avatarFile.value = file;
+  avatarPreviewSrc.value = URL.createObjectURL(file);
   pickedFile.value = null;
 }
 
@@ -159,42 +166,53 @@ async function onSave() {
     errorMsg.value = t("profile.errors.passwordMismatch");
     return;
   }
-
-  // OpenAPI: email 必填（即使 UI 禁用也必须带上）
-  const emailValue = form.email || initial.value.email;
-  if (!emailValue) {
-    errorMsg.value = t("profile.errors.emailMissing");
+  if (!isDirty.value) {
     return;
   }
 
   isSubmitting.value = true;
+
   try {
-    const payload: any = {
-      email: emailValue,
-      username: usernameTrimmed,
-    };
+    const profilePayload: {
+      username?: string | null;
+      password?: string | null;
+    } = {};
 
-    if (passwordTouched.value) payload.password = form.newPassword;
-    if (avatarDataUrl.value) payload.avatar_base64 = avatarDataUrl.value;
+    if (isUsernameDirty.value) {
+      profilePayload.username = usernameTrimmed;
+    }
 
-    const updated = await updateMe(payload);
-    auth.setMe(updated);
+    if (passwordTouched.value) {
+      profilePayload.password = form.newPassword;
+    }
 
-    // 同步本页状态（避免 dirty 一直为 true）
-    initial.value.username = updated.username ?? "";
-    initial.value.email = updated.email ?? "";
+    if (Object.keys(profilePayload).length > 0) {
+      await patchMe(profilePayload);
+    }
+
+    if (avatarFile.value) {
+      await patchMyAvatar(avatarFile.value);
+    }
+
+    await auth.fetchMe();
+
+    initial.value.username = auth.me?.username ?? "";
+    initial.value.email = auth.me?.email ?? "";
     form.username = initial.value.username;
     form.email = initial.value.email;
     form.newPassword = "";
     form.confirmNewPassword = "";
 
-    // 保存成功：清掉本地裁剪结果，后续展示走后端 avatarUrl（更一致）
-    avatarDataUrl.value = null;
+    revokeLocalAvatarPreview();
+    avatarFile.value = null;
     avatarPreviewSrc.value = "";
 
     successMsg.value = t("profile.toast.saved");
   } catch (e: any) {
-    errorMsg.value = e?.message ?? t("profile.toast.saveFailed");
+    errorMsg.value =
+      e?.response?.data?.detail?.[0]?.msg ??
+      e?.message ??
+      t("profile.toast.saveFailed");
   } finally {
     isSubmitting.value = false;
   }
@@ -215,7 +233,6 @@ function confirmLeave() {
   router.push("/");
 }
 
-// 页面展示用：本地裁剪预览优先，其次后端 url
 const displayAvatarSrc = computed(() => avatarPreviewSrc.value || avatarUrl.value);
 </script>
 

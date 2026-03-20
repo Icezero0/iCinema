@@ -4,13 +4,12 @@ import { useRoute, useRouter, RouterLink } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useI18n } from "vue-i18n";
 import LocaleMenuButton from "@/components/LocaleMenuButton.vue";
+import { login } from "@/infra/api/auth.api";
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
-
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 const email = ref("");
 const password = ref("");
@@ -24,40 +23,14 @@ function setError(msg: string) {
   errorMsg.value = msg;
 }
 
-async function loginRequest(payload: { email: string; password: string }) {
-  // 后端是 OAuth2 Password flow：x-www-form-urlencoded
-  const body = new URLSearchParams();
-  body.set("email", payload.email);
-  body.set("password", payload.password);
+function extractErrorMessage(err: any) {
+  const detail = err?.response?.data?.detail;
 
-  const res = await fetch(`${apiBase}/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+  if (typeof err?.message === "string" && err.message) return err.message;
 
-  // 401 / 422 都统一到表单错误（不弹窗）
-  if (!res.ok) {
-    // 尽量解析后端 detail，但不做复杂联想
-    let msg = t("auth.login.invalid");
-
-    try {
-      const data = await res.json();
-      // FastAPI 常见：{ detail: "..." } 或 { detail: [{ msg: "..." }, ...] }
-      const detail = (data as any)?.detail;
-      if (typeof detail === "string") msg = detail;
-      else if (Array.isArray(detail) && detail[0]?.msg) msg = detail[0].msg;
-    } catch {
-      // ignore
-    }
-    throw new Error(msg);
-  }
-
-  return (await res.json()) as {
-    access_token: string;
-    refresh_token?: string;
-    token_type?: string;
-  };
+  return t("auth.login.invalid");
 }
 
 async function submit() {
@@ -74,21 +47,20 @@ async function submit() {
 
   isSubmitting.value = true;
   try {
-    const r = await loginRequest({ email: e, password: p });
+    const r = await login(e, p);
 
-    if (!r?.access_token) {
-      throw new Error("Login failed: missing access token.");
+    if (!r?.access_token || !r?.refresh_token) {
+      throw new Error("Login failed: missing token pair.");
     }
 
     auth.setTokens(r.access_token, r.refresh_token);
-    await auth.init();
+    await auth.fetchMe();
 
-    // 登录成功：优先回 redirect，其次回首页
     const redirect =
       typeof route.query.redirect === "string" ? route.query.redirect : "/";
     await router.replace(redirect);
   } catch (err: any) {
-    setError(err?.message || t("auth.login.invalid"));
+    setError(extractErrorMessage(err));
   } finally {
     isSubmitting.value = false;
   }

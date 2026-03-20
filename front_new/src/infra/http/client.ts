@@ -1,19 +1,49 @@
 import axios, { AxiosError } from 'axios'
 import type { InternalAxiosRequestConfig } from 'axios'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? 'http://localhost:8000'
+const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? '/api/v1'
+
+const baseURL = API_ORIGIN + API_PREFIX
 
 export const http = axios.create({
   baseURL,
   timeout: 15000,
 })
 
+type TokenResponse = {
+  access_token: string
+  refresh_token: string
+  token_type: string
+}
+
+function clearAuthStorage() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+}
+
+function redirectToLogin() {
+  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  window.location.href = `/auth/login?redirect=${encodeURIComponent(redirect)}`
+}
+
+function isAuthRequest(url?: string) {
+  if (!url) return false
+  return (
+    url.includes('/auth/login') ||
+    url.includes('/auth/register') ||
+    url.includes('/auth/refresh')
+  )
+}
+
 // 请求拦截：默认带 access_token
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
   if (token) {
     config.headers = config.headers ?? {}
-    config.headers.Authorization = `Bearer ${token}`
+    if (!config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
   }
   return config
 })
@@ -24,17 +54,26 @@ async function refreshAccessTokenOnce(): Promise<string> {
   const refreshToken = localStorage.getItem('refresh_token')
   if (!refreshToken) throw new Error('No refresh token')
 
-  // 用“裸 axios”请求 refresh，避免再次进入 http 拦截器（防止递归）
-  const { data } = await axios.post(
-    `${baseURL}/token/refresh`,
-    null,
-    { headers: { Authorization: `Bearer ${refreshToken}` } }
+  const { data } = await axios.post<TokenResponse>(
+    `${baseURL}/auth/refresh`,
+    {
+      refresh_token: refreshToken,
+    },
+    {
+      timeout: 15000,
+    },
   )
 
   const newAccessToken = data?.access_token
-  if (!newAccessToken) throw new Error('Refresh did not return access_token')
+  const newRefreshToken = data?.refresh_token
+
+  if (!newAccessToken || !newRefreshToken) {
+    throw new Error('Refresh did not return complete token pair')
+  }
 
   localStorage.setItem('access_token', newAccessToken)
+  localStorage.setItem('refresh_token', newRefreshToken)
+
   return newAccessToken
 }
 
@@ -42,32 +81,42 @@ http.interceptors.response.use(
   (resp) => resp,
   async (err: AxiosError) => {
     const status = err.response?.status
-    const original = err.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
+    const original = err.config as
+      | (InternalAxiosRequestConfig & { _retry?: boolean })
+      | undefined
 
-    // 非 401：直接抛错
-    if (status !== 401 || !original) throw err
+    if (status !== 401 || !original) {
+      throw err
+    }
 
-    // 避免死循环：同一个请求只重试一次
-    if (original._retry) throw err
+    // auth 自身请求失败，不再尝试 refresh
+    if (isAuthRequest(original.url)) {
+      throw err
+    }
+
+    // 同一个请求只重试一次
+    if (original._retry) {
+      throw err
+    }
     original._retry = true
 
     try {
-      // 并发锁：同一时刻只 refresh 一次
-      refreshPromise = refreshPromise ?? refreshAccessTokenOnce()
-      const newToken = await refreshPromise
-      refreshPromise = null
+      refreshPromise =
+        refreshPromise ??
+        refreshAccessTokenOnce().finally(() => {
+          refreshPromise = null
+        })
 
-      // 更新原请求头并重试
+      const newToken = await refreshPromise
+
       original.headers = original.headers ?? {}
       original.headers.Authorization = `Bearer ${newToken}`
+
       return http.request(original)
-    } catch (e) {
-      refreshPromise = null
-      // refresh 失败才判定彻底未登录
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      window.location.href = '/login'
+    } catch {
+      clearAuthStorage()
+      redirectToLogin()
       throw err
     }
-  }
+  },
 )

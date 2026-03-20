@@ -1,51 +1,73 @@
 import { http } from '@/infra/http/client'
 
-export type MeResponse = {
+export type UserResponse = {
   id: number
   email: string
   username: string | null
-  avatar_path: string | null
-  created_at: string
   auto_accept: boolean
-  rooms_owned?: any
-  rooms_joined?: any
+  avatar_url: string | null
 }
 
-export type User = {
-  id: number;
-  email: string;
-  username: string;
-  avatar_path: string | null;
-  created_at: string;
-  auto_accept?: boolean;
-};
+export type UserMeResponse = UserResponse
 
 export type UserListResponse = {
-  items: User[];
-  total: number;
-};
-
-export async function getUserById(userId: number) {
-  const { data } = await http.get<UserListResponse>("/users", {
-    params: { userid: userId },
-  });
-  return data.items?.[0] ?? null;
+  items: UserResponse[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
 }
 
-export async function getMe() {
-  const { data } = await http.get<MeResponse>('/users/me')
-  return data
-}
-
-export type UserUpdatePayload = {
-  email: string
+export type UserPatchPayload = {
   username?: string | null
   password?: string | null
-  avatar_base64?: string | null
   auto_accept?: boolean | null
 }
 
-export async function updateMe(payload: UserUpdatePayload) {
-  const { data } = await http.put<MeResponse>('/users/me', payload)
+export type AvatarUploadResponse = {
+  avatar_url: string | null
+}
+
+export async function getUserById(userId: number) {
+  const { data } = await http.get<UserResponse>(`/users/${userId}`)
+  return data
+}
+
+export async function getUsers(params?: {
+  page?: number
+  page_size?: number
+  username?: string | null
+  email?: string | null
+}) {
+  const { data } = await http.get<UserListResponse>('/users', {
+    params,
+  })
+  return data
+}
+
+export async function getMe() {
+  const { data } = await http.get<UserMeResponse>('/users/me')
+  return data
+}
+
+export async function patchMe(payload: UserPatchPayload) {
+  const { data } = await http.patch<UserMeResponse>('/users/me', payload)
+  return data
+}
+
+export async function patchMyAvatar(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+
+  const { data } = await http.patch<AvatarUploadResponse>(
+    '/users/me/avatar',
+    form,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    },
+  )
+
   return data
 }

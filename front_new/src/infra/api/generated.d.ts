@@ -4,7 +4,41 @@
  */
 
 export interface paths {
-    "/token": {
+    "/avatar/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Avatar */
+        get: operations["get_avatar_avatar__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register */
+        post: operations["register_api_v1_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -14,14 +48,32 @@ export interface paths {
         get?: never;
         put?: never;
         /** Login */
-        post: operations["login_token_post"];
+        post: operations["login_api_v1_auth_login_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/token/refresh": {
+    "/api/v1/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Me */
+        get: operations["get_me_api_v1_users_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Me */
+        patch: operations["patch_me_api_v1_users_me_patch"];
+        trace?: never;
+    };
+    "/api/v1/users/me/avatar": {
         parameters: {
             query?: never;
             header?: never;
@@ -30,75 +82,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Refresh Token */
-        post: operations["refresh_token_token_refresh_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Users
-         * @description 分页检索用户，支持邮箱、用户名、用户ID检索
-         */
-        get: operations["list_users_users_get"];
-        put?: never;
-        /** Create User */
-        post: operations["create_user_users_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/users/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read Users Me
-         * @description 获取当前登录用户的详细信息，包括基本信息、拥有的房间、加入的房间和通知
-         *
-         *     参数:
-         *     - rooms_skip: 房间分页起始位置
-         *     - rooms_limit: 房间分页数量
-         *     - notifications_skip: 通知分页起始位置
-         *     - notifications_limit: 通知分页数量
-         *     - include_room_details: 是否包含房间详细信息
-         *
-         *     返回:
-         *     - UserDetailsResponse: 包含用户基本信息、房间列表和通知列表的响应
-         */
-        get: operations["read_users_me_users_me_get"];
-        /** Update User Me */
-        put: operations["update_user_me_users_me_put"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch My Avatar */
+        patch: operations["patch_my_avatar_api_v1_users_me_avatar_patch"];
         trace?: never;
     };
-    "/users/{user_id}": {
+    "/api/v1/users": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Read User */
-        get: operations["read_user_users__user_id__get"];
+        /** Get Users */
+        get: operations["get_users_api_v1_users_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -107,15 +107,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/token/check": {
+    "/api/v1/users/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Check Access Token */
-        get: operations["check_access_token_token_check_get"];
+        /** Get User */
+        get: operations["get_user_api_v1_users__user_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -124,55 +124,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/rooms": {
+    "/api/v1/rooms": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Rooms
-         * @description 分页获取房间列表，支持按名称、房主、活跃状态筛选。
-         */
-        get: operations["list_rooms_rooms_get"];
+        /** Get Rooms */
+        get: operations["get_rooms_api_v1_rooms_get"];
         put?: never;
         /** Create Room */
-        post: operations["create_room_rooms_post"];
+        post: operations["create_room_api_v1_rooms_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/rooms/{room_id}": {
+    "/api/v1/rooms/{room_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Room Info */
-        get: operations["get_room_info_rooms__room_id__get"];
-        /** Update Room */
-        put: operations["update_room_rooms__room_id__put"];
+        /** Get Room */
+        get: operations["get_room_api_v1_rooms__room_id__get"];
+        put?: never;
         post?: never;
         /** Delete Room */
-        delete: operations["delete_room_rooms__room_id__delete"];
+        delete: operations["delete_room_api_v1_rooms__room_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch Room */
+        patch: operations["patch_room_api_v1_rooms__room_id__patch"];
         trace?: never;
     };
-    "/rooms/{room_id}/details": {
+    "/api/v1/rooms/{room_id}/members": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Room Details */
-        get: operations["get_room_details_rooms__room_id__details_get"];
+        /** Get Room Members */
+        get: operations["get_room_members_api_v1_rooms__room_id__members_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -181,7 +178,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/rooms/{room_id}/members": {
+    "/api/v1/rooms/{room_id}/join-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Room Join Requests */
+        get: operations["get_room_join_requests_api_v1_rooms__room_id__join_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rooms/{room_id}/join-requests/apply": {
         parameters: {
             query?: never;
             header?: never;
@@ -190,18 +204,32 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Create Room Invitation
-         * @description 将用户添加为房间成员
-         */
-        post: operations["create_room_invitation_rooms__room_id__members_post"];
+        /** Apply Room Join Request */
+        post: operations["apply_room_join_request_api_v1_rooms__room_id__join_requests_apply_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/rooms/{room_id}/members/{user_id}": {
+    "/api/v1/rooms/{room_id}/join-requests/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Invite Room Join Request */
+        post: operations["invite_room_join_request_api_v1_rooms__room_id__join_requests_invite_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rooms/{room_id}/members/{target_user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -212,24 +240,21 @@ export interface paths {
         put?: never;
         post?: never;
         /** Remove Room Member */
-        delete: operations["remove_room_member_rooms__room_id__members__user_id__delete"];
+        delete: operations["remove_room_member_api_v1_rooms__room_id__members__target_user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/users/me/room_ids": {
+    "/api/v1/notifications": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get My Room Ids
-         * @description 查询当前用户所在的所有房间id（包括拥有和加入的房间）
-         */
-        get: operations["get_my_room_ids_users_me_room_ids_get"];
+        /** Get Notifications */
+        get: operations["get_notifications_api_v1_notifications_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -238,18 +263,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/users/{user_id}/rooms": {
+    "/api/v1/notifications/unread-count": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get User Rooms By Member
-         * @description 查询用户作为成员（包括owner和member）关联的房间，支持分页
-         */
-        get: operations["get_user_rooms_by_member_users__user_id__rooms_get"];
+        /** Get Unread Count */
+        get: operations["get_unread_count_api_v1_notifications_unread_count_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -258,27 +280,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read Notifications
-         * @description 获取当前用户的通知列表，支持分页和状态筛选
-         */
-        get: operations["read_notifications_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/{notification_id}/respond": {
+    "/api/v1/notifications/{notification_id}/read": {
         parameters: {
             query?: never;
             header?: never;
@@ -287,18 +289,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Respond To Notification
-         * @description 处理用户对邀请或申请通知的响应 (接受/拒绝)
-         */
-        post: operations["respond_to_notification_notifications__notification_id__respond_post"];
+        /** Mark Notification As Read */
+        post: operations["mark_notification_as_read_api_v1_notifications__notification_id__read_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/notifications/{notification_id}": {
+    "/api/v1/notifications/read-all": {
         parameters: {
             query?: never;
             header?: never;
@@ -307,50 +306,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
-        /** Delete Notification */
-        delete: operations["delete_notification_notifications__notification_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/rooms/{room_id}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Room Messages
-         * @description 获取指定房间的消息列表
-         */
-        get: operations["get_room_messages_rooms__room_id__messages_get"];
-        put?: never;
-        /**
-         * Create Message
-         * @description 在指定房间中创建新消息
-         */
-        post: operations["create_message_rooms__room_id__messages_post"];
+        /** Mark All Notifications As Read */
+        post: operations["mark_all_notifications_as_read_api_v1_notifications_read_all_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/messages/{message_id}": {
+    "/api/v1/join-requests/{request_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Message
-         * @description 获取指定消息的详细信息
-         */
-        get: operations["get_message_messages__message_id__get"];
+        /** Get Join Request */
+        get: operations["get_join_request_api_v1_join_requests__request_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -359,35 +331,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/ws/status": {
+    "/api/v1/join-requests/{request_id}/approve": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Websocket Status
-         * @description WebSocket连接状态
-         */
-        get: operations["websocket_status_ws_status_get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** Approve Join Request */
+        post: operations["approve_join_request_api_v1_join_requests__request_id__approve_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/": {
+    "/api/v1/join-requests/{request_id}/reject": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Read Root */
-        get: operations["read_root__get"];
+        get?: never;
+        put?: never;
+        /** Reject Join Request */
+        post: operations["reject_join_request_api_v1_join_requests__request_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health */
+        get: operations["health_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -400,177 +386,187 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Body_login_token_post */
-        Body_login_token_post: {
-            /** Email */
-            email: string;
-            /** Password */
-            password: string;
+        /** AvatarUploadResponse */
+        AvatarUploadResponse: {
+            /** Avatar Url */
+            avatar_url: string | null;
+        };
+        /** Body_patch_my_avatar_api_v1_users_me_avatar_patch */
+        Body_patch_my_avatar_api_v1_users_me_avatar_patch: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** MessageCreate */
-        MessageCreate: {
-            /** Content */
-            content: string;
+        /** LoginRequest */
+        LoginRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
         };
-        /** MessageListResponse */
-        MessageListResponse: {
+        /** NotificationListResponse */
+        NotificationListResponse: {
             /** Items */
-            items: components["schemas"]["MessageResponse"][];
+            items?: components["schemas"]["NotificationResponse"][];
             /** Total */
             total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total Pages */
+            total_pages: number;
         };
-        /** MessageResponse */
-        MessageResponse: {
-            /** Content */
-            content: string;
+        /**
+         * NotificationRelatedType
+         * @enum {string}
+         */
+        NotificationRelatedType: "room_join_request" | "announcement";
+        /** NotificationResponse */
+        NotificationResponse: {
             /** Id */
             id: number;
+            /** Recipient User Id */
+            recipient_user_id: number;
+            /** Actor User Id */
+            actor_user_id: number | null;
+            notification_type: components["schemas"]["NotificationType"];
+            related_type: components["schemas"]["NotificationRelatedType"] | null;
+            /** Related Id */
+            related_id: number | null;
+            /** Is Read */
+            is_read: boolean;
+            /** Read At */
+            read_at: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** User Id */
-            user_id?: number | null;
+            actor?: components["schemas"]["UserBriefResponse"] | null;
         };
-        /** Notification */
-        Notification: {
-            /** Content */
-            content: string;
-            /** Recipient Id */
-            recipient_id: number;
-            /** Sender Id */
-            sender_id?: number | null;
-            /**
-             * Status
-             * @default
-             */
-            status: string;
-            /** Id */
-            id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Is Deleted
-             * @default false
-             */
-            is_deleted: boolean;
-        };
-        /** NotificationAction */
-        NotificationAction: {
-            /** Action */
-            action: string;
-            /** Token */
-            token?: string | null;
-        };
-        /** NotificationList */
-        NotificationList: {
-            /** Items */
-            items: components["schemas"]["Notification"][];
-            /** Total */
-            total: number;
-        };
-        /** Room */
-        Room: {
-            /** Name */
-            name: string;
-            /** Is Public */
-            is_public?: boolean | null;
-            /** Config */
-            config?: string | null;
-            /** Id */
-            id: number;
-            /** Owner Id */
-            owner_id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Is Active */
-            is_active: boolean;
+        /**
+         * NotificationType
+         * @enum {string}
+         */
+        NotificationType: "system" | "workflow";
+        /** NotificationUnreadCountResponse */
+        NotificationUnreadCountResponse: {
+            /** Unread Count */
+            unread_count: number;
         };
         /** RoomCreate */
         RoomCreate: {
             /** Name */
             name: string;
-            /** Is Public */
-            is_public?: boolean | null;
+            /**
+             * Is Public
+             * @default true
+             */
+            is_public: boolean | null;
             /** Config */
             config?: string | null;
         };
-        /** RoomDetailsResponse */
-        RoomDetailsResponse: {
-            /** Name */
-            name: string;
-            /** Is Public */
-            is_public?: boolean | null;
-            /** Config */
-            config?: string | null;
+        /**
+         * RoomJoinRequestAction
+         * @enum {string}
+         */
+        RoomJoinRequestAction: "pending" | "approved" | "rejected";
+        /** RoomJoinRequestCreate */
+        RoomJoinRequestCreate: {
+            /** Target User Id */
+            target_user_id: number;
+        };
+        /** RoomJoinRequestListResponse */
+        RoomJoinRequestListResponse: {
+            /** Items */
+            items?: components["schemas"]["RoomJoinRequestResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total Pages */
+            total_pages: number;
+        };
+        /** RoomJoinRequestResponse */
+        RoomJoinRequestResponse: {
             /** Id */
             id: number;
-            /** Owner Id */
-            owner_id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Is Active */
-            is_active: boolean;
-            owner: components["schemas"]["User"];
-            /** Members */
-            members: components["schemas"]["User"][];
-            /**
-             * Message Count
-             * @default 0
-             */
-            message_count: number;
+            /** Room Id */
+            room_id: number;
+            /** Initiator User Id */
+            initiator_user_id: number;
+            /** Target User Id */
+            target_user_id: number;
+            source: components["schemas"]["RoomJoinRequestSource"];
+            status: components["schemas"]["RoomJoinRequestStatus"];
+            room_action: components["schemas"]["RoomJoinRequestAction"];
+            target_action: components["schemas"]["RoomJoinRequestAction"];
+            /** Room Action By User Id */
+            room_action_by_user_id: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            initiator?: components["schemas"]["UserBriefResponse"] | null;
+            target?: components["schemas"]["UserBriefResponse"] | null;
+            room_action_by?: components["schemas"]["UserBriefResponse"] | null;
         };
-        /** RoomList */
-        RoomList: {
+        /**
+         * RoomJoinRequestSource
+         * @enum {string}
+         */
+        RoomJoinRequestSource: "apply" | "invite" | "member_invite";
+        /**
+         * RoomJoinRequestStatus
+         * @enum {string}
+         */
+        RoomJoinRequestStatus: "pending" | "approved" | "rejected" | "cancelled";
+        /** RoomListResponse */
+        RoomListResponse: {
             /** Items */
-            items: components["schemas"]["Room"][];
+            items?: components["schemas"]["RoomResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total Pages */
+            total_pages: number;
+        };
+        /** RoomMemberListResponse */
+        RoomMemberListResponse: {
+            /** Items */
+            items?: components["schemas"]["RoomMemberResponse"][];
             /** Total */
             total: number;
         };
-        /** RoomMemberAdd */
-        RoomMemberAdd: {
+        /** RoomMemberResponse */
+        RoomMemberResponse: {
+            /** Room Id */
+            room_id: number;
             /** User Id */
             user_id: number;
-            /** Action */
-            action: string;
+            /** Joined At */
+            joined_at: string | null;
+            role: components["schemas"]["RoomRole"];
+            user?: components["schemas"]["UserBriefResponse"] | null;
         };
-        /** RoomResponse */
-        RoomResponse: {
-            /** Name */
-            name: string;
-            /** Is Public */
-            is_public?: boolean | null;
-            /** Config */
-            config?: string | null;
-            /** Id */
-            id: number;
-            /** Owner Id */
-            owner_id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Is Active */
-            is_active: boolean;
-        };
-        /** RoomUpdate */
-        RoomUpdate: {
+        /** RoomPatch */
+        RoomPatch: {
             /** Name */
             name?: string | null;
             /** Is Public */
@@ -578,29 +574,49 @@ export interface components {
             /** Config */
             config?: string | null;
         };
-        /** User */
-        User: {
+        /** RoomResponse */
+        RoomResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Owner Id */
+            owner_id: number;
+            /** Is Public */
+            is_public: boolean | null;
+            /** Config */
+            config: string | null;
+        };
+        /**
+         * RoomRole
+         * @enum {string}
+         */
+        RoomRole: "owner" | "manager" | "member";
+        /** TokenResponse */
+        TokenResponse: {
+            /** Access Token */
+            access_token: string;
+            /** Refresh Token */
+            refresh_token: string;
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type: string;
+        };
+        /** UserBriefResponse */
+        UserBriefResponse: {
+            /** Id */
+            id: number;
             /**
              * Email
              * Format: email
              */
             email: string;
             /** Username */
-            username: string;
-            /** Id */
-            id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Avatar Path */
-            avatar_path?: string | null;
-            /**
-             * Auto Accept
-             * @default false
-             */
-            auto_accept: boolean;
+            username: string | null;
+            /** Avatar Url */
+            readonly avatar_url: string | null;
         };
         /** UserCreate */
         UserCreate: {
@@ -610,82 +626,63 @@ export interface components {
              */
             email: string;
             /** Username */
-            username: string;
+            username?: string | null;
             /** Password */
             password: string;
         };
-        /** UserDetailsResponse */
-        UserDetailsResponse: {
+        /** UserListResponse */
+        UserListResponse: {
+            /** Items */
+            items?: components["schemas"]["UserResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total Pages */
+            total_pages: number;
+        };
+        /** UserMeResponse */
+        UserMeResponse: {
+            /** Id */
+            id: number;
             /**
              * Email
              * Format: email
              */
             email: string;
             /** Username */
-            username: string;
-            /** Id */
-            id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Avatar Path */
-            avatar_path?: string | null;
-            /**
-             * Auto Accept
-             * @default false
-             */
+            username: string | null;
+            /** Auto Accept */
             auto_accept: boolean;
-            rooms_owned: components["schemas"]["RoomList"];
-            rooms_joined: components["schemas"]["RoomList"];
+            /** Avatar Url */
+            readonly avatar_url: string | null;
         };
-        /** UserList */
-        UserList: {
-            /** Items */
-            items: components["schemas"]["User"][];
-            /** Total */
-            total: number;
+        /** UserPatch */
+        UserPatch: {
+            /** Username */
+            username?: string | null;
+            /** Password */
+            password?: string | null;
+            /** Auto Accept */
+            auto_accept?: boolean | null;
         };
         /** UserResponse */
         UserResponse: {
-            /**
-             * Email
-             * Format: email
-             */
-            email: string;
-            /** Username */
-            username: string;
             /** Id */
             id: number;
             /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Avatar Path */
-            avatar_path?: string | null;
-            /**
-             * Auto Accept
-             * @default false
-             */
-            auto_accept: boolean;
-        };
-        /** UserUpdate */
-        UserUpdate: {
-            /**
              * Email
              * Format: email
              */
             email: string;
-            /** Password */
-            password?: string | null;
             /** Username */
-            username?: string | null;
-            /** Avatar Base64 */
-            avatar_base64?: string | null;
+            username: string | null;
             /** Auto Accept */
-            auto_accept?: boolean | null;
+            auto_accept: boolean;
+            /** Avatar Url */
+            readonly avatar_url: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -705,18 +702,16 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    login_token_post: {
+    get_avatar_avatar__key__get: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                key: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/x-www-form-urlencoded": components["schemas"]["Body_login_token_post"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -738,67 +733,7 @@ export interface operations {
             };
         };
     };
-    refresh_token_token_refresh_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    list_users_users_get: {
-        parameters: {
-            query?: {
-                /** @description 分页起始位置 */
-                skip?: number;
-                /** @description 分页数量 */
-                limit?: number;
-                /** @description 邮箱精确匹配 */
-                email?: string | null;
-                /** @description 用户名模糊匹配 */
-                username?: string | null;
-                /** @description 用户ID精确匹配 */
-                userid?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserList"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_user_users_post: {
+    register_api_v1_auth_register_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -812,12 +747,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["User"];
+                    "application/json": components["schemas"]["UserResponse"];
                 };
             };
             /** @description Validation Error */
@@ -831,10 +766,132 @@ export interface operations {
             };
         };
     };
-    read_users_me_users_me_get: {
+    login_api_v1_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_me_api_v1_users_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserMeResponse"];
+                };
+            };
+        };
+    };
+    patch_me_api_v1_users_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserMeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_my_avatar_api_v1_users_me_avatar_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_patch_my_avatar_api_v1_users_me_avatar_patch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_users_api_v1_users_get: {
         parameters: {
             query?: {
-                include_room_details?: boolean;
+                page?: number;
+                page_size?: number;
+                username?: string | null;
+                email?: string | null;
             };
             header?: never;
             path?: never;
@@ -848,7 +905,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserDetailsResponse"];
+                    "application/json": components["schemas"]["UserListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -862,40 +919,7 @@ export interface operations {
             };
         };
     };
-    update_user_me_users_me_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UserUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["User"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    read_user_users__user_id__get: {
+    get_user_api_v1_users__user_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -926,41 +950,12 @@ export interface operations {
             };
         };
     };
-    check_access_token_token_check_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    list_rooms_rooms_get: {
+    get_rooms_api_v1_rooms_get: {
         parameters: {
             query?: {
-                /** @description 分页起始位置 */
-                skip?: number;
-                /** @description 分页数量 */
-                limit?: number;
-                /** @description 房间名模糊搜索 */
-                name?: string;
-                /** @description 房主ID */
-                owner_id?: number;
-                /** @description 是否活跃 */
-                is_active?: boolean;
-                /** @description 是否公开房间 */
-                is_public?: boolean;
+                page?: number;
+                page_size?: number;
+                name?: string | null;
             };
             header?: never;
             path?: never;
@@ -974,7 +969,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoomList"];
+                    "application/json": components["schemas"]["RoomListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -988,7 +983,7 @@ export interface operations {
             };
         };
     };
-    create_room_rooms_post: {
+    create_room_api_v1_rooms_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1002,6 +997,37 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_room_api_v1_rooms__room_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1021,7 +1047,7 @@ export interface operations {
             };
         };
     };
-    get_room_info_rooms__room_id__get: {
+    delete_room_api_v1_rooms__room_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -1031,6 +1057,39 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_room_api_v1_rooms__room_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoomPatch"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -1052,71 +1111,7 @@ export interface operations {
             };
         };
     };
-    update_room_rooms__room_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                room_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RoomUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Room"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_room_rooms__room_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                room_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_room_details_rooms__room_id__details_get: {
+    get_room_members_api_v1_rooms__room_id__members_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1133,7 +1128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoomDetailsResponse"];
+                    "application/json": components["schemas"]["RoomMemberListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1147,7 +1142,74 @@ export interface operations {
             };
         };
     };
-    create_room_invitation_rooms__room_id__members_post: {
+    get_room_join_requests_api_v1_rooms__room_id__join_requests_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                status?: components["schemas"]["RoomJoinRequestStatus"] | null;
+                source?: components["schemas"]["RoomJoinRequestSource"] | null;
+            };
+            header?: never;
+            path: {
+                room_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomJoinRequestListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_room_join_request_api_v1_rooms__room_id__join_requests_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invite_room_join_request_api_v1_rooms__room_id__join_requests_invite_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1158,7 +1220,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RoomMemberAdd"];
+                "application/json": components["schemas"]["RoomJoinRequestCreate"];
             };
         };
         responses: {
@@ -1182,13 +1244,13 @@ export interface operations {
             };
         };
     };
-    remove_room_member_rooms__room_id__members__user_id__delete: {
+    remove_room_member_api_v1_rooms__room_id__members__target_user_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 room_id: number;
-                user_id: number;
+                target_user_id: number;
             };
             cookie?: never;
         };
@@ -1212,7 +1274,41 @@ export interface operations {
             };
         };
     };
-    get_my_room_ids_users_me_room_ids_get: {
+    get_notifications_api_v1_notifications_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                is_read?: boolean | null;
+                notification_type?: components["schemas"]["NotificationType"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_unread_count_api_v1_notifications_unread_count_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1227,117 +1323,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": number[];
+                    "application/json": components["schemas"]["NotificationUnreadCountResponse"];
                 };
             };
         };
     };
-    get_user_rooms_by_member_users__user_id__rooms_get: {
-        parameters: {
-            query?: {
-                /** @description 分页起始位置 */
-                skip?: number;
-                /** @description 分页数量 */
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RoomList"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    read_notifications_notifications_get: {
-        parameters: {
-            query?: {
-                skip?: number;
-                limit?: number;
-                /** @description 通知状态筛选，如'unread', 'read'等 */
-                status?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationList"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    respond_to_notification_notifications__notification_id__respond_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                notification_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NotificationAction"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_notification_notifications__notification_id__delete: {
+    mark_notification_as_read_api_v1_notifications__notification_id__read_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1349,34 +1340,49 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_notifications_as_read_api_v1_notifications_read_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
-    get_room_messages_rooms__room_id__messages_get: {
+    get_join_request_api_v1_join_requests__request_id__get: {
         parameters: {
-            query?: {
-                /** @description 跳过的消息数量 */
-                skip?: number;
-                /** @description 返回的消息数量 */
-                limit?: number;
-            };
+            query?: never;
             header?: never;
             path: {
-                room_id: number;
+                request_id: number;
             };
             cookie?: never;
         };
@@ -1388,7 +1394,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageListResponse"];
+                    "application/json": components["schemas"]["RoomJoinRequestResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1402,47 +1408,12 @@ export interface operations {
             };
         };
     };
-    create_message_rooms__room_id__messages_post: {
+    approve_join_request_api_v1_join_requests__request_id__approve_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                room_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MessageCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_message_messages__message_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                message_id: number;
+                request_id: number;
             };
             cookie?: never;
         };
@@ -1454,7 +1425,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageResponse"];
+                    "application/json": components["schemas"]["RoomJoinRequestResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1468,7 +1439,38 @@ export interface operations {
             };
         };
     };
-    websocket_status_ws_status_get: {
+    reject_join_request_api_v1_join_requests__request_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomJoinRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1483,27 +1485,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    read_root__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

@@ -1,9 +1,9 @@
 import { defineStore } from "pinia";
-import { getUserById, type User } from "@/infra/api/users.api";
+import { getUserById, type UserResponse } from "@/infra/api/users.api";
 import { getRoomById, type Room } from "@/infra/api/rooms.api";
 
 type State = {
-  usersById: Record<number, User>;
+  usersById: Record<number, UserResponse>;
   roomsById: Record<number, Room>;
   loadingUsers: Record<number, boolean>;
   loadingRooms: Record<number, boolean>;
@@ -23,16 +23,17 @@ export const useEntitiesStore = defineStore("entities", {
         new Set(userIds.filter((v): v is number => typeof v === "number" && v > 0)),
       );
 
-      const toFetch = ids.filter((id) => !this.usersById[id] && !this.loadingUsers[id]);
+      const toFetch = ids.filter(
+        (id) => !this.usersById[id] && !this.loadingUsers[id],
+      );
       if (toFetch.length === 0) return;
 
-      // 简易并发：全并发即可（量很小）；以后多了再做并发上限
       await Promise.all(
         toFetch.map(async (id) => {
           this.loadingUsers[id] = true;
           try {
             const u = await getUserById(id);
-            if (u) this.usersById[id] = u;
+            this.usersById[id] = u;
           } finally {
             this.loadingUsers[id] = false;
           }
@@ -45,7 +46,9 @@ export const useEntitiesStore = defineStore("entities", {
         new Set(roomIds.filter((v): v is number => typeof v === "number" && v > 0)),
       );
 
-      const toFetch = ids.filter((id) => !this.roomsById[id] && !this.loadingRooms[id]);
+      const toFetch = ids.filter(
+        (id) => !this.roomsById[id] && !this.loadingRooms[id],
+      );
       if (toFetch.length === 0) return;
 
       await Promise.all(
@@ -53,7 +56,7 @@ export const useEntitiesStore = defineStore("entities", {
           this.loadingRooms[id] = true;
           try {
             const r = await getRoomById(id);
-            if (r) this.roomsById[id] = r;
+            this.roomsById[id] = r;
           } finally {
             this.loadingRooms[id] = false;
           }

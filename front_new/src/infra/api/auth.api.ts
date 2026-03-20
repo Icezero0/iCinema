@@ -1,32 +1,33 @@
 import { http } from '@/infra/http/client'
 
-export type LoginResponse = {
+export type TokenResponse = {
   access_token: string
   refresh_token: string
   token_type: 'bearer' | string
 }
 
-export type RefreshResponse = {
-  access_token: string
-  token_type: 'bearer' | string
+export type RegisterPayload = {
+  email: string
+  username?: string | null
+  password: string
 }
 
 export async function login(email: string, password: string) {
-  const body = new URLSearchParams()
-  body.set('email', email)
-  body.set('password', password)
-
-  const { data } = await http.post<LoginResponse>('/token', body, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  const { data } = await http.post<TokenResponse>('/auth/login', {
+    email,
+    password,
   })
   return data
 }
 
+export async function register(payload: RegisterPayload) {
+  const { data } = await http.post('/auth/register', payload)
+  return data
+}
+
 export async function refreshAccessToken(refreshToken: string) {
-  const { data } = await http.post<RefreshResponse>(
-    '/token/refresh',
-    null,
-    { headers: { Authorization: `Bearer ${refreshToken}` } }
-  )
+  const { data } = await http.post<TokenResponse>('/auth/refresh', {
+    refresh_token: refreshToken,
+  })
   return data
 }

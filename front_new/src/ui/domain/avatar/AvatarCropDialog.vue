@@ -32,7 +32,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
-  (e: "done", dataUrl: string): void;
+  (e: "done", file: File): void;
   (e: "cancel"): void;
 }>();
 
@@ -78,18 +78,40 @@ function onCancel() {
 function rotateLeft() {
   cropperRef.value?.rotate(-90);
 }
+
 function rotateRight() {
   cropperRef.value?.rotate(90);
 }
+
 function reset() {
   cropperRef.value?.reset();
 }
 
-function usePhoto() {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: "image/jpeg" | "image/png",
+  quality: number,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Failed to export cropped avatar"));
+          return;
+        }
+        resolve(blob);
+      },
+      type,
+      quality,
+    );
+  });
+}
+
+async function usePhoto() {
   const result = cropperRef.value?.getResult();
   if (!result?.canvas) return;
 
-  const canvas = result.canvas;
+  const canvas = result.canvas as HTMLCanvasElement;
   const out = document.createElement("canvas");
   out.width = props.outputSize;
   out.height = props.outputSize;
@@ -101,9 +123,16 @@ function usePhoto() {
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(canvas, 0, 0, out.width, out.height);
 
-  const dataUrl = out.toDataURL(props.outputMime, props.outputQuality);
-  emit("done", dataUrl);
-  close();
+  try {
+    const blob = await canvasToBlob(out, props.outputMime, props.outputQuality);
+    const ext = props.outputMime === "image/png" ? "png" : "jpg";
+    const file = new File([blob], `avatar.${ext}`, { type: props.outputMime });
+
+    emit("done", file);
+    close();
+  } catch (err) {
+    console.error(err);
+  }
 }
 </script>
 
