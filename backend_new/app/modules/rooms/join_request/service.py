@@ -71,7 +71,7 @@ class RoomJoinRequestService:
             room_action=RoomJoinRequestAction.PENDING,
             target_action=RoomJoinRequestAction.APPROVED,
         )
-        
+
         reviewer_user_ids = await self.membership_service.get_room_user_ids_by_permission(
             db,
             room_id=room_id,
@@ -81,10 +81,9 @@ class RoomJoinRequestService:
         for reviewer_user_id in reviewer_user_ids:
             if reviewer_user_id == user.id:
                 continue
-            await self._notify_room_join_request_updated(
+            await self._send_room_join_request_notification(
                 db,
                 recipient_user_id=reviewer_user_id,
-                actor_user_id=user.id,
                 request_id=request.id,
             )
 
@@ -124,17 +123,15 @@ class RoomJoinRequestService:
             target_user_id=target_user_id,
         )
 
-        room_action = RoomJoinRequestAction.PENDING
-        source = RoomJoinRequestSource.MEMBER_INVITE
-        room_action_by_user_id = None
-
+        can_review = True
         try:
             require_room_permission(role, RoomPermission.REVIEW_JOIN_REQUEST)
-            room_action = RoomJoinRequestAction.APPROVED
-            source = RoomJoinRequestSource.INVITE
-            room_action_by_user_id = user.id
         except ForbiddenError:
-            pass
+            can_review = False
+
+        room_action = RoomJoinRequestAction.APPROVED if can_review else RoomJoinRequestAction.PENDING
+        source = RoomJoinRequestSource.INVITE if can_review else RoomJoinRequestSource.MEMBER_INVITE
+        room_action_by_user_id = user.id if can_review else None
 
         request = await self.repo.create_request(
             db,
@@ -148,12 +145,29 @@ class RoomJoinRequestService:
             room_action_by_user_id=room_action_by_user_id,
         )
 
-        await self._notify_room_join_request_updated(
+        # 被邀请人始终收到通知
+        await self._send_room_join_request_notification(
             db,
             recipient_user_id=target_user_id,
-            actor_user_id=user.id,
             request_id=request.id,
         )
+
+        # 只有邀请人没有审核权限时，房间侧 reviewer 才需要收到通知
+        if not can_review:
+            reviewer_user_ids = await self.membership_service.get_room_user_ids_by_permission(
+                db,
+                room_id=room_id,
+                permission=RoomPermission.REVIEW_JOIN_REQUEST,
+            )
+
+            for reviewer_user_id in reviewer_user_ids:
+                if reviewer_user_id == user.id:
+                    continue
+                await self._send_room_join_request_notification(
+                    db,
+                    recipient_user_id=reviewer_user_id,
+                    request_id=request.id,
+                )
 
         await db.commit()
         await db.refresh(request)
@@ -381,23 +395,6 @@ class RoomJoinRequestService:
         if member:
             raise ConflictError("User is already a room member.")
 
-    async def _ensure_can_invite(
-        self,
-        db: AsyncSession,
-        *,
-        room_id: int,
-        user: User,
-    ) -> None:
-        role = await self.membership_service.find_room_role(
-            db,
-            room_id=room_id,
-            user_id=user.id,
-        )
-        if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
-
-        require_room_permission(role, RoomPermission.INVITE_USER)
-
     async def _ensure_can_review_by_room(
         self,
         db: AsyncSession,
@@ -415,19 +412,18 @@ class RoomJoinRequestService:
 
         require_room_permission(role, RoomPermission.REVIEW_JOIN_REQUEST)
 
-    async def _notify_room_join_request_updated(
+    async def _send_room_join_request_notification(
         self,
         db: AsyncSession,
         *,
         recipient_user_id: int,
-        actor_user_id: int | None,
         request_id: int,
     ) -> None:
-        await self.notification_service.create_notification(
+        await self.notification_service.send_notification(
             db,
             payload=NotificationCreate(
                 recipient_user_id=recipient_user_id,
-                actor_user_id=actor_user_id,
+                actor_user_id=None,
                 notification_type=NotificationType.WORKFLOW,
                 related_type=NotificationRelatedType.ROOM_JOIN_REQUEST,
                 related_id=request_id,
@@ -444,18 +440,7 @@ class RoomJoinRequestService:
             or request.target_action == RoomJoinRequestAction.REJECTED
         ):
             request.status = RoomJoinRequestStatus.REJECTED
-            request = await self.repo.save_request(db, request)
-
-            actor_user_id = request.room_action_by_user_id
-                
-            if request.target_action != RoomJoinRequestAction.REJECTED:
-                await self._notify_room_join_request_updated(
-                    db,
-                    recipient_user_id=request.target_user_id,
-                    actor_user_id=actor_user_id,
-                    request_id=request.id,
-                )
-            return request
+            return await self.repo.save_request(db, request)
 
         if (
             request.room_action == RoomJoinRequestAction.APPROVED
@@ -470,18 +455,6 @@ class RoomJoinRequestService:
                 role=RoomRole.MEMBER,
             )
 
-            request = await self.repo.save_request(db, request)
-
-            actor_user_id = request.room_action_by_user_id
-            if request.target_action == RoomJoinRequestAction.APPROVED:
-                actor_user_id = request.target_user_id
-
-            await self._notify_room_join_request_updated(
-                db,
-                recipient_user_id=request.target_user_id,
-                actor_user_id=actor_user_id,
-                request_id=request.id,
-            )
-            return request
+            return await self.repo.save_request(db, request)
 
         return await self.repo.save_request(db, request)

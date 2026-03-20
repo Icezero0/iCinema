@@ -78,6 +78,22 @@ class NotificationService:
             recipient_user_id=user.id,
         )
 
+    async def send_notification(
+        self,
+        db: AsyncSession,
+        *,
+        payload: NotificationCreate,
+    ) -> None:
+        await self.repo.create_notification(
+            db,
+            recipient_user_id=payload.recipient_user_id,
+            actor_user_id=payload.actor_user_id,
+            notification_type=payload.notification_type.value,
+            related_type=payload.related_type.value if payload.related_type else None,
+            related_id=payload.related_id,
+        )
+
+    
     async def create_notification(
         self,
         db: AsyncSession,
