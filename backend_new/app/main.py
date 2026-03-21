@@ -1,19 +1,30 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
-from app.api.v1.avatar import router as avatar_router
+from app.api.public_resources import router as public_resources_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.core.startup import ensure_database_file, ensure_runtime_paths
 from app.realtime.ws_router import router as ws_router
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await ensure_runtime_paths()
+    await ensure_database_file()
+    yield
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         debug=settings.debug,
+        lifespan=lifespan,
     )
 
     app.add_middleware(
@@ -24,10 +35,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(avatar_router)
-
     register_exception_handlers(app)
 
+    app.include_router(public_resources_router)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     app.include_router(ws_router)
 

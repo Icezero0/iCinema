@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.core.validators import normalize_email
-from app.modules.users.avatar_service import AvatarService
+from app.modules.media.service import MediaService
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 from app.modules.users.schemas import UserCreate, UserPatch
@@ -14,7 +14,24 @@ from app.modules.users.schemas import UserCreate, UserPatch
 class UserService:
     def __init__(self) -> None:
         self.repo = UserRepository()
-        self.avatar_service = AvatarService()
+        self.media_service = MediaService()
+
+    async def hydrate_user_avatar_key(self, db: AsyncSession, user: User) -> User:
+        avatar_key = await self.media_service.get_user_avatar_storage_key(db, user.id)
+        user.avatar_key = avatar_key
+        return user
+
+    async def hydrate_users_avatar_key(self, db: AsyncSession, users: list[User]) -> list[User]:
+        if not users:
+            return users
+
+        user_ids = [user.id for user in users]
+        avatar_key_map = await self.media_service.get_user_avatar_storage_key_map(db, user_ids)
+
+        for user in users:
+            user.avatar_key = avatar_key_map.get(user.id)
+
+        return users
 
     async def create_user(self, db: AsyncSession, payload: UserCreate) -> User:
         if await self.repo.get_by_email(db, payload.email):
@@ -27,7 +44,7 @@ class UserService:
             hashed_password=hash_password(payload.password),
         )
         await db.commit()
-        return user
+        return await self.hydrate_user_avatar_key(db, user)
 
     async def find_user_by_id(self, db: AsyncSession, user_id: int) -> User | None:
         return await self.repo.get_by_id(db, user_id)
@@ -36,7 +53,7 @@ class UserService:
         user = await self.find_user_by_id(db, user_id)
         if not user:
             raise NotFoundError("User not found")
-        return user
+        return await self.hydrate_user_avatar_key(db, user)
 
     async def find_user_by_email(self, db: AsyncSession, email: str) -> User | None:
         return await self.repo.get_by_email(db, normalize_email(email))
@@ -60,6 +77,8 @@ class UserService:
             username=username,
             email=email,
         )
+
+        items = await self.hydrate_users_avatar_key(db, items)
 
         total_pages = ceil(total / page_size) if total > 0 else 0
 
@@ -85,11 +104,14 @@ class UserService:
 
         user = await self.repo.save(db, user)
         await db.commit()
-        return user
+        return await self.hydrate_user_avatar_key(db, user)
 
     async def update_avatar(self, db: AsyncSession, user: User, file) -> User:
-        key = await self.avatar_service.save_avatar(file=file, user_id=user.id)
-        user.avatar_key = key
+        await self.media_service.create_avatar_asset(
+            db,
+            file=file,
+            user=user,
+        )
         user = await self.repo.save(db, user)
         await db.commit()
-        return user
+        return await self.hydrate_user_avatar_key(db, user)

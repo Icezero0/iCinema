@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # 上传目录
     upload_dir: str | None = Field(default=None, alias="UPLOAD_DIR")
     avatar_subdir: str = Field("avatars", alias="AVATAR_SUBDIR")
+    image_subdir: str = Field("images", alias="IMAGE_SUBDIR")
+    sticker_subdir: str = Field("stickers", alias="STICKER_SUBDIR")
+    video_subdir: str = Field("videos", alias="VIDEO_SUBDIR")
 
     # JWT
     jwt_secret_key: str = Field(..., alias="JWT_SECRET_KEY")
@@ -26,8 +29,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(60, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
 
-    # 头像文件路径前缀
+    # 文件路径前缀
     avatar_public_prefix: str = Field("/avatar", alias="AVATAR_PUBLIC_PREFIX")
+    image_public_prefix: str = Field("/image", alias="IMAGE_PUBLIC_PREFIX")
+    sticker_public_prefix: str = Field("/sticker", alias="STICKER_PUBLIC_PREFIX")
+    video_public_prefix: str = Field("/video", alias="VIDEO_PUBLIC_PREFIX")
 
     # WS
     ws_auth_timeout_seconds: int = 30
@@ -42,7 +48,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ---------- derived paths ----------
     @property
     def data_dir_path(self) -> Path:
         return Path(self.data_dir).resolve()
@@ -53,7 +58,6 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        # sqlite+aiosqlite: absolute path
         return f"sqlite+aiosqlite:///{self.db_path.as_posix()}"
 
     @property
@@ -65,6 +69,19 @@ class Settings(BaseSettings):
     @property
     def avatar_dir_path(self) -> Path:
         return (self.upload_dir_path / self.avatar_subdir).resolve()
+
+    @property
+    def image_dir_path(self) -> Path:
+        return (self.upload_dir_path / self.image_subdir).resolve()
+
+    @property
+    def sticker_dir_path(self) -> Path:
+        return (self.upload_dir_path / self.sticker_subdir).resolve()
+
+    @property
+    def video_dir_path(self) -> Path:
+        return (self.upload_dir_path / self.video_subdir).resolve()
+
 
 @lru_cache
 def get_settings() -> Settings:
