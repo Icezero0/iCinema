@@ -2,6 +2,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.media.models import MessageResourceRef
 from app.modules.messages.models import Message
 
 
@@ -23,6 +24,26 @@ class MessageRepository:
         await db.flush()
         await db.refresh(message)
         return message
+
+    async def create_message_resource_refs(
+        self,
+        db: AsyncSession,
+        *,
+        message_id: int,
+        media_asset_ids: list[int],
+    ) -> None:
+        if not media_asset_ids:
+            return
+
+        rows = [
+            MessageResourceRef(
+                message_id=message_id,
+                media_asset_id=media_asset_id,
+            )
+            for media_asset_id in media_asset_ids
+        ]
+        db.add_all(rows)
+        await db.flush()
 
     async def find_message_by_id(
         self,

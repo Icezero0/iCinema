@@ -35,6 +35,24 @@ class Settings(BaseSettings):
     sticker_public_prefix: str = Field("/sticker", alias="STICKER_PUBLIC_PREFIX")
     video_public_prefix: str = Field("/video", alias="VIDEO_PUBLIC_PREFIX")
 
+    # Emoji catalog（远程）
+    emoji_catalog_url: str = Field(
+        "https://koishi.js.org/QFace/assets/qq_emoji/_index.json",
+        alias="EMOJI_CATALOG_URL",
+    )
+    emoji_public_base_url: str = Field(
+        "https://koishi.js.org/QFace/",
+        alias="EMOJI_PUBLIC_BASE_URL",
+    )
+    emoji_catalog_cache_ttl_seconds: int = Field(
+        3600,
+        alias="EMOJI_CATALOG_CACHE_TTL_SECONDS",
+    )
+    emoji_catalog_timeout_seconds: int = Field(
+        10,
+        alias="EMOJI_CATALOG_TIMEOUT_SECONDS",
+    )
+
     # WS
     ws_auth_timeout_seconds: int = 30
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Literal, Union
-from app.modules.messages.constants import EMOJI_ID_MAX, EMOJI_ID_MIN
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -27,7 +26,15 @@ class EmojiSegmentIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["emoji"] = "emoji"
-    id: int = Field(ge=EMOJI_ID_MIN, le=EMOJI_ID_MAX)
+    id: str = Field(min_length=1, max_length=64)
+
+    @field_validator("id")
+    @classmethod
+    def validate_id(cls, value: str) -> str:
+        value = value.strip()
+        if value == "":
+            raise ValueError("emoji id cannot be empty")
+        return value
 
 
 class ImageSegmentIn(BaseModel):
@@ -84,7 +91,7 @@ class TextSegmentOut(BaseModel):
 
 class EmojiSegmentOut(BaseModel):
     type: Literal["emoji"] = "emoji"
-    id: int
+    id: str
 
 
 class ImageSegmentOut(BaseModel):
@@ -119,7 +126,7 @@ class MessageResponse(BaseModel):
 
     id: int
     room_id: int
-    sender_user_id: int
+    sender_user_id: int | None
     sender: UserResponse | None = None
     content: MessageContentOut
     created_at: datetime

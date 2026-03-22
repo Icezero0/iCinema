@@ -1,15 +1,18 @@
 from datetime import datetime, timedelta, timezone
+from math import ceil
 
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.modules.media.constants import (
+    EmojiProvider,
     MediaAssetStatus,
     MediaAssetType,
     StickerLibrarySource,
 )
+from app.modules.media.emoji_catalog import EmojiCatalogService
 from app.modules.media.models import MediaAsset
 from app.modules.media.repository import MediaRepository
 from app.modules.media.storage import MediaStorageService
@@ -22,6 +25,14 @@ class MediaService:
     def __init__(self) -> None:
         self.repo = MediaRepository()
         self.storage = MediaStorageService()
+        self.emoji_catalog = EmojiCatalogService()
+
+    def _normalize_datetime_to_utc_aware(self, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     async def find_media_asset_by_id(self, db: AsyncSession, asset_id: int) -> MediaAsset | None:
         return await self.repo.find_media_asset_by_id(db, asset_id)
@@ -162,11 +173,16 @@ class MediaService:
                 media_asset_id=existing.id,
             )
             if not item:
+                next_sort_order = await self.repo.get_next_user_sticker_sort_order(
+                    db,
+                    user_id=user.id,
+                )
                 await self.repo.create_user_sticker_library_item(
                     db,
                     user_id=user.id,
                     media_asset_id=existing.id,
                     source=StickerLibrarySource.UPLOAD,
+                    sort_order=next_sort_order,
                 )
             return existing
 
@@ -189,13 +205,104 @@ class MediaService:
             expires_at=None,
         )
 
+        next_sort_order = await self.repo.get_next_user_sticker_sort_order(
+            db,
+            user_id=user.id,
+        )
         await self.repo.create_user_sticker_library_item(
             db,
             user_id=user.id,
             media_asset_id=asset.id,
             source=StickerLibrarySource.UPLOAD,
+            sort_order=next_sort_order,
         )
         return asset
+
+    async def collect_sticker(
+        self,
+        db: AsyncSession,
+        *,
+        sticker_id: int,
+        user: User,
+    ) -> MediaAsset:
+        asset = await self.repo.find_active_sticker_asset_by_id(
+            db,
+            asset_id=sticker_id,
+        )
+        if asset is None:
+            raise NotFoundError("Sticker not found")
+
+        item = await self.repo.find_user_sticker_library_item(
+            db,
+            user_id=user.id,
+            media_asset_id=asset.id,
+        )
+        if item is None:
+            next_sort_order = await self.repo.get_next_user_sticker_sort_order(
+                db,
+                user_id=user.id,
+            )
+            await self.repo.create_user_sticker_library_item(
+                db,
+                user_id=user.id,
+                media_asset_id=asset.id,
+                source=StickerLibrarySource.COLLECT,
+                sort_order=next_sort_order,
+            )
+
+        return asset
+
+    async def get_user_stickers(
+        self,
+        db: AsyncSession,
+        *,
+        user: User,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        items, total = await self.repo.get_user_sticker_library_assets(
+            db,
+            user_id=user.id,
+            page=page,
+            page_size=page_size,
+        )
+
+        total_pages = ceil(total / page_size) if total > 0 else 0
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
+    async def reorder_user_stickers(
+        self,
+        db: AsyncSession,
+        *,
+        user: User,
+        sticker_ids: list[int],
+    ) -> None:
+        items = await self.repo.get_user_sticker_library_items_by_asset_ids(
+            db,
+            user_id=user.id,
+            media_asset_ids=sticker_ids,
+        )
+
+        existing_ids = {item.media_asset_id for item in items}
+        if existing_ids != set(sticker_ids):
+            raise BadRequestError("Some stickers are not in user's library")
+
+        total = len(sticker_ids)
+        for index, sticker_id in enumerate(sticker_ids):
+            sort_order = total - index
+            await self.repo.update_user_sticker_sort_order(
+                db,
+                user_id=user.id,
+                media_asset_id=sticker_id,
+                sort_order=sort_order,
+            )
 
     async def get_serving_asset(self, db: AsyncSession, asset_id: int) -> MediaAsset:
         asset = await self.get_media_asset_by_id(db, asset_id)
@@ -205,10 +312,10 @@ class MediaService:
             raise NotFoundError("Media asset not found")
 
         return asset
-    
+
     async def get_user_avatar_url(
         self,
-        db,
+        db: AsyncSession,
         user_id: int,
     ) -> str | None:
         asset = await self.repo.find_active_avatar_asset_by_user_id(db, user_id)
@@ -218,17 +325,17 @@ class MediaService:
 
     async def get_user_avatar_storage_key(
         self,
-        db,
+        db: AsyncSession,
         user_id: int,
     ) -> str | None:
         asset = await self.repo.find_active_avatar_asset_by_user_id(db, user_id)
         if not asset:
             return None
         return asset.storage_key
-    
+
     async def get_user_avatar_storage_key_map(
         self,
-        db,
+        db: AsyncSession,
         user_ids: list[int],
     ) -> dict[int, str | None]:
         if not user_ids:
@@ -243,7 +350,7 @@ class MediaService:
                 avatar_key_map[user_id] = storage_key
 
         return avatar_key_map
-    
+
     async def get_media_assets_by_ids(
         self,
         db: AsyncSession,
@@ -252,17 +359,18 @@ class MediaService:
         return await self.repo.get_media_assets_by_ids(db, asset_ids)
 
     def is_asset_expired(self, asset: MediaAsset, *, now: datetime | None = None) -> bool:
-        now = now or datetime.now(timezone.utc)
+        now = self._normalize_datetime_to_utc_aware(now or datetime.now(timezone.utc))
+        expires_at = self._normalize_datetime_to_utc_aware(asset.expires_at)
 
         if asset.status == MediaAssetStatus.EXPIRED:
             return True
         if asset.status == MediaAssetStatus.DELETED:
             return True
-        if asset.asset_type == MediaAssetType.IMAGE and asset.expires_at is not None:
-            return asset.expires_at <= now
+        if asset.asset_type == MediaAssetType.IMAGE and expires_at is not None:
+            return expires_at <= now
 
         return False
-    
+
     async def expire_asset_if_needed(
         self,
         db: AsyncSession,
@@ -280,7 +388,7 @@ class MediaService:
             asset.status = MediaAssetStatus.EXPIRED
 
         return asset
-    
+
     async def cleanup_expired_images(
         self,
         db: AsyncSession,
@@ -319,3 +427,129 @@ class MediaService:
         )
         await db.commit()
         return len(asset_ids)
+
+    async def get_visible_emojis(self) -> list[dict]:
+        return await self.emoji_catalog.get_visible_emojis()
+
+    async def get_emoji(self, emoji_id: str) -> dict | None:
+        return await self.emoji_catalog.get_emoji(emoji_id)
+
+    async def get_emoji_or_raise(self, emoji_id: str) -> dict:
+        emoji = await self.get_emoji(emoji_id)
+        if emoji is None:
+            raise BadRequestError("Invalid emoji id")
+        return emoji
+
+    async def touch_user_emoji_usage(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        emoji_id: str,
+        provider: str = EmojiProvider.QFACE,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+
+        usage = await self.repo.find_user_emoji_usage(
+            db,
+            user_id=user_id,
+            provider=provider,
+            emoji_id=emoji_id,
+        )
+        if usage is None:
+            await self.repo.create_user_emoji_usage(
+                db,
+                user_id=user_id,
+                provider=provider,
+                emoji_id=emoji_id,
+                last_used_at=now,
+            )
+            return
+
+        await self.repo.touch_user_emoji_usage_last_used_at(
+            db,
+            user_id=user_id,
+            provider=provider,
+            emoji_id=emoji_id,
+            last_used_at=now,
+        )
+
+    async def get_recent_emojis(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        provider: str = EmojiProvider.QFACE,
+        limit: int = 20,
+    ) -> list[dict]:
+        usages = await self.repo.get_recent_user_emoji_usages(
+            db,
+            user_id=user_id,
+            provider=provider,
+            limit=limit,
+        )
+
+        items: list[dict] = []
+        for usage in usages:
+            emoji = await self.get_emoji(usage.emoji_id)
+            if emoji is None:
+                continue
+            items.append(emoji)
+
+        return items
+
+    async def validate_message_image_asset(
+        self,
+        db: AsyncSession,
+        *,
+        asset_id: int,
+        user_id: int,
+    ) -> MediaAsset:
+        asset = await self.find_media_asset_by_id(db, asset_id)
+        if asset is None or asset.asset_type != MediaAssetType.IMAGE:
+            raise BadRequestError("Invalid image id")
+
+        if asset.status != MediaAssetStatus.ACTIVE or self.is_asset_expired(asset):
+            raise BadRequestError("Image is expired or unavailable")
+
+        if asset.uploaded_by_user_id != user_id:
+            raise BadRequestError("Image is not owned by current user")
+
+        return asset
+    
+    async def get_user_sticker_library_item(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        media_asset_id: int,
+    ):
+        return await self.repo.find_user_sticker_library_item(
+            db,
+            user_id=user_id,
+            media_asset_id=media_asset_id,
+        )
+
+    async def validate_message_sticker_asset(
+        self,
+        db: AsyncSession,
+        *,
+        asset_id: int,
+        user_id: int,
+    ) -> MediaAsset:
+        asset = await self.repo.find_active_sticker_asset_by_id(
+            db,
+            asset_id=asset_id,
+        )
+        if asset is None:
+            raise BadRequestError("Invalid sticker id")
+
+        item = await self.repo.find_user_sticker_library_item(
+            db,
+            user_id=user_id,
+            media_asset_id=asset_id,
+        )
+        if item is None:
+            raise BadRequestError("Sticker is not in user's library")
+
+        return asset

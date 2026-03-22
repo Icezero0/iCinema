@@ -8,14 +8,18 @@ from app.modules.media.service import MediaService
 from app.modules.messages.models import Message
 from app.modules.messages.repository import MessageRepository
 from app.modules.messages.schemas import (
+    EmojiSegmentIn,
     EmojiSegmentOut,
+    ImageSegmentIn,
     ImageSegmentOut,
     MessageContentIn,
     MessageContentOut,
     MessageCreate,
     MessageListResponse,
     MessageResponse,
+    StickerSegmentIn,
     StickerSegmentOut,
+    TextSegmentIn,
     TextSegmentOut,
 )
 from app.modules.rooms.constants import RoomPermission
@@ -50,6 +54,12 @@ class MessageService:
             permission=RoomPermission.SEND_MESSAGE,
         )
 
+        media_asset_ids = await self._validate_message_content(
+            db,
+            user=user,
+            content=payload.content,
+        )
+
         content = self._dump_content(payload.content)
 
         message = await self.repo.create_message(
@@ -58,6 +68,14 @@ class MessageService:
             sender_user_id=user.id,
             room_id=room_id,
         )
+
+        if media_asset_ids:
+            await self.repo.create_message_resource_refs(
+                db,
+                message_id=message.id,
+                media_asset_ids=sorted(media_asset_ids),
+            )
+
         await db.commit()
 
         message = await self.repo.find_message_by_id(db, message.id)
@@ -135,6 +153,54 @@ class MessageService:
 
         require_room_permission(role, permission)
 
+    async def _validate_message_content(
+        self,
+        db: AsyncSession,
+        *,
+        user: User,
+        content: MessageContentIn,
+    ) -> set[int]:
+        media_asset_ids: set[int] = set()
+        used_emoji_ids: set[str] = set()
+
+        for segment in content.segments:
+            if isinstance(segment, TextSegmentIn):
+                continue
+
+            if isinstance(segment, EmojiSegmentIn):
+                await self.media_service.get_emoji_or_raise(segment.id)
+                used_emoji_ids.add(segment.id)
+                continue
+
+            if isinstance(segment, ImageSegmentIn):
+                await self.media_service.validate_message_image_asset(
+                    db,
+                    asset_id=segment.id,
+                    user_id=user.id,
+                )
+                media_asset_ids.add(segment.id)
+                continue
+
+            if isinstance(segment, StickerSegmentIn):
+                await self.media_service.validate_message_sticker_asset(
+                    db,
+                    asset_id=segment.id,
+                    user_id=user.id,
+                )
+                media_asset_ids.add(segment.id)
+                continue
+
+            raise ValueError(f"Unsupported segment type: {segment.type}")
+
+        for emoji_id in used_emoji_ids:
+            await self.media_service.touch_user_emoji_usage(
+                db,
+                user_id=user.id,
+                emoji_id=emoji_id,
+            )
+
+        return media_asset_ids
+
     def _dump_content(self, content: MessageContentIn) -> str:
         return json.dumps(content.model_dump(mode="json"), ensure_ascii=False)
 
@@ -163,7 +229,6 @@ class MessageService:
         db: AsyncSession,
         message: Message,
     ) -> MessageResponse:
-
         content = self._load_content(message.content)
         content = await self._enrich_content_urls(db, content)
 
