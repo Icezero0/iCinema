@@ -11,6 +11,8 @@ ROLE_PERMISSIONS: dict[RoomRole, set[RoomPermission]] = {
         RoomPermission.REVIEW_JOIN_REQUEST,
         RoomPermission.MANAGE_MEMBERS,
         RoomPermission.MANAGE_MANAGERS,
+        RoomPermission.VIEW_MESSAGES,
+        RoomPermission.SEND_MESSAGE,
     },
     RoomRole.MANAGER: {
         RoomPermission.UPDATE_ROOM,
@@ -19,11 +21,15 @@ ROLE_PERMISSIONS: dict[RoomRole, set[RoomPermission]] = {
         RoomPermission.INVITE_USER,
         RoomPermission.REVIEW_JOIN_REQUEST,
         RoomPermission.MANAGE_MEMBERS,
+        RoomPermission.VIEW_MESSAGES,
+        RoomPermission.SEND_MESSAGE,
     },
     RoomRole.MEMBER: {
         RoomPermission.VIEW_ROOM,
         RoomPermission.INVITE_USER,
         RoomPermission.VIEW_MEMBERS,
+        RoomPermission.VIEW_MESSAGES,
+        RoomPermission.SEND_MESSAGE,
     },
 }
 

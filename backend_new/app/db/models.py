@@ -8,3 +8,4 @@ from app.modules.media.models import (
     UserStickerLibraryItem,
     MessageResourceRef,
 )
+from app.modules.messages.models import Message

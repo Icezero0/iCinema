@@ -166,3 +166,37 @@ class MediaRepository:
             .limit(1)
         )
         return result.scalar_one_or_none()
+    
+    async def find_active_avatar_storage_keys_by_user_ids(
+        self,
+        db,
+        user_ids: list[int],
+    ) -> list[tuple[int, str]]:
+        if not user_ids:
+            return []
+
+        result = await db.execute(
+            select(UserAvatarAsset.user_id, MediaAsset.storage_key)
+            .join(MediaAsset, UserAvatarAsset.media_asset_id == MediaAsset.id)
+            .where(
+                UserAvatarAsset.user_id.in_(user_ids),
+                UserAvatarAsset.is_deleted.is_(False),
+                MediaAsset.asset_type == "avatar",
+                MediaAsset.status == "active",
+            )
+            .order_by(UserAvatarAsset.user_id.asc(), UserAvatarAsset.id.desc())
+        )
+        return list(result.all())
+    
+    async def get_media_assets_by_ids(
+        self,
+        db: AsyncSession,
+        asset_ids: list[int],
+    ) -> list[MediaAsset]:
+        if not asset_ids:
+            return []
+
+        result = await db.execute(
+            select(MediaAsset).where(MediaAsset.id.in_(asset_ids))
+        )
+        return list(result.scalars().all())

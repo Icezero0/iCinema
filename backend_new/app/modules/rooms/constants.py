@@ -15,6 +15,8 @@ class RoomPermission(StrEnum):
     REVIEW_JOIN_REQUEST = "review_join_request"
     MANAGE_MEMBERS = "manage_members"
     MANAGE_MANAGERS = "manage_managers"
+    VIEW_MESSAGES = "view_messages"
+    SEND_MESSAGE = "send_message"
 
 class RoomJoinRequestSource(StrEnum):
     APPLY = "apply"

@@ -226,3 +226,28 @@ class MediaService:
         if not asset:
             return None
         return asset.storage_key
+    
+    async def get_user_avatar_storage_key_map(
+        self,
+        db,
+        user_ids: list[int],
+    ) -> dict[int, str | None]:
+        if not user_ids:
+            return {}
+
+        rows = await self.repo.find_active_avatar_storage_keys_by_user_ids(db, user_ids)
+
+        avatar_key_map: dict[int, str | None] = {user_id: None for user_id in user_ids}
+
+        for user_id, storage_key in rows:
+            if avatar_key_map[user_id] is None:
+                avatar_key_map[user_id] = storage_key
+
+        return avatar_key_map
+    
+    async def get_media_assets_by_ids(
+        self,
+        db: AsyncSession,
+        asset_ids: list[int],
+    ) -> list[MediaAsset]:
+        return await self.repo.get_media_assets_by_ids(db, asset_ids)
