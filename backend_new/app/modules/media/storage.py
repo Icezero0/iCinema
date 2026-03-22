@@ -140,3 +140,13 @@ class MediaStorageService:
             raise BadRequestError("Invalid media storage key")
 
         return self._get_base_dir(asset_type) / storage_key
+    
+    def delete_file(
+        self,
+        *,
+        asset_type: str,
+        storage_key: str,
+    ) -> None:
+        path = self.get_file_path(asset_type=asset_type, storage_key=storage_key)
+        if path.exists():
+            path.unlink()

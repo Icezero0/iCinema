@@ -1,7 +1,10 @@
+import datetime
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.media.models import MediaAsset, UserAvatarAsset, UserStickerLibraryItem
+from app.modules.media.constants import MediaAssetStatus, MediaAssetType
 
 
 class MediaRepository:
@@ -200,3 +203,38 @@ class MediaRepository:
             select(MediaAsset).where(MediaAsset.id.in_(asset_ids))
         )
         return list(result.scalars().all())
+    
+    async def get_expired_active_image_assets(
+        self,
+        db: AsyncSession,
+        *,
+        now: datetime,
+        limit: int = 100,
+    ) -> list[MediaAsset]:
+        result = await db.execute(
+            select(MediaAsset)
+            .where(
+                MediaAsset.asset_type == MediaAssetType.IMAGE,
+                MediaAsset.status == MediaAssetStatus.ACTIVE,
+                MediaAsset.expires_at.is_not(None),
+                MediaAsset.expires_at <= now,
+            )
+            .order_by(MediaAsset.id.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+    
+    async def mark_media_assets_expired(
+        self,
+        db: AsyncSession,
+        *,
+        asset_ids: list[int],
+    ) -> None:
+        if not asset_ids:
+            return
+
+        await db.execute(
+            update(MediaAsset)
+            .where(MediaAsset.id.in_(asset_ids))
+            .values(status=MediaAssetStatus.EXPIRED)
+        )

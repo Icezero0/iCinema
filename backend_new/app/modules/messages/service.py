@@ -182,15 +182,18 @@ class MessageService:
         db: AsyncSession,
         content: MessageContentOut,
     ) -> MessageContentOut:
-        asset_ids: list[int] = []
+        asset_ids: set[int] = set()
 
         for segment in content.segments:
             if isinstance(segment, (ImageSegmentOut, StickerSegmentOut)):
-                asset_ids.append(segment.id)
+                asset_ids.add(segment.id)
+
+        if not asset_ids:
+            return content
 
         assets = await self.media_service.get_media_assets_by_ids(
             db,
-            list(set(asset_ids)),
+            list(asset_ids),
         )
         asset_map = {asset.id: asset for asset in assets}
 
@@ -200,7 +203,7 @@ class MessageService:
                 if (
                     asset
                     and asset.asset_type == MediaAssetType.IMAGE
-                    and asset.status == MediaAssetStatus.ACTIVE
+                    and not self.media_service.is_asset_expired(asset)
                 ):
                     segment.url = self.media_service.get_media_asset_url(asset)
 

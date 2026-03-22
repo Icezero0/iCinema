@@ -199,11 +199,10 @@ class MediaService:
 
     async def get_serving_asset(self, db: AsyncSession, asset_id: int) -> MediaAsset:
         asset = await self.get_media_asset_by_id(db, asset_id)
+        asset = await self.expire_asset_if_needed(db, asset)
 
-        if asset.status == MediaAssetStatus.DELETED:
+        if self.is_asset_expired(asset):
             raise NotFoundError("Media asset not found")
-        if asset.status == MediaAssetStatus.EXPIRED:
-            raise NotFoundError("Media asset expired")
 
         return asset
     
@@ -251,3 +250,72 @@ class MediaService:
         asset_ids: list[int],
     ) -> list[MediaAsset]:
         return await self.repo.get_media_assets_by_ids(db, asset_ids)
+
+    def is_asset_expired(self, asset: MediaAsset, *, now: datetime | None = None) -> bool:
+        now = now or datetime.now(timezone.utc)
+
+        if asset.status == MediaAssetStatus.EXPIRED:
+            return True
+        if asset.status == MediaAssetStatus.DELETED:
+            return True
+        if asset.asset_type == MediaAssetType.IMAGE and asset.expires_at is not None:
+            return asset.expires_at <= now
+
+        return False
+    
+    async def expire_asset_if_needed(
+        self,
+        db: AsyncSession,
+        asset: MediaAsset,
+    ) -> MediaAsset:
+        if asset.asset_type != MediaAssetType.IMAGE:
+            return asset
+
+        if not self.is_asset_expired(asset):
+            return asset
+
+        if asset.status == MediaAssetStatus.ACTIVE:
+            await self.repo.mark_media_assets_expired(db, asset_ids=[asset.id])
+            await db.commit()
+            asset.status = MediaAssetStatus.EXPIRED
+
+        return asset
+    
+    async def cleanup_expired_images(
+        self,
+        db: AsyncSession,
+        *,
+        batch_size: int = 100,
+    ) -> int:
+        now = datetime.now(timezone.utc)
+        assets = await self.repo.get_expired_active_image_assets(
+            db,
+            now=now,
+            limit=batch_size,
+        )
+        if not assets:
+            return 0
+
+        asset_ids: list[int] = []
+
+        for asset in assets:
+            try:
+                self.storage.delete_file(
+                    asset_type=asset.asset_type,
+                    storage_key=asset.storage_key,
+                )
+                asset_ids.append(asset.id)
+            except FileNotFoundError:
+                asset_ids.append(asset.id)
+            except Exception:
+                continue
+
+        if not asset_ids:
+            return 0
+
+        await self.repo.mark_media_assets_expired(
+            db,
+            asset_ids=asset_ids,
+        )
+        await db.commit()
+        return len(asset_ids)
