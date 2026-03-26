@@ -7,12 +7,13 @@ from app.modules.media.schemas import (
     EmojiListResponse,
     EmojiResponse,
     MediaAssetUploadResponse,
-    StickerListResponse,
-    StickerOrderUpdateRequest,
+    StickerLibraryResponse,
+    StickerLibraryUpdateRequest,
     StickerResponse,
 )
 from app.modules.media.service import MediaService
 from app.modules.users.models import User
+from app.core.exceptions import BadRequestError
 
 router = APIRouter(prefix="/media", tags=["media"])
 
@@ -46,7 +47,6 @@ async def upload_image(
         file=file,
         user=current_user,
     )
-    await db.commit()
     return MediaAssetUploadResponse(
         id=asset.id,
         asset_type=asset.asset_type,
@@ -68,7 +68,6 @@ async def upload_sticker(
         file=file,
         user=current_user,
     )
-    await db.commit()
     return MediaAssetUploadResponse(
         id=asset.id,
         asset_type=asset.asset_type,
@@ -79,25 +78,30 @@ async def upload_sticker(
     )
 
 
-@router.get("/stickers", response_model=StickerListResponse)
+@router.get("/stickers/library", response_model=StickerLibraryResponse)
 async def get_my_stickers(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    all: bool = Query(default=False),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> StickerListResponse:
-    data = await media_service.get_user_stickers(
+) -> StickerLibraryResponse:
+    if all and not (page is None and page_size is None):
+        raise BadRequestError("page and page_size are not allowed when all=true")
+    data = await media_service.get_user_sticker_library(
         db,
         user=current_user,
+        all=all,
         page=page,
         page_size=page_size,
     )
-    return StickerListResponse(
+    return StickerLibraryResponse(
         items=[
             _build_sticker_response(item, asset)
             for item, asset in data["items"]
         ],
         total=data["total"],
+        all=data["all"],
         page=data["page"],
         page_size=data["page_size"],
         total_pages=data["total_pages"],
@@ -115,7 +119,6 @@ async def collect_sticker(
         sticker_id=sticker_id,
         user=current_user,
     )
-    await db.commit()
 
     item = await media_service.get_user_sticker_library_item(
         db,
@@ -128,18 +131,17 @@ async def collect_sticker(
     return _build_sticker_response(item, asset)
 
 
-@router.patch("/stickers/order")
-async def reorder_stickers(
-    payload: StickerOrderUpdateRequest,
+@router.patch("/stickers/library")
+async def update_user_sticker_library(
+    payload: StickerLibraryUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
-    await media_service.reorder_user_stickers(
+    await media_service.update_user_sticker_library(
         db,
         user=current_user,
         sticker_ids=payload.sticker_ids,
     )
-    await db.commit()
     return {"message": "ok"}
 
 

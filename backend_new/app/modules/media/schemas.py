@@ -45,22 +45,21 @@ class StickerResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-class StickerListResponse(BaseModel):
+class StickerLibraryResponse(BaseModel):
     items: list[StickerResponse] = Field(default_factory=list)
     total: int
-    page: int
-    page_size: int
-    total_pages: int
+    all: bool
+    page: int | None = None
+    page_size: int | None = None
+    total_pages: int | None = None
 
 
-class StickerOrderUpdateRequest(BaseModel):
-    sticker_ids: list[int] = Field(default_factory=list)
+class StickerLibraryUpdateRequest(BaseModel):
+    sticker_ids: list[int]
 
     @field_validator("sticker_ids")
     @classmethod
     def validate_sticker_ids(cls, value: list[int]) -> list[int]:
-        if not value:
-            raise ValueError("sticker_ids cannot be empty")
         if any(item <= 0 for item in value):
             raise ValueError("sticker_ids must be positive integers")
         if len(set(value)) != len(value):

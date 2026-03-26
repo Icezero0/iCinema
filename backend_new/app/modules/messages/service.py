@@ -176,7 +176,6 @@ class MessageService:
                 await self.media_service.validate_message_image_asset(
                     db,
                     asset_id=segment.id,
-                    user_id=user.id,
                 )
                 media_asset_ids.add(segment.id)
                 continue

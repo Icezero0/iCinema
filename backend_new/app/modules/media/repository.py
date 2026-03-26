@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import desc, func, select, update
+from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.media.constants import MediaAssetStatus, MediaAssetType
@@ -252,6 +252,54 @@ class MediaRepository:
             )
         )
         return list(result.scalars().all())
+    
+    async def get_user_active_sticker_library_items(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+    ) -> list[UserStickerLibraryItem]:
+        result = await db.execute(
+            select(UserStickerLibraryItem)
+            .join(MediaAsset, UserStickerLibraryItem.media_asset_id == MediaAsset.id)
+            .where(
+                UserStickerLibraryItem.user_id == user_id,
+                MediaAsset.asset_type == MediaAssetType.STICKER,
+                MediaAsset.status == MediaAssetStatus.ACTIVE,
+            )
+            .order_by(
+                UserStickerLibraryItem.sort_order.desc(),
+                UserStickerLibraryItem.created_at.desc(),
+                UserStickerLibraryItem.id.desc(),
+            )
+        )
+        return list(result.scalars().all())
+    
+    async def get_all_user_sticker_library_assets(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+    ) -> list[tuple[UserStickerLibraryItem, MediaAsset]]:
+        stmt = (
+            select(UserStickerLibraryItem, MediaAsset)
+            .join(
+                MediaAsset,
+                UserStickerLibraryItem.media_asset_id == MediaAsset.id,
+            )
+            .where(
+                UserStickerLibraryItem.user_id == user_id,
+                MediaAsset.asset_type == MediaAssetType.STICKER,
+                MediaAsset.status == MediaAssetStatus.ACTIVE,
+            )
+            .order_by(
+                UserStickerLibraryItem.sort_order.desc(),
+                UserStickerLibraryItem.created_at.desc(),
+                UserStickerLibraryItem.id.desc(),
+            )
+        )
+        result = await db.execute(stmt)
+        return list(result.all())
 
     async def update_user_sticker_sort_order(
         self,
@@ -268,6 +316,23 @@ class MediaRepository:
                 UserStickerLibraryItem.media_asset_id == media_asset_id,
             )
             .values(sort_order=sort_order)
+        )
+
+    async def delete_user_sticker_library_items_by_asset_ids(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        media_asset_ids: list[int],
+    ) -> None:
+        if not media_asset_ids:
+            return
+
+        await db.execute(
+            delete(UserStickerLibraryItem).where(
+                UserStickerLibraryItem.user_id == user_id,
+                UserStickerLibraryItem.media_asset_id.in_(media_asset_ids),
+            )
         )
 
     async def find_active_avatar_asset_by_user_id(

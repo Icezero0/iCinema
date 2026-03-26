@@ -147,6 +147,8 @@ class MediaService:
             status=MediaAssetStatus.ACTIVE,
             expires_at=expires_at,
         )
+
+        db.commit()
         return asset
 
     async def create_sticker_asset(
@@ -216,6 +218,8 @@ class MediaService:
             source=StickerLibrarySource.UPLOAD,
             sort_order=next_sort_order,
         )
+        
+        db.commit()
         return asset
 
     async def collect_sticker(
@@ -250,59 +254,96 @@ class MediaService:
                 sort_order=next_sort_order,
             )
 
+        db.commit()
         return asset
 
-    async def get_user_stickers(
+    async def get_user_sticker_library(
         self,
         db: AsyncSession,
         *,
         user: User,
+        all: bool,
         page: int,
         page_size: int,
     ) -> dict[str, object]:
-        items, total = await self.repo.get_user_sticker_library_assets(
-            db,
-            user_id=user.id,
-            page=page,
-            page_size=page_size,
-        )
+        
+        if all:
+            items = await self.repo.get_all_user_sticker_library_assets(
+                db,
+                user_id=user.id,
+            )
 
-        total_pages = ceil(total / page_size) if total > 0 else 0
+            return {
+                "items": items,
+                "total": len(items),
+                "all": True,
+                "page": None,
+                "page_size": None,
+                "total_pages": None,
+            }
+        
+        else:
+            items, total = await self.repo.get_user_sticker_library_assets(
+                db,
+                user_id=user.id,
+                page=page,
+                page_size=page_size,
+            )
 
-        return {
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-        }
+            total_pages = ceil(total / page_size) if total > 0 else 0
 
-    async def reorder_user_stickers(
+            return {
+                "items": items,
+                "total": total,
+                "all": False,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+            }
+
+    async def update_user_sticker_library(
         self,
         db: AsyncSession,
         *,
         user: User,
         sticker_ids: list[int],
     ) -> None:
-        items = await self.repo.get_user_sticker_library_items_by_asset_ids(
+        items = await self.repo.get_user_active_sticker_library_items(
             db,
             user_id=user.id,
-            media_asset_ids=sticker_ids,
         )
 
-        existing_ids = {item.media_asset_id for item in items}
-        if existing_ids != set(sticker_ids):
-            raise BadRequestError("Some stickers are not in user's library")
+        db_id_set = set(item.media_asset_id for item in items)
+        payload_id_set = set(sticker_ids)
+
+        if len(sticker_ids) != len(payload_id_set):
+            raise BadRequestError("Duplicate sticker ids in library payload")
+
+        if not payload_id_set.issubset(db_id_set):
+            raise BadRequestError(
+                "Sticker payload contains items not in user's sticker library"
+            )
+        
+        removed_ids = list(db_id_set - payload_id_set)
+        
+        await self.repo.delete_user_sticker_library_items_by_asset_ids(
+            db,
+            user_id=user.id,
+            media_asset_ids=removed_ids,
+        )
+
+        item_by_asset_id = {
+            item.media_asset_id: item
+            for item in items
+            if item.media_asset_id in payload_id_set
+        }
 
         total = len(sticker_ids)
-        for index, sticker_id in enumerate(sticker_ids):
-            sort_order = total - index
-            await self.repo.update_user_sticker_sort_order(
-                db,
-                user_id=user.id,
-                media_asset_id=sticker_id,
-                sort_order=sort_order,
-            )
+        for index, asset_id in enumerate(sticker_ids):
+            item_by_asset_id[asset_id].sort_order = total - index
+
+        await db.flush()
+        await db.commit()
 
     async def get_serving_asset(self, db: AsyncSession, asset_id: int) -> MediaAsset:
         asset = await self.get_media_asset_by_id(db, asset_id)
@@ -503,7 +544,6 @@ class MediaService:
         db: AsyncSession,
         *,
         asset_id: int,
-        user_id: int,
     ) -> MediaAsset:
         asset = await self.find_media_asset_by_id(db, asset_id)
         if asset is None or asset.asset_type != MediaAssetType.IMAGE:
@@ -511,9 +551,6 @@ class MediaService:
 
         if asset.status != MediaAssetStatus.ACTIVE or self.is_asset_expired(asset):
             raise BadRequestError("Image is expired or unavailable")
-
-        if asset.uploaded_by_user_id != user_id:
-            raise BadRequestError("Image is not owned by current user")
 
         return asset
     
