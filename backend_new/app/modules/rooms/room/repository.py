@@ -1,6 +1,8 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.modules.rooms.constants import RoomJoinAuditMode, RoomVisibility
 from app.modules.rooms.models import Room, RoomMember
 
 
@@ -11,14 +13,14 @@ class RoomRepository:
         *,
         name: str,
         owner_id: int,
-        is_public: bool | None,
-        config: str | None,
+        visibility: RoomVisibility,
+        join_audit_mode: RoomJoinAuditMode,
     ) -> Room:
         room = Room(
             name=name,
             owner_id=owner_id,
-            is_public=is_public,
-            config=config,
+            visibility=visibility,
+            join_audit_mode=join_audit_mode,
         )
         db.add(room)
         await db.flush()
@@ -26,7 +28,11 @@ class RoomRepository:
         return room
 
     async def get_room_by_id(self, db: AsyncSession, room_id: int) -> Room | None:
-        result = await db.execute(select(Room).where(Room.id == room_id))
+        result = await db.execute(
+            select(Room)
+            .options(selectinload(Room.settings))
+            .where(Room.id == room_id)
+        )
         return result.scalar_one_or_none()
 
     async def get_rooms(
@@ -44,7 +50,7 @@ class RoomRepository:
             .outerjoin(RoomMember, RoomMember.room_id == Room.id)
             .where(
                 or_(
-                    Room.is_public.is_(True),
+                    Room.visibility == RoomVisibility.PUBLIC,
                     Room.owner_id == user_id,
                     RoomMember.user_id == user_id,
                 )
@@ -59,7 +65,8 @@ class RoomRepository:
         total = count_result.scalar_one()
 
         stmt = (
-            base_stmt.order_by(Room.id.desc())
+            base_stmt.options(selectinload(Room.settings))
+            .order_by(Room.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

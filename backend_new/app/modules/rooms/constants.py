@@ -6,6 +6,7 @@ class RoomRole(StrEnum):
     MANAGER = "manager"
     MEMBER = "member"
 
+
 class RoomPermission(StrEnum):
     VIEW_ROOM = "view_room"
     UPDATE_ROOM = "update_room"
@@ -18,6 +19,35 @@ class RoomPermission(StrEnum):
     VIEW_MESSAGES = "view_messages"
     SEND_MESSAGE = "send_message"
 
+
+class RoomVisibility(StrEnum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
+class RoomJoinAuditMode(StrEnum):
+    AUTO_APPROVE = "auto_approve"
+    MANUAL_REVIEW = "manual_review"
+    AUTO_REJECT = "auto_reject"
+
+
+class RoomMediaSourceType(StrEnum):
+    EXTERNAL_URL = "external_url"
+    LOCAL_FILE = "local_file"
+
+
+class RoomSyncPolicy(StrEnum):
+    AUTO_PAUSE = "auto_pause"
+    AUTO_SEEK = "auto_seek"
+    DISABLED = "disabled"
+
+
+class RoomActiveSyncPermission(StrEnum):
+    OWNER_ONLY = "owner_only"
+    OWNER_AND_MANAGER = "owner_and_manager"
+    ALL_MEMBERS = "all_members"
+
+
 class RoomJoinRequestSource(StrEnum):
     APPLY = "apply"
     INVITE = "invite"
@@ -29,6 +59,7 @@ class RoomJoinRequestStatus(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     CANCELLED = "cancelled"
+
 
 class RoomJoinRequestAction(StrEnum):
     PENDING = "pending"

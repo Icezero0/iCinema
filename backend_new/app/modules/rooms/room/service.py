@@ -3,12 +3,13 @@ from math import ceil
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError
-from app.modules.rooms.constants import RoomPermission, RoomRole
+from app.modules.rooms.constants import RoomPermission, RoomRole, RoomVisibility
 from app.modules.rooms.membership.service import RoomMembershipService
-from app.modules.rooms.permissions import require_room_permission
 from app.modules.rooms.models import Room
+from app.modules.rooms.permissions import require_room_permission
 from app.modules.rooms.room.repository import RoomRepository
 from app.modules.rooms.room.schemas import RoomCreate, RoomPatch
+from app.modules.rooms.settings.service import RoomSettingsService
 from app.modules.users.models import User
 
 
@@ -16,6 +17,26 @@ class RoomService:
     def __init__(self) -> None:
         self.repo = RoomRepository()
         self.membership_service = RoomMembershipService()
+        self.settings_service = RoomSettingsService()
+
+    async def _require_room_permission(
+        self,
+        db: AsyncSession,
+        *,
+        room: Room,
+        user: User,
+        permission: RoomPermission,
+    ) -> str:
+        role = await self.membership_service.find_room_role(
+            db,
+            room_id=room.id,
+            user_id=user.id,
+        )
+        if role is None:
+            raise ForbiddenError("You do not have permission to perform this action")
+
+        require_room_permission(role, permission)
+        return role
 
     async def find_room_by_id(self, db: AsyncSession, room_id: int) -> Room | None:
         return await self.repo.get_room_by_id(db, room_id)
@@ -35,18 +56,15 @@ class RoomService:
     ) -> Room:
         room = await self.get_room_by_id(db, room_id)
 
-        if room.is_public:
+        if room.visibility == RoomVisibility.PUBLIC:
             return room
 
-        role = await self.membership_service.find_room_role(
+        await self._require_room_permission(
             db,
-            room_id=room.id,
-            user_id=user.id,
+            room=room,
+            user=user,
+            permission=RoomPermission.VIEW_ROOM,
         )
-        if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
-
-        require_room_permission(role, RoomPermission.VIEW_ROOM)
         return room
 
     async def create_room(
@@ -60,8 +78,8 @@ class RoomService:
             db,
             name=payload.name,
             owner_id=user.id,
-            is_public=payload.is_public,
-            config=payload.config,
+            visibility=payload.visibility,
+            join_audit_mode=payload.join_audit_mode,
         )
 
         await self.membership_service.repo.create_member(
@@ -70,6 +88,8 @@ class RoomService:
             user_id=user.id,
             role=RoomRole.OWNER.value,
         )
+
+        await self.settings_service.create_default_settings(db, room_id=room.id)
 
         await db.commit()
         await db.refresh(room)
@@ -111,26 +131,24 @@ class RoomService:
         payload: RoomPatch,
     ) -> Room:
         room = await self.get_room_by_id(db, room_id)
-        role = await self.membership_service.find_room_role(
-            db,
-            room_id=room.id,
-            user_id=user.id,
-        )
-        if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
 
-        require_room_permission(role, RoomPermission.UPDATE_ROOM)
+        await self._require_room_permission(
+            db,
+            room=room,
+            user=user,
+            permission=RoomPermission.UPDATE_ROOM,
+        )
 
         updates = payload.model_dump(exclude_unset=True)
 
         if "name" in updates:
             room.name = updates["name"]
 
-        if "is_public" in updates:
-            room.is_public = updates["is_public"]
+        if "visibility" in updates:
+            room.visibility = updates["visibility"]
 
-        if "config" in updates:
-            room.config = updates["config"]
+        if "join_audit_mode" in updates:
+            room.join_audit_mode = updates["join_audit_mode"]
 
         room = await self.repo.save_room(db, room)
         await db.commit()
@@ -145,15 +163,13 @@ class RoomService:
         user: User,
     ) -> None:
         room = await self.get_room_by_id(db, room_id)
-        role = await self.membership_service.find_room_role(
-            db,
-            room_id=room.id,
-            user_id=user.id,
-        )
-        if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
 
-        require_room_permission(role, RoomPermission.DELETE_ROOM)
+        await self._require_room_permission(
+            db,
+            room=room,
+            user=user,
+            permission=RoomPermission.DELETE_ROOM,
+        )
 
         await self.repo.delete_room(db, room)
         await db.commit()
