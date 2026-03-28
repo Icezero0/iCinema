@@ -1,0 +1,153 @@
+from __future__ import annotations
+
+from fastapi import WebSocket
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import AppError, BadRequestError
+from app.realtime.constants import WsCommandAction, WsErrorCode, WsMessageType
+from app.realtime.handlers.auth import AuthHandler
+from app.realtime.handlers.heartbeat import HeartbeatHandler
+from app.realtime.handlers.playback import PlaybackCommandHandler
+from app.realtime.handlers.room import RoomCommandHandler
+from app.realtime.manager import RealtimeManager, WsConnection
+from app.realtime.protocol import (
+    WsCommandPayload,
+    WsMessage,
+    build_ack_message,
+    build_error_message,
+)
+
+
+class RealtimeMessageHandler:
+    def __init__(self) -> None:
+        self.auth_handler = AuthHandler()
+        self.heartbeat_handler = HeartbeatHandler()
+        self.room_handler = RoomCommandHandler()
+        self.playback_handler = PlaybackCommandHandler()
+
+    async def handle(
+        self,
+        *,
+        db: AsyncSession,
+        manager: RealtimeManager,
+        websocket: WebSocket,
+        connection: WsConnection | None,
+        raw_message: dict,
+    ) -> WsConnection | None:
+        request_id = self._extract_request_id(raw_message)
+
+        try:
+            message = WsMessage.model_validate(raw_message)
+
+            if message.type == WsMessageType.AUTH:
+                return await self.auth_handler.handle(
+                    db=db,
+                    manager=manager,
+                    websocket=websocket,
+                    connection=connection,
+                    payload=message.payload or {},
+                )
+
+            if message.type == WsMessageType.HEARTBEAT:
+                await self.heartbeat_handler.handle(
+                    websocket=websocket,
+                    payload=message.payload,
+                )
+                return connection
+
+            if message.type == WsMessageType.COMMAND:
+                connection = self._require_authenticated(connection)
+                command = WsCommandPayload.model_validate(message.payload or {})
+
+                await self._dispatch_command(
+                    db=db,
+                    manager=manager,
+                    connection=connection,
+                    command=command,
+                )
+
+                await websocket.send_json(
+                    build_ack_message(
+                        request_id=command.request_id
+                    ).model_dump(mode="json")
+                )
+                return connection
+
+            raise BadRequestError(f"Client cannot send message type: {message.type}")
+
+        except AppError as e:
+            await websocket.send_json(
+                build_error_message(
+                    code=e.code,
+                    request_id=request_id,
+                    message=e.message,
+                ).model_dump(mode="json"),
+            )
+            return connection
+
+        except ValidationError:
+            await websocket.send_json(
+                build_error_message(
+                    code=WsErrorCode.INVALID_PAYLOAD,
+                    request_id=request_id,
+                    message="Invalid websocket payload",
+                ).model_dump(mode="json"),
+            )
+            return connection
+
+    async def _dispatch_command(
+        self,
+        *,
+        db: AsyncSession,
+        manager: RealtimeManager,
+        connection: WsConnection,
+        command: WsCommandPayload,
+    ) -> None:
+        if command.action in {
+            WsCommandAction.ROOM_ENTER,
+            WsCommandAction.ROOM_LEAVE,
+        }:
+            await self.room_handler.handle(
+                db=db,
+                manager=manager,
+                connection=connection,
+                command=command,
+            )
+            return
+
+        if command.action in {
+            WsCommandAction.PLAYBACK_PAUSE,
+            WsCommandAction.PLAYBACK_PLAY,
+            WsCommandAction.PLAYBACK_SEEK,
+            WsCommandAction.PLAYBACK_SET_SOURCE,
+        }:
+            await self.playback_handler.handle(
+                db=db,
+                manager=manager,
+                connection=connection,
+                command=command,
+            )
+            return
+
+        raise BadRequestError(f"Unsupported command action: {command.action}")
+
+    @staticmethod
+    def _extract_request_id(raw_message: dict) -> str | None:
+        if not isinstance(raw_message, dict):
+            return None
+
+        payload = raw_message.get("payload")
+        if not isinstance(payload, dict):
+            return None
+
+        request_id = payload.get("request_id")
+        if isinstance(request_id, str):
+            return request_id
+        return None
+
+    @staticmethod
+    def _require_authenticated(connection: WsConnection | None) -> WsConnection:
+        if connection is None:
+            raise BadRequestError("Authentication required before this action")
+        return connection
