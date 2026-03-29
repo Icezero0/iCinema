@@ -54,7 +54,9 @@ class Settings(BaseSettings):
     )
 
     # WS
-    ws_auth_timeout_seconds: int = 30
+    ws_auth_timeout_seconds: int = Field(
+        10, alias="WS_AUTH_TIMEOUT_SECONDS"
+    )
 
     # CORS
     cors_origins: list[str] = ["*"]
@@ -99,7 +101,6 @@ class Settings(BaseSettings):
     @property
     def video_dir_path(self) -> Path:
         return (self.upload_dir_path / self.video_subdir).resolve()
-
 
 @lru_cache
 def get_settings() -> Settings:

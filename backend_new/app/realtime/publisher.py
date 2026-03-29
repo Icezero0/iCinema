@@ -1,14 +1,11 @@
 from typing import Any
 
 from app.modules.messages.schemas import MessageResponse
+from app.realtime.channels import ChannelKey, room_channel, user_channel
 from app.realtime.constants import WsEventType
 from app.realtime.manager import RealtimeManager
-from app.realtime.protocol import (
-    ChannelKey,
-    build_event_message,
-    room_channel,
-    user_channel,
-)
+from app.realtime.protocol import build_event_message
+from app.realtime.state import PlaybackState, PresenceState, VideoSourceState
 
 
 class RealtimePublisher:
@@ -25,6 +22,7 @@ class RealtimePublisher:
         channel: ChannelKey,
         event: WsEventType,
         data: dict[str, Any] | None = None,
+        exclude_connection_ids: set[str] | None = None,
     ) -> None:
         await self.manager.publish(
             channel=channel,
@@ -32,10 +30,11 @@ class RealtimePublisher:
                 event=event,
                 data=data,
             ),
+            exclude_connection_ids=exclude_connection_ids,
         )
 
     # =========================
-    # no data events
+    # signal events
     # =========================
 
     async def publish_notification(
@@ -98,32 +97,77 @@ class RealtimePublisher:
             data=message.model_dump(mode="json"),
         )
 
-    async def publish_playback_play(
+    async def publish_presence(
         self,
         *,
-        room_id: int,
+        presence: PresenceState,
+        exclude_connection_ids: set[str] | None = None,
     ) -> None:
-        pass
+        await self._publish_event(
+            channel=room_channel(presence.room_id),
+            event=WsEventType.PRESENCE,
+            data=presence.model_dump(mode="json"),
+            exclude_connection_ids=exclude_connection_ids,
+        )
 
-    async def publish_playback_pause(
+    async def publish_session(
         self,
         *,
+        connection_id: str,
         room_id: int,
+        reason: str,
     ) -> None:
-        pass
-
-    async def publish_playback_seek(
-        self,
-        *,
-        room_id: int,
-        position: float,
-    ) -> None:
-        pass
+        await self.manager.send_to_connection(
+            connection_id=connection_id,
+            message=build_event_message(
+                event=WsEventType.SESSION,
+                data={
+                    "room_id": room_id,
+                    "reason": reason,
+                },
+            ),
+        )
 
     async def publish_playback_source_set(
         self,
         *,
-        room_id: int,
-        source: str,
+        video_source: VideoSourceState,
     ) -> None:
-        pass
+        await self._publish_event(
+            channel=room_channel(video_source.room_id),
+            event=WsEventType.PLAYBACK_SOURCE_SET,
+            data=video_source.model_dump(mode="json"),
+        )
+
+    async def publish_playback_play(
+        self,
+        *,
+        playback: PlaybackState,
+    ) -> None:
+        await self._publish_event(
+            channel=room_channel(playback.room_id),
+            event=WsEventType.PLAYBACK_PLAY,
+            data=playback.model_dump(mode="json"),
+        )
+
+    async def publish_playback_pause(
+        self,
+        *,
+        playback: PlaybackState,
+    ) -> None:
+        await self._publish_event(
+            channel=room_channel(playback.room_id),
+            event=WsEventType.PLAYBACK_PAUSE,
+            data=playback.model_dump(mode="json"),
+        )
+
+    async def publish_playback_seek(
+        self,
+        *,
+        playback: PlaybackState,
+    ) -> None:
+        await self._publish_event(
+            channel=room_channel(playback.room_id),
+            event=WsEventType.PLAYBACK_SEEK,
+            data=playback.model_dump(mode="json"),
+        )

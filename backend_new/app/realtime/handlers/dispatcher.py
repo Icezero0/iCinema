@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import WebSocket
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,19 +13,21 @@ from app.realtime.handlers.heartbeat import HeartbeatHandler
 from app.realtime.handlers.playback import PlaybackCommandHandler
 from app.realtime.handlers.room import RoomCommandHandler
 from app.realtime.manager import RealtimeManager, WsConnection
+from app.realtime.presence import RoomPresenceService
 from app.realtime.protocol import (
     WsCommandPayload,
     WsMessage,
     build_ack_message,
     build_error_message,
 )
+from app.realtime.publisher import RealtimePublisher
 
 
 class RealtimeMessageHandler:
-    def __init__(self) -> None:
+    def __init__(self, *, presence_service: RoomPresenceService) -> None:
         self.auth_handler = AuthHandler()
         self.heartbeat_handler = HeartbeatHandler()
-        self.room_handler = RoomCommandHandler()
+        self.room_handler = RoomCommandHandler(presence_service)
         self.playback_handler = PlaybackCommandHandler()
 
     async def handle(
@@ -31,6 +35,7 @@ class RealtimeMessageHandler:
         *,
         db: AsyncSession,
         manager: RealtimeManager,
+        publisher: RealtimePublisher,
         websocket: WebSocket,
         connection: WsConnection | None,
         raw_message: dict,
@@ -60,16 +65,18 @@ class RealtimeMessageHandler:
                 connection = self._require_authenticated(connection)
                 command = WsCommandPayload.model_validate(message.payload or {})
 
-                await self._dispatch_command(
+                ack_data = await self._dispatch_command(
                     db=db,
                     manager=manager,
+                    publisher=publisher,
                     connection=connection,
                     command=command,
                 )
 
                 await websocket.send_json(
                     build_ack_message(
-                        request_id=command.request_id
+                        request_id=command.request_id,
+                        data=ack_data,
                     ).model_dump(mode="json")
                 )
                 return connection
@@ -101,34 +108,35 @@ class RealtimeMessageHandler:
         *,
         db: AsyncSession,
         manager: RealtimeManager,
+        publisher: RealtimePublisher,
         connection: WsConnection,
         command: WsCommandPayload,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         if command.action in {
             WsCommandAction.ROOM_ENTER,
             WsCommandAction.ROOM_LEAVE,
         }:
-            await self.room_handler.handle(
+            return await self.room_handler.handle(
                 db=db,
                 manager=manager,
+                publisher=publisher,
                 connection=connection,
                 command=command,
             )
-            return
 
         if command.action in {
             WsCommandAction.PLAYBACK_PAUSE,
             WsCommandAction.PLAYBACK_PLAY,
             WsCommandAction.PLAYBACK_SEEK,
-            WsCommandAction.PLAYBACK_SET_SOURCE,
+            WsCommandAction.PLAYBACK_SOURCE_SET,
         }:
-            await self.playback_handler.handle(
+            return await self.playback_handler.handle(
                 db=db,
                 manager=manager,
+                publisher=publisher,
                 connection=connection,
                 command=command,
             )
-            return
 
         raise BadRequestError(f"Unsupported command action: {command.action}")
 

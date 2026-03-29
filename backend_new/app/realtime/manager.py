@@ -6,7 +6,8 @@ from uuid import uuid4
 
 from fastapi import WebSocket
 
-from app.realtime.protocol import ChannelKey, WsMessage, user_channel
+from app.realtime.channels import ChannelKey, user_channel
+from app.realtime.protocol import WsMessage
 
 
 @dataclass
@@ -15,6 +16,7 @@ class WsConnection:
     user_id: int
     websocket: WebSocket
     subscriptions: set[ChannelKey] = field(default_factory=set)
+    active_room_id: int | None = None
 
 
 class RealtimeManager:
@@ -70,6 +72,7 @@ class RealtimeManager:
                         self.channel_connections.pop(channel, None)
 
             connection.subscriptions.clear()
+            connection.active_room_id = None
 
     async def subscribe(self, *, connection_id: str, channel: ChannelKey) -> None:
         async with self._lock:
@@ -100,7 +103,12 @@ class RealtimeManager:
                 if not connection_ids:
                     self.channel_connections.pop(channel, None)
 
-    async def _send_to_connection(self, *, connection_id: str, message: WsMessage) -> None:
+    async def send_to_connection(
+        self,
+        *,
+        connection_id: str,
+        message: WsMessage,
+    ) -> None:
         connection = self.connections.get(connection_id)
         if connection is None:
             return
@@ -110,7 +118,17 @@ class RealtimeManager:
         except Exception:  # noqa: BLE001
             await self.disconnect(connection_id)
 
-    async def publish(self, *, channel: ChannelKey, message: WsMessage) -> None:
+    async def publish(
+        self,
+        *,
+        channel: ChannelKey,
+        message: WsMessage,
+        exclude_connection_ids: set[str] | None = None,
+    ) -> None:
+        excluded = exclude_connection_ids or set()
         connection_ids = list(self.channel_connections.get(channel, set()))
+
         for connection_id in connection_ids:
-            await self._send_to_connection(connection_id=connection_id, message=message)
+            if connection_id in excluded:
+                continue
+            await self.send_to_connection(connection_id=connection_id, message=message)

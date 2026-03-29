@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 from app.realtime.constants import (
-    WsMessageType,
-    WsErrorCode,
     WsCommandAction,
+    WsErrorCode,
     WsEventType,
     WsHeartbeatAction,
-    ChannelKind,
+    WsMessageType,
 )
 
 
@@ -21,25 +19,6 @@ class WsMessage(BaseModel):
     v: int = 1
     type: WsMessageType
     payload: dict[str, Any] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ChannelKey:
-    kind: ChannelKind
-    target_id: str
-
-
-# =========================
-# helpers
-# =========================
-
-
-def user_channel(user_id: int) -> ChannelKey:
-    return ChannelKey(kind=ChannelKind.USER, target_id=str(user_id))
-
-
-def room_channel(room_id: int) -> ChannelKey:
-    return ChannelKey(kind=ChannelKind.ROOM, target_id=str(room_id))
 
 
 # =========================
@@ -96,6 +75,7 @@ class WsAckPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str | None = None
+    data: dict[str, Any] | None = None
 
 
 # =========================
@@ -120,10 +100,14 @@ def build_event_message(
 def build_ack_message(
     *,
     request_id: str | None = None,
+    data: dict[str, Any] | None = None,
 ) -> WsMessage:
     return WsMessage(
         type=WsMessageType.ACK,
-        payload=WsAckPayload(request_id=request_id).model_dump(mode="json"),
+        payload=WsAckPayload(
+            request_id=request_id,
+            data=data,
+        ).model_dump(mode="json"),
     )
 
 

@@ -9,9 +9,11 @@ class WsMessageType(StrEnum):
     ERROR = "error"
     ACK = "ack"
 
+
 class WsHeartbeatAction(StrEnum):
     PING = "ping"
     PONG = "pong"
+
 
 class WsCommandAction(StrEnum):
     ROOM_ENTER = "room_enter"
@@ -20,7 +22,8 @@ class WsCommandAction(StrEnum):
     PLAYBACK_PAUSE = "playback_pause"
     PLAYBACK_PLAY = "playback_play"
     PLAYBACK_SEEK = "playback_seek"
-    PLAYBACK_SET_SOURCE = "playback_source_set"
+    PLAYBACK_SOURCE_SET = "playback_source_set"
+
 
 class WsEventType(StrEnum):
     NOTIFICATION = "notification"
@@ -29,12 +32,15 @@ class WsEventType(StrEnum):
     ROOM_SETTINGS = "room_settings"
     ROOM_MEMBERS = "room_members"
 
+    PRESENCE = "presence"
+    SESSION = "session"
+
     MESSAGE = "message"
 
     PLAYBACK_PAUSE = "playback_pause"
     PLAYBACK_PLAY = "playback_play"
     PLAYBACK_SEEK = "playback_seek"
-    PLAYBACK_SET_SOURCE = "playback_source_set"
+    PLAYBACK_SOURCE_SET = "playback_source_set"
 
 
 class WsErrorCode(StrEnum):
@@ -45,6 +51,17 @@ class WsErrorCode(StrEnum):
     INVALID_PAYLOAD = "invalid_payload"
     INTERNAL_ERROR = "internal_error"
 
+
 class ChannelKind(StrEnum):
     USER = "user"
     ROOM = "room"
+
+
+class VideoSourceType(StrEnum):
+    LOCAL_FILE = "local_file"
+    EXTERNAL_URL = "external_url"
+
+
+class PlaybackStatusType(StrEnum):
+    PLAYING = "playing"
+    PAUSED = "paused"
