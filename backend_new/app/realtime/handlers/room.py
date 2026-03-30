@@ -9,16 +9,23 @@ from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.room.service import RoomService
 from app.realtime.constants import WsCommandAction
 from app.realtime.manager import RealtimeManager, WsConnection
-from app.realtime.presence import RoomPresenceService
 from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
+from app.realtime.room_presence import RoomPresenceService
+from app.realtime.room_video_runtime import RoomVideoRuntimeService
+from app.realtime.state import RoomSnapshot
 
 
 class RoomCommandHandler:
-    def __init__(self, presence_service: RoomPresenceService) -> None:
+    def __init__(
+        self,
+        presence_service: RoomPresenceService,
+        video_runtime_service: RoomVideoRuntimeService,
+    ) -> None:
         self.room_service = RoomService()
         self.membership_service = RoomMembershipService()
         self.presence_service = presence_service
+        self.video_runtime_service = video_runtime_service
 
     async def handle(
         self,
@@ -77,10 +84,19 @@ class RoomCommandHandler:
         if replaced_connection_id == connection.connection_id:
             replaced_connection_id = None
 
-        result = await self.presence_service.enter_room(
+        current_presence = await self.presence_service.enter_room(
             manager=manager,
             connection=connection,
             room_id=room_id,
+        )
+
+        video_source = await self.video_runtime_service.get_video_source(room_id=room_id)
+        playback = await self.video_runtime_service.get_playback(room_id=room_id)
+        snapshot = RoomSnapshot(
+            room_id=room_id,
+            present_user_ids=current_presence.present_user_ids,
+            video_source=video_source,
+            playback=playback,
         )
 
         if replaced_connection_id is not None:
@@ -94,17 +110,21 @@ class RoomCommandHandler:
             left_presence = await self.presence_service.get_presence_state(
                 room_id=previous_room_id,
             )
+            if not left_presence.present_user_ids:
+                await self.video_runtime_service.clear_room_runtime(
+                    room_id=previous_room_id,
+                )
+
             await publisher.publish_presence(
                 presence=left_presence,
             )
 
-        current_presence = await self.presence_service.get_presence_state(room_id=room_id)
         await publisher.publish_presence(
             presence=current_presence,
             exclude_connection_ids={connection.connection_id},
         )
 
-        return result.snapshot.model_dump(mode="json")
+        return snapshot.model_dump(mode="json")
 
     async def _handle_room_leave(
         self,
@@ -125,6 +145,9 @@ class RoomCommandHandler:
             return
 
         presence = await self.presence_service.get_presence_state(room_id=room_id)
+        if not presence.present_user_ids:
+            await self.video_runtime_service.clear_room_runtime(room_id=room_id)
+
         await publisher.publish_presence(
             presence=presence,
             exclude_connection_ids={connection.connection_id},

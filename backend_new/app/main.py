@@ -8,6 +8,7 @@ from app.api.public_resources import router as public_resources_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.startup import ensure_database_file, ensure_runtime_paths
+from app.realtime.bootstrap import setup_realtime
 from app.realtime.ws_router import router as ws_router
 
 settings = get_settings()
@@ -26,6 +27,8 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=lifespan,
     )
+
+    setup_realtime(app)
 
     app.add_middleware(
         CORSMiddleware,

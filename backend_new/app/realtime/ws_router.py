@@ -7,8 +7,9 @@ from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.realtime.handlers.dispatcher import RealtimeMessageHandler
 from app.realtime.manager import RealtimeManager, WsConnection
-from app.realtime.presence import RoomPresenceService
 from app.realtime.publisher import RealtimePublisher
+from app.realtime.room_presence import RoomPresenceService
+from app.realtime.room_video_runtime import RoomVideoRuntimeService
 
 settings = get_settings()
 
@@ -21,9 +22,15 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
     manager: RealtimeManager = ws.app.state.realtime_manager
     publisher: RealtimePublisher = ws.app.state.realtime_publisher
-    presence_service: RoomPresenceService = ws.app.state.realtime_presence_service
+    presence_service: RoomPresenceService = ws.app.state.realtime_room_presence_service
+    video_runtime_service: RoomVideoRuntimeService = (
+        ws.app.state.realtime_room_video_runtime_service
+    )
 
-    handler = RealtimeMessageHandler(presence_service=presence_service)
+    handler = RealtimeMessageHandler(
+        presence_service=presence_service,
+        video_runtime_service=video_runtime_service,
+    )
     connection: WsConnection | None = None
     auth_deadline = time.monotonic() + settings.ws_auth_timeout_seconds
 
@@ -65,6 +72,9 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
             if left_room_id is not None:
                 presence = await presence_service.get_presence_state(room_id=left_room_id)
+                if not presence.present_user_ids:
+                    await video_runtime_service.clear_room_runtime(room_id=left_room_id)
+
                 await publisher.publish_presence(
                     presence=presence,
                 )

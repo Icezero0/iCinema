@@ -72,7 +72,6 @@ class RealtimeManager:
                         self.channel_connections.pop(channel, None)
 
             connection.subscriptions.clear()
-            connection.active_room_id = None
 
     async def subscribe(self, *, connection_id: str, channel: ChannelKey) -> None:
         async with self._lock:
@@ -116,6 +115,11 @@ class RealtimeManager:
         try:
             await connection.websocket.send_json(message.model_dump(mode="json"))
         except Exception:  # noqa: BLE001
+            try:
+                await connection.websocket.close()
+            except Exception:  # noqa: BLE001
+                pass
+
             await self.disconnect(connection_id)
 
     async def publish(

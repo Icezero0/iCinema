@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # WS
     ws_auth_timeout_seconds: int = Field(
-        10, alias="WS_AUTH_TIMEOUT_SECONDS"
+        10, alias="WS_AUTH_TIMEOUT_SECONDS", ge=1
     )
 
     # CORS

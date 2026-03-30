@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 
 from app.realtime.channels import room_channel
 from app.realtime.manager import RealtimeManager, WsConnection
-from app.realtime.state import PresenceState, RoomSnapshot
-
-
-@dataclass(frozen=True)
-class RoomPresenceEnterResult:
-    room_id: int
-    snapshot: RoomSnapshot
+from app.realtime.state import PresenceState
 
 
 class RoomPresenceService:
@@ -35,16 +28,13 @@ class RoomPresenceService:
         manager: RealtimeManager,
         connection: WsConnection,
         room_id: int,
-    ) -> RoomPresenceEnterResult:
+    ) -> PresenceState:
         async with self._lock:
             current_room_id = connection.active_room_id
             if current_room_id == room_id:
                 room_connections = self.room_user_connections.get(room_id, {})
                 if room_connections.get(connection.user_id) == connection.connection_id:
-                    return RoomPresenceEnterResult(
-                        room_id=room_id,
-                        snapshot=self._build_room_snapshot_locked(room_id),
-                    )
+                    return self._build_presence_state_locked(room_id)
 
             if current_room_id is not None and current_room_id != room_id:
                 await self._leave_room_locked(
@@ -80,10 +70,7 @@ class RoomPresenceService:
                 channel=room_channel(room_id),
             )
 
-            return RoomPresenceEnterResult(
-                room_id=room_id,
-                snapshot=self._build_room_snapshot_locked(room_id),
-            )
+            return self._build_presence_state_locked(room_id)
 
     async def leave_room(
         self,
@@ -133,14 +120,6 @@ class RoomPresenceService:
         async with self._lock:
             return self._build_presence_state_locked(room_id)
 
-    async def get_room_snapshot(
-        self,
-        *,
-        room_id: int,
-    ) -> RoomSnapshot:
-        async with self._lock:
-            return self._build_room_snapshot_locked(room_id)
-
     async def _leave_room_locked(
         self,
         *,
@@ -168,13 +147,4 @@ class RoomPresenceService:
         return PresenceState(
             room_id=room_id,
             present_user_ids=sorted(room_connections.keys()),
-        )
-
-    def _build_room_snapshot_locked(self, room_id: int) -> RoomSnapshot:
-        presence = self._build_presence_state_locked(room_id)
-        return RoomSnapshot(
-            room_id=room_id,
-            present_user_ids=presence.present_user_ids,
-            video_source=None,
-            playback=None,
         )

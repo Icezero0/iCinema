@@ -13,7 +13,6 @@ from app.realtime.handlers.heartbeat import HeartbeatHandler
 from app.realtime.handlers.playback import PlaybackCommandHandler
 from app.realtime.handlers.room import RoomCommandHandler
 from app.realtime.manager import RealtimeManager, WsConnection
-from app.realtime.presence import RoomPresenceService
 from app.realtime.protocol import (
     WsCommandPayload,
     WsMessage,
@@ -21,14 +20,26 @@ from app.realtime.protocol import (
     build_error_message,
 )
 from app.realtime.publisher import RealtimePublisher
+from app.realtime.room_presence import RoomPresenceService
+from app.realtime.room_video_runtime import RoomVideoRuntimeService
 
 
 class RealtimeMessageHandler:
-    def __init__(self, *, presence_service: RoomPresenceService) -> None:
+    def __init__(
+        self,
+        *,
+        presence_service: RoomPresenceService,
+        video_runtime_service: RoomVideoRuntimeService,
+    ) -> None:
         self.auth_handler = AuthHandler()
         self.heartbeat_handler = HeartbeatHandler()
-        self.room_handler = RoomCommandHandler(presence_service)
-        self.playback_handler = PlaybackCommandHandler()
+        self.room_handler = RoomCommandHandler(
+            presence_service=presence_service,
+            video_runtime_service=video_runtime_service,
+        )
+        self.playback_handler = PlaybackCommandHandler(
+            video_runtime_service=video_runtime_service,
+        )
 
     async def handle(
         self,
