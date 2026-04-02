@@ -80,7 +80,7 @@ class RoomSettings(Base):
         index=True,
     )
 
-    media_source_type: Mapped[RoomMediaSourceType] = mapped_column(
+    selected_room_video_source_type: Mapped[RoomMediaSourceType] = mapped_column(
         String(32),
         nullable=False,
         default=RoomMediaSourceType.EXTERNAL_URL,

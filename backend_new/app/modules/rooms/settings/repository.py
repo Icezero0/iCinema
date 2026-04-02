@@ -15,7 +15,9 @@ class RoomSettingsRepository:
         db: AsyncSession,
         *,
         room_id: int,
-        media_source_type: RoomMediaSourceType = RoomMediaSourceType.EXTERNAL_URL,
+        selected_room_video_source_type: RoomMediaSourceType = (
+            RoomMediaSourceType.EXTERNAL_URL
+        ),
         sync_policy: RoomSyncPolicy = RoomSyncPolicy.AUTO_PAUSE,
         active_sync_permission: RoomActiveSyncPermission = (
             RoomActiveSyncPermission.OWNER_AND_MANAGER
@@ -23,7 +25,7 @@ class RoomSettingsRepository:
     ) -> RoomSettings:
         settings = RoomSettings(
             room_id=room_id,
-            media_source_type=media_source_type,
+            selected_room_video_source_type=selected_room_video_source_type,
             sync_policy=sync_policy,
             active_sync_permission=active_sync_permission,
         )

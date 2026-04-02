@@ -24,7 +24,6 @@ from app.realtime.room_video_runtime import RoomVideoRuntimeService
 
 @dataclass
 class PlaybackRuntimePolicy:
-    media_source_type: RoomMediaSourceType
     sync_policy: RoomSyncPolicy
     active_sync_permission: RoomActiveSyncPermission
 
@@ -58,21 +57,21 @@ class PlaybackCommandHandler:
             raise ForbiddenError("You are not allowed to control playback in this room")
 
         policy = await self._get_runtime_policy(db=db, room_id=room_id)
-        self._require_active_sync_permission(role=role, permission=policy.active_sync_permission)
+
+        self._require_active_sync_permission(
+            role=role,
+            permission=policy.active_sync_permission,
+        )
 
         if command.action == WsCommandAction.PLAYBACK_SOURCE_SET:
             return await self._handle_source_set(
+                db=db,
                 publisher=publisher,
                 room_id=room_id,
                 command=command,
-                policy=policy,
             )
 
         if command.action == WsCommandAction.PLAYBACK_PLAY:
-            self._require_sync_action_allowed(
-                action=command.action,
-                sync_policy=policy.sync_policy,
-            )
             return await self._handle_play(
                 publisher=publisher,
                 room_id=room_id,
@@ -80,10 +79,6 @@ class PlaybackCommandHandler:
             )
 
         if command.action == WsCommandAction.PLAYBACK_PAUSE:
-            self._require_sync_action_allowed(
-                action=command.action,
-                sync_policy=policy.sync_policy,
-            )
             return await self._handle_pause(
                 publisher=publisher,
                 room_id=room_id,
@@ -91,10 +86,6 @@ class PlaybackCommandHandler:
             )
 
         if command.action == WsCommandAction.PLAYBACK_SEEK:
-            self._require_sync_action_allowed(
-                action=command.action,
-                sync_policy=policy.sync_policy,
-            )
             return await self._handle_seek(
                 publisher=publisher,
                 room_id=room_id,
@@ -106,18 +97,14 @@ class PlaybackCommandHandler:
     async def _handle_source_set(
         self,
         *,
+        db: AsyncSession,
         publisher: RealtimePublisher,
         room_id: int,
         command: WsCommandPayload,
-        policy: PlaybackRuntimePolicy,
     ) -> dict[str, Any]:
         data = command.data or {}
 
         source_type = self._parse_source_type(data.get("source_type"))
-        self._require_source_type_allowed(
-            source_type=source_type,
-            media_source_type=policy.media_source_type,
-        )
 
         external_url: str | None = None
         file_hash: str | None = None
@@ -140,6 +127,12 @@ class PlaybackCommandHandler:
         anchor_ts_ms = self._parse_optional_positive_int(
             data.get("anchor_ts_ms"),
             field_name="anchor_ts_ms",
+        )
+
+        await self._persist_selected_room_video_source_type(
+            db=db,
+            room_id=room_id,
+            source_type=source_type,
         )
 
         video_source, playback = await self.video_runtime_service.set_video_source(
@@ -255,6 +248,27 @@ class PlaybackCommandHandler:
             "playback": playback.model_dump(mode="json"),
         }
 
+    async def _persist_selected_room_video_source_type(
+        self,
+        *,
+        db: AsyncSession,
+        room_id: int,
+        source_type: VideoSourceType,
+    ) -> None:
+        settings = await self.room_settings_service.find_room_settings_by_room_id(
+            db,
+            room_id=room_id,
+        )
+        if settings is None:
+            settings = await self.room_settings_service.create_default_settings(
+                db,
+                room_id=room_id,
+            )
+
+        settings.selected_room_video_source_type = RoomMediaSourceType(source_type.value)
+        await self.room_settings_service.repo.save_settings(db, settings)
+        await db.commit()
+
     async def _get_runtime_policy(
         self,
         *,
@@ -268,13 +282,11 @@ class PlaybackCommandHandler:
 
         if settings is None:
             return PlaybackRuntimePolicy(
-                media_source_type=RoomMediaSourceType.EXTERNAL_URL,
                 sync_policy=RoomSyncPolicy.AUTO_PAUSE,
                 active_sync_permission=RoomActiveSyncPermission.OWNER_AND_MANAGER,
             )
 
         return PlaybackRuntimePolicy(
-            media_source_type=settings.media_source_type,
             sync_policy=settings.sync_policy,
             active_sync_permission=settings.active_sync_permission,
         )
@@ -306,46 +318,6 @@ class PlaybackCommandHandler:
             raise ForbiddenError("You do not have permission to control playback")
 
         raise ForbiddenError("You do not have permission to control playback")
-
-    @staticmethod
-    def _require_sync_action_allowed(
-        *,
-        action: WsCommandAction,
-        sync_policy: RoomSyncPolicy,
-    ) -> None:
-        if sync_policy == RoomSyncPolicy.DISABLED:
-            raise ForbiddenError("Playback sync is disabled in this room")
-
-        if sync_policy == RoomSyncPolicy.AUTO_PAUSE:
-            if action in {
-                WsCommandAction.PLAYBACK_PLAY,
-                WsCommandAction.PLAYBACK_PAUSE,
-            }:
-                return
-            raise ForbiddenError("Seek is not allowed under current sync policy")
-
-        if sync_policy == RoomSyncPolicy.AUTO_SEEK:
-            return
-
-        raise ForbiddenError("Playback sync is not allowed in this room")
-
-    @staticmethod
-    def _require_source_type_allowed(
-        *,
-        source_type: VideoSourceType,
-        media_source_type: RoomMediaSourceType,
-    ) -> None:
-        if media_source_type == RoomMediaSourceType.EXTERNAL_URL:
-            if source_type != VideoSourceType.EXTERNAL_URL:
-                raise BadRequestError("This room only allows external_url media source")
-            return
-
-        if media_source_type == RoomMediaSourceType.LOCAL_FILE:
-            if source_type != VideoSourceType.LOCAL_FILE:
-                raise BadRequestError("This room only allows local_file media source")
-            return
-
-        raise BadRequestError("Unsupported room media source type")
 
     @staticmethod
     def _parse_source_type(value: Any) -> VideoSourceType:

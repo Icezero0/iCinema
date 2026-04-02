@@ -38,7 +38,6 @@ class RoomMediaSourceType(StrEnum):
 
 class RoomSyncPolicy(StrEnum):
     AUTO_PAUSE = "auto_pause"
-    AUTO_SEEK = "auto_seek"
     DISABLED = "disabled"
 
 

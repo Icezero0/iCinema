@@ -1,20 +1,20 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError
-from app.modules.rooms.constants import RoomPermission
-from app.modules.rooms.models import RoomSettings
+from app.modules.rooms.constants import RoomPermission, RoomVisibility
+from app.modules.rooms.membership.service import RoomMembershipService
+from app.modules.rooms.models import Room, RoomSettings
 from app.modules.rooms.permissions import require_room_permission
-from app.modules.rooms.room.service import RoomService
+from app.modules.rooms.room.repository import RoomRepository
 from app.modules.rooms.settings.repository import RoomSettingsRepository
 from app.modules.rooms.settings.schemas import RoomSettingsPatch
-from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.users.models import User
 
 
 class RoomSettingsService:
     def __init__(self) -> None:
         self.repo = RoomSettingsRepository()
-        self.room_service = RoomService()
+        self.room_repo = RoomRepository()
         self.membership_service = RoomMembershipService()
 
     async def _require_room_permission(
@@ -35,6 +35,17 @@ class RoomSettingsService:
 
         require_room_permission(role, permission)
         return role
+
+    async def _get_room_by_id(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+    ) -> Room:
+        room = await self.room_repo.get_room_by_id(db, room_id)
+        if not room:
+            raise NotFoundError("Room not found")
+        return room
 
     async def find_room_settings_by_room_id(
         self,
@@ -61,7 +72,6 @@ class RoomSettingsService:
         *,
         room_id: int,
     ) -> RoomSettings:
-        # internal composable helper: no commit here
         return await self.repo.create_settings(
             db,
             room_id=room_id,
@@ -74,17 +84,20 @@ class RoomSettingsService:
         room_id: int,
         user: User,
     ) -> RoomSettings:
-        await self.room_service.get_accessible_room_by_id(
-            db,
-            room_id=room_id,
-            user=user,
-        )
+        room = await self._get_room_by_id(db, room_id=room_id)
 
-        settings = await self.find_room_settings_by_room_id(db, room_id=room_id)
+        if room.visibility != RoomVisibility.PUBLIC:
+            await self._require_room_permission(
+                db,
+                room_id=room_id,
+                user=user,
+                permission=RoomPermission.VIEW_ROOM,
+            )
+
+        settings = room.settings
         if settings:
             return settings
 
-        # defensive fallback for legacy / partially migrated data
         settings = await self.create_default_settings(db, room_id=room_id)
         await db.commit()
         await db.refresh(settings)
@@ -98,7 +111,7 @@ class RoomSettingsService:
         user: User,
         payload: RoomSettingsPatch,
     ) -> RoomSettings:
-        await self.room_service.get_room_by_id(db, room_id)
+        await self._get_room_by_id(db, room_id=room_id)
 
         await self._require_room_permission(
             db,
@@ -113,8 +126,10 @@ class RoomSettingsService:
 
         updates = payload.model_dump(exclude_unset=True)
 
-        if "media_source_type" in updates:
-            settings.media_source_type = updates["media_source_type"]
+        if "selected_room_video_source_type" in updates:
+            settings.selected_room_video_source_type = updates[
+                "selected_room_video_source_type"
+            ]
 
         if "sync_policy" in updates:
             settings.sync_policy = updates["sync_policy"]
