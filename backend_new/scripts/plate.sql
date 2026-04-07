@@ -15,7 +15,7 @@ SELECT name FROM sqlite_master WHERE type='table';
 -- DELETE FROM messages;
 
 
-SELECT * FROM messages;
+-- SELECT * FROM messages;
 -- SELECT * FROM room_members;
 -- SELECT * FROM users;
 -- SELECT * FROM media_assets;
@@ -24,5 +24,8 @@ SELECT * FROM messages;
 -- SELECT * FROM user_avatar_assets WHERE is_deleted = 0;
 -- DROP TABLE IF EXISTS messages;
 
--- SELECT * FROM media_assets;
--- DROP TABLE IF EXISTS messages;
+
+SELECT * FROM rooms;
+SELECT * FROM room_settings;
+
+DROP TABLE IF EXISTS room_settings;
