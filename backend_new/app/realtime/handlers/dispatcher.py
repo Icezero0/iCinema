@@ -10,8 +10,8 @@ from app.core.exceptions import AppError, BadRequestError
 from app.realtime.constants import WsCommandAction, WsErrorCode, WsMessageType
 from app.realtime.handlers.auth import AuthHandler
 from app.realtime.handlers.heartbeat import HeartbeatHandler
-from app.realtime.handlers.playback import PlaybackCommandHandler
 from app.realtime.handlers.room import RoomCommandHandler
+from app.realtime.handlers.room_video import RoomVideoCommandHandler
 from app.realtime.manager import RealtimeManager, WsConnection
 from app.realtime.protocol import (
     WsCommandPayload,
@@ -37,7 +37,7 @@ class RealtimeMessageHandler:
             presence_service=presence_service,
             video_runtime_service=video_runtime_service,
         )
-        self.playback_handler = PlaybackCommandHandler(
+        self.room_video_handler = RoomVideoCommandHandler(
             video_runtime_service=video_runtime_service,
         )
 
@@ -139,9 +139,10 @@ class RealtimeMessageHandler:
             WsCommandAction.PLAYBACK_PAUSE,
             WsCommandAction.PLAYBACK_PLAY,
             WsCommandAction.PLAYBACK_SEEK,
-            WsCommandAction.PLAYBACK_SOURCE_SET,
+            WsCommandAction.ROOM_VIDEO_SOURCE_SET,
+            WsCommandAction.USER_PLAYER_STATUS,
         }:
-            return await self.playback_handler.handle(
+            return await self.room_video_handler.handle(
                 db=db,
                 manager=manager,
                 publisher=publisher,

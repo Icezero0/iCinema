@@ -31,7 +31,7 @@ class RoomJoinAuditMode(StrEnum):
     AUTO_REJECT = "auto_reject"
 
 
-class RoomMediaSourceType(StrEnum):
+class RoomVideoSourceType(StrEnum):
     EXTERNAL_URL = "external_url"
     LOCAL_FILE = "local_file"
 

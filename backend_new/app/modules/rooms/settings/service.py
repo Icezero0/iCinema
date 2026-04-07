@@ -1,7 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError
-from app.modules.rooms.constants import RoomPermission, RoomVisibility
+from app.modules.rooms.constants import (
+    RoomPermission,
+    RoomVideoSourceType,
+    RoomVisibility,
+)
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.models import Room, RoomSettings
 from app.modules.rooms.permissions import require_room_permission
@@ -99,6 +103,23 @@ class RoomSettingsService:
             return settings
 
         settings = await self.create_default_settings(db, room_id=room_id)
+        await db.commit()
+        await db.refresh(settings)
+        return settings
+
+    async def set_selected_room_video_source_type(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+        source_type: RoomVideoSourceType,
+    ) -> RoomSettings:
+        settings = await self.find_room_settings_by_room_id(db, room_id=room_id)
+        if not settings:
+            settings = await self.create_default_settings(db, room_id=room_id)
+
+        settings.selected_room_video_source_type = source_type
+        settings = await self.repo.save_settings(db, settings)
         await db.commit()
         await db.refresh(settings)
         return settings

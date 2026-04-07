@@ -12,7 +12,7 @@ from app.modules.rooms.constants import (
     RoomJoinRequestAction,
     RoomJoinRequestSource,
     RoomJoinRequestStatus,
-    RoomMediaSourceType,
+    RoomVideoSourceType,
     RoomSyncPolicy,
     RoomVisibility,
 )
@@ -80,11 +80,11 @@ class RoomSettings(Base):
         index=True,
     )
 
-    selected_room_video_source_type: Mapped[RoomMediaSourceType] = mapped_column(
+    selected_room_video_source_type: Mapped[RoomVideoSourceType] = mapped_column(
         String(32),
         nullable=False,
-        default=RoomMediaSourceType.EXTERNAL_URL,
-        server_default=RoomMediaSourceType.EXTERNAL_URL.value,
+        default=RoomVideoSourceType.EXTERNAL_URL,
+        server_default=RoomVideoSourceType.EXTERNAL_URL.value,
     )
     sync_policy: Mapped[RoomSyncPolicy] = mapped_column(
         String(32),

@@ -22,7 +22,8 @@ class WsCommandAction(StrEnum):
     PLAYBACK_PAUSE = "playback_pause"
     PLAYBACK_PLAY = "playback_play"
     PLAYBACK_SEEK = "playback_seek"
-    PLAYBACK_SOURCE_SET = "playback_source_set"
+    ROOM_VIDEO_SOURCE_SET = "room_video_source_set"
+    USER_PLAYER_STATUS = "user_player_status"
 
 
 class WsEventType(StrEnum):
@@ -40,7 +41,8 @@ class WsEventType(StrEnum):
     PLAYBACK_PAUSE = "playback_pause"
     PLAYBACK_PLAY = "playback_play"
     PLAYBACK_SEEK = "playback_seek"
-    PLAYBACK_SOURCE_SET = "playback_source_set"
+    ROOM_VIDEO_SOURCE_SET = "room_video_source_set"
+    USER_PLAYER_STATES = "user_player_states"
 
 
 class WsErrorCode(StrEnum):
@@ -57,11 +59,18 @@ class ChannelKind(StrEnum):
     ROOM = "room"
 
 
-class VideoSourceType(StrEnum):
-    LOCAL_FILE = "local_file"
-    EXTERNAL_URL = "external_url"
-
-
 class PlaybackStatusType(StrEnum):
     PLAYING = "playing"
     PAUSED = "paused"
+
+
+class UserPlayerStatusType(StrEnum):
+    READY = "ready"
+    STALLING = "stalling"
+    ERROR = "error"
+    IDLE = "idle"
+
+
+class AutoPlaybackAction(StrEnum):
+    PLAY = "play"
+    PAUSE = "pause"

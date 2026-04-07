@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,27 +9,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BadRequestError, ForbiddenError
 from app.modules.rooms.constants import (
     RoomActiveSyncPermission,
-    RoomMediaSourceType,
     RoomRole,
     RoomSyncPolicy,
+    RoomVideoSourceType,
 )
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.room.service import RoomService
 from app.modules.rooms.settings.service import RoomSettingsService
-from app.realtime.constants import VideoSourceType, WsCommandAction
+from app.realtime.constants import AutoPlaybackAction, UserPlayerStatusType, WsCommandAction
 from app.realtime.manager import RealtimeManager, WsConnection
 from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
 from app.realtime.room_video_runtime import RoomVideoRuntimeService
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
-class PlaybackRuntimePolicy:
+class RoomVideoRuntimePolicy:
     sync_policy: RoomSyncPolicy
     active_sync_permission: RoomActiveSyncPermission
 
 
-class PlaybackCommandHandler:
+class RoomVideoCommandHandler:
     def __init__(self, video_runtime_service: RoomVideoRuntimeService) -> None:
         self.video_runtime_service = video_runtime_service
         self.room_service = RoomService()
@@ -54,17 +57,26 @@ class PlaybackCommandHandler:
             user_id=connection.user_id,
         )
         if role is None:
-            raise ForbiddenError("You are not allowed to control playback in this room")
+            raise ForbiddenError("You are not allowed to control room video in this room")
 
         policy = await self._get_runtime_policy(db=db, room_id=room_id)
+
+        if command.action == WsCommandAction.USER_PLAYER_STATUS:
+            return await self._handle_user_player_status(
+                publisher=publisher,
+                room_id=room_id,
+                user_id=connection.user_id,
+                command=command,
+                sync_policy=policy.sync_policy,
+            )
 
         self._require_active_sync_permission(
             role=role,
             permission=policy.active_sync_permission,
         )
 
-        if command.action == WsCommandAction.PLAYBACK_SOURCE_SET:
-            return await self._handle_source_set(
+        if command.action == WsCommandAction.ROOM_VIDEO_SOURCE_SET:
+            return await self._handle_room_video_source_set(
                 db=db,
                 publisher=publisher,
                 room_id=room_id,
@@ -92,9 +104,9 @@ class PlaybackCommandHandler:
                 command=command,
             )
 
-        raise BadRequestError(f"Unsupported playback command action: {command.action}")
+        raise BadRequestError(f"Unsupported room video command action: {command.action}")
 
-    async def _handle_source_set(
+    async def _handle_room_video_source_set(
         self,
         *,
         db: AsyncSession,
@@ -109,7 +121,7 @@ class PlaybackCommandHandler:
         external_url: str | None = None
         file_hash: str | None = None
 
-        if source_type == VideoSourceType.EXTERNAL_URL:
+        if source_type == RoomVideoSourceType.EXTERNAL_URL:
             external_url = self._parse_required_non_empty_string(
                 data.get("external_url"),
                 field_name="external_url",
@@ -129,26 +141,36 @@ class PlaybackCommandHandler:
             field_name="anchor_ts_ms",
         )
 
-        await self._persist_selected_room_video_source_type(
-            db=db,
+        await self.room_settings_service.set_selected_room_video_source_type(
+            db,
             room_id=room_id,
             source_type=source_type,
         )
 
-        video_source, playback = await self.video_runtime_service.set_video_source(
-            room_id=room_id,
-            source_type=source_type,
-            external_url=external_url,
-            file_hash=file_hash,
-            anchor_ts_ms=anchor_ts_ms,
+        room_video_source, playback, user_player_states = (
+            await self.video_runtime_service.set_room_video_source(
+                room_id=room_id,
+                source_type=source_type,
+                external_url=external_url,
+                file_hash=file_hash,
+                anchor_ts_ms=anchor_ts_ms,
+            )
         )
 
-        await publisher.publish_playback_source_set(video_source=video_source)
+        logger.info(
+            "room video source set: room_id=%s source_type=%s",
+            room_id,
+            source_type,
+        )
+
+        await publisher.publish_room_video_source_set(room_video_source=room_video_source)
         await publisher.publish_playback_pause(playback=playback)
+        await publisher.publish_user_player_states(user_player_states=user_player_states)
 
         return {
-            "video_source": video_source.model_dump(mode="json"),
+            "room_video_source": room_video_source.model_dump(mode="json"),
             "playback": playback.model_dump(mode="json"),
+            "user_player_states": user_player_states.model_dump(mode="json"),
         }
 
     async def _handle_play(
@@ -178,6 +200,13 @@ class PlaybackCommandHandler:
             position_seconds=position_seconds,
             anchor_ts_ms=anchor_ts_ms,
             playback_rate=playback_rate,
+        )
+
+        logger.info(
+            "playback play: room_id=%s position_seconds=%s playback_rate=%s",
+            room_id,
+            position_seconds,
+            playback_rate,
         )
 
         await publisher.publish_playback_play(playback=playback)
@@ -214,6 +243,13 @@ class PlaybackCommandHandler:
             playback_rate=playback_rate,
         )
 
+        logger.info(
+            "playback pause: room_id=%s position_seconds=%s playback_rate=%s",
+            room_id,
+            position_seconds,
+            playback_rate,
+        )
+
         await publisher.publish_playback_pause(playback=playback)
         return {
             "playback": playback.model_dump(mode="json"),
@@ -243,50 +279,100 @@ class PlaybackCommandHandler:
             anchor_ts_ms=anchor_ts_ms,
         )
 
+        logger.info(
+            "playback seek: room_id=%s position_seconds=%s",
+            room_id,
+            position_seconds,
+        )
+
         await publisher.publish_playback_seek(playback=playback)
         return {
             "playback": playback.model_dump(mode="json"),
         }
 
-    async def _persist_selected_room_video_source_type(
+    async def _handle_user_player_status(
         self,
         *,
-        db: AsyncSession,
+        publisher: RealtimePublisher,
         room_id: int,
-        source_type: VideoSourceType,
-    ) -> None:
-        settings = await self.room_settings_service.find_room_settings_by_room_id(
-            db,
-            room_id=room_id,
-        )
-        if settings is None:
-            settings = await self.room_settings_service.create_default_settings(
-                db,
-                room_id=room_id,
-            )
+        user_id: int,
+        command: WsCommandPayload,
+        sync_policy: RoomSyncPolicy,
+    ) -> dict[str, Any]:
+        data = command.data or {}
 
-        settings.selected_room_video_source_type = RoomMediaSourceType(source_type.value)
-        await self.room_settings_service.repo.save_settings(db, settings)
-        await db.commit()
+        status = self._parse_user_player_status(data.get("status"))
+        reported_at_ms = self._parse_positive_int(
+            data.get("reported_at_ms"),
+            field_name="reported_at_ms",
+        )
+        position_seconds = self._parse_optional_non_negative_number(
+            data.get("position_seconds"),
+            field_name="position_seconds",
+        )
+        error_code = self._parse_optional_string(
+            data.get("error_code"),
+            field_name="error_code",
+        )
+        error_message = self._parse_optional_string(
+            data.get("error_message"),
+            field_name="error_message",
+        )
+
+        result = await self.video_runtime_service.report_user_player_status(
+            room_id=room_id,
+            user_id=user_id,
+            status=status,
+            reported_at_ms=reported_at_ms,
+            sync_policy=sync_policy,
+            position_seconds=position_seconds,
+            error_code=error_code,
+            error_message=error_message,
+        )
+
+        logger.info(
+            "user player status: room_id=%s user_id=%s status=%s sync_policy=%s",
+            room_id,
+            user_id,
+            status,
+            sync_policy,
+        )
+
+        await publisher.publish_user_player_states(
+            user_player_states=result.user_player_states,
+        )
+
+        if result.auto_action == AutoPlaybackAction.PAUSE and result.auto_playback is not None:
+            await publisher.publish_playback_pause(playback=result.auto_playback)
+        elif result.auto_action == AutoPlaybackAction.PLAY and result.auto_playback is not None:
+            await publisher.publish_playback_play(playback=result.auto_playback)
+
+        response: dict[str, Any] = {
+            "user_player_states": result.user_player_states.model_dump(mode="json")
+        }
+        if result.auto_playback is not None:
+            response["playback"] = result.auto_playback.model_dump(mode="json")
+            response["auto_action"] = result.auto_action.value
+        return response
 
     async def _get_runtime_policy(
         self,
         *,
         db: AsyncSession,
         room_id: int,
-    ) -> PlaybackRuntimePolicy:
+    ) -> RoomVideoRuntimePolicy:
         settings = await self.room_settings_service.find_room_settings_by_room_id(
             db,
             room_id=room_id,
         )
 
         if settings is None:
-            return PlaybackRuntimePolicy(
+            return RoomVideoRuntimePolicy(
                 sync_policy=RoomSyncPolicy.AUTO_PAUSE,
                 active_sync_permission=RoomActiveSyncPermission.OWNER_AND_MANAGER,
             )
 
-        return PlaybackRuntimePolicy(
+        return RoomVideoRuntimePolicy(
             sync_policy=settings.sync_policy,
             active_sync_permission=settings.active_sync_permission,
         )
@@ -295,7 +381,7 @@ class PlaybackCommandHandler:
     def _require_active_room(connection: WsConnection) -> int:
         room_id = connection.active_room_id
         if room_id is None:
-            raise BadRequestError("You must enter a room before controlling playback")
+            raise BadRequestError("You must enter a room before controlling room video")
         return room_id
 
     @staticmethod
@@ -310,24 +396,34 @@ class PlaybackCommandHandler:
         if permission == RoomActiveSyncPermission.OWNER_AND_MANAGER:
             if role in {RoomRole.OWNER, RoomRole.MANAGER}:
                 return
-            raise ForbiddenError("You do not have permission to control playback")
+            raise ForbiddenError("You do not have permission to control room video")
 
         if permission == RoomActiveSyncPermission.OWNER_ONLY:
             if role == RoomRole.OWNER:
                 return
-            raise ForbiddenError("You do not have permission to control playback")
+            raise ForbiddenError("You do not have permission to control room video")
 
-        raise ForbiddenError("You do not have permission to control playback")
+        raise ForbiddenError("You do not have permission to control room video")
 
     @staticmethod
-    def _parse_source_type(value: Any) -> VideoSourceType:
+    def _parse_source_type(value: Any) -> RoomVideoSourceType:
         if not isinstance(value, str):
             raise BadRequestError("source_type is required")
 
         try:
-            return VideoSourceType(value)
+            return RoomVideoSourceType(value)
         except ValueError as exc:
             raise BadRequestError("Invalid source_type") from exc
+
+    @staticmethod
+    def _parse_user_player_status(value: Any) -> UserPlayerStatusType:
+        if not isinstance(value, str):
+            raise BadRequestError("status is required")
+
+        try:
+            return UserPlayerStatusType(value)
+        except ValueError as exc:
+            raise BadRequestError("Invalid status") from exc
 
     @staticmethod
     def _parse_required_non_empty_string(value: Any, *, field_name: str) -> str:
@@ -336,16 +432,38 @@ class PlaybackCommandHandler:
         return value.strip()
 
     @staticmethod
+    def _parse_optional_string(value: Any, *, field_name: str) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise BadRequestError(f"{field_name} must be a string")
+        stripped = value.strip()
+        return stripped or None
+
+    @staticmethod
     def _parse_optional_positive_int(value: Any, *, field_name: str) -> int | None:
         if value is None:
             return None
-        return PlaybackCommandHandler._parse_positive_int(value, field_name=field_name)
+        return RoomVideoCommandHandler._parse_positive_int(value, field_name=field_name)
 
     @staticmethod
     def _parse_positive_int(value: Any, *, field_name: str) -> int:
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise BadRequestError(f"{field_name} must be a positive integer")
         return value
+
+    @staticmethod
+    def _parse_optional_non_negative_number(
+        value: Any,
+        *,
+        field_name: str,
+    ) -> float | None:
+        if value is None:
+            return None
+        return RoomVideoCommandHandler._parse_non_negative_number(
+            value,
+            field_name=field_name,
+        )
 
     @staticmethod
     def _parse_non_negative_number(value: Any, *, field_name: str) -> float:

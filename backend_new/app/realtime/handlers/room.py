@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, ForbiddenError
+from app.modules.rooms.constants import RoomSyncPolicy
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.room.service import RoomService
-from app.realtime.constants import WsCommandAction
+from app.modules.rooms.settings.service import RoomSettingsService
+from app.realtime.constants import AutoPlaybackAction, WsCommandAction
 from app.realtime.manager import RealtimeManager, WsConnection
 from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
@@ -23,6 +23,7 @@ class RoomCommandHandler:
         video_runtime_service: RoomVideoRuntimeService,
     ) -> None:
         self.room_service = RoomService()
+        self.room_settings_service = RoomSettingsService()
         self.membership_service = RoomMembershipService()
         self.presence_service = presence_service
         self.video_runtime_service = video_runtime_service
@@ -35,7 +36,7 @@ class RoomCommandHandler:
         publisher: RealtimePublisher,
         connection: WsConnection,
         command: WsCommandPayload,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, object] | None:
         if command.action == WsCommandAction.ROOM_ENTER:
             return await self._handle_room_enter(
                 db=db,
@@ -47,6 +48,7 @@ class RoomCommandHandler:
 
         if command.action == WsCommandAction.ROOM_LEAVE:
             await self._handle_room_leave(
+                db=db,
                 manager=manager,
                 publisher=publisher,
                 connection=connection,
@@ -64,7 +66,7 @@ class RoomCommandHandler:
         publisher: RealtimePublisher,
         connection: WsConnection,
         command: WsCommandPayload,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         room_id = self._extract_room_id(command)
 
         await self.room_service.get_room_by_id(db, room_id)
@@ -90,13 +92,19 @@ class RoomCommandHandler:
             room_id=room_id,
         )
 
-        video_source = await self.video_runtime_service.get_video_source(room_id=room_id)
+        room_video_source = await self.video_runtime_service.get_room_video_source(
+            room_id=room_id
+        )
         playback = await self.video_runtime_service.get_playback(room_id=room_id)
+        user_player_states = await self.video_runtime_service.get_user_player_states(
+            room_id=room_id,
+        )
         snapshot = RoomSnapshot(
             room_id=room_id,
             present_user_ids=current_presence.present_user_ids,
-            video_source=video_source,
+            room_video_source=room_video_source,
             playback=playback,
+            user_player_states=user_player_states,
         )
 
         if replaced_connection_id is not None:
@@ -114,6 +122,27 @@ class RoomCommandHandler:
                 await self.video_runtime_service.clear_room_runtime(
                     room_id=previous_room_id,
                 )
+            else:
+                sync_policy = await self._get_room_sync_policy(
+                    db=db,
+                    room_id=previous_room_id,
+                )
+                user_player_states_update = await self.video_runtime_service.remove_user_player_state(
+                    room_id=previous_room_id,
+                    user_id=connection.user_id,
+                    sync_policy=sync_policy,
+                )
+                if user_player_states_update is not None:
+                    await publisher.publish_user_player_states(
+                        user_player_states=user_player_states_update.user_player_states,
+                    )
+                    if (
+                        user_player_states_update.auto_action == AutoPlaybackAction.PLAY
+                        and user_player_states_update.auto_playback is not None
+                    ):
+                        await publisher.publish_playback_play(
+                            playback=user_player_states_update.auto_playback,
+                        )
 
             await publisher.publish_presence(
                 presence=left_presence,
@@ -129,6 +158,7 @@ class RoomCommandHandler:
     async def _handle_room_leave(
         self,
         *,
+        db: AsyncSession,
         manager: RealtimeManager,
         publisher: RealtimePublisher,
         connection: WsConnection,
@@ -147,11 +177,43 @@ class RoomCommandHandler:
         presence = await self.presence_service.get_presence_state(room_id=room_id)
         if not presence.present_user_ids:
             await self.video_runtime_service.clear_room_runtime(room_id=room_id)
+        else:
+            sync_policy = await self._get_room_sync_policy(db=db, room_id=room_id)
+            user_player_states_update = await self.video_runtime_service.remove_user_player_state(
+                room_id=room_id,
+                user_id=connection.user_id,
+                sync_policy=sync_policy,
+            )
+            if user_player_states_update is not None:
+                await publisher.publish_user_player_states(
+                    user_player_states=user_player_states_update.user_player_states,
+                )
+                if (
+                    user_player_states_update.auto_action == AutoPlaybackAction.PLAY
+                    and user_player_states_update.auto_playback is not None
+                ):
+                    await publisher.publish_playback_play(
+                        playback=user_player_states_update.auto_playback,
+                    )
 
         await publisher.publish_presence(
             presence=presence,
             exclude_connection_ids={connection.connection_id},
         )
+
+    async def _get_room_sync_policy(
+        self,
+        *,
+        db: AsyncSession,
+        room_id: int,
+    ) -> RoomSyncPolicy:
+        settings = await self.room_settings_service.find_room_settings_by_room_id(
+            db,
+            room_id=room_id,
+        )
+        if settings is None:
+            return RoomSyncPolicy.AUTO_PAUSE
+        return settings.sync_policy
 
     @staticmethod
     def _extract_room_id(command: WsCommandPayload) -> int:
