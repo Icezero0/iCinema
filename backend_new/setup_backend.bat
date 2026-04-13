@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 setlocal
 
 echo ==========================================
@@ -7,121 +6,117 @@ echo   FastAPI Backend Setup Script
 echo ==========================================
 echo.
 
-echo [INFO] 当前目录: %cd%
+echo [INFO] Current directory: %cd%
 echo.
 
-:: -------------------------------------------------
-:: 1️⃣ 检查 Python 是否安装
-:: -------------------------------------------------
+REM -------------------------------------------------
+REM 1. Check Python
+REM -------------------------------------------------
 python --version >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] 未检测到 Python 环境。
+    echo [ERROR] Python was not found.
     echo.
-    echo 请安装 Python ^(建议 3.12^)
+    echo Please install Python 3.12 or newer:
     echo https://www.python.org/downloads/windows/
     pause
     exit /b 1
 )
 
-echo [INFO] Python 已安装
+echo [INFO] Python detected
 python --version
 echo.
 
-:: -------------------------------------------------
-:: 2️⃣ 检查 requirements.txt
-:: -------------------------------------------------
+REM -------------------------------------------------
+REM 2. Check requirements.txt
+REM -------------------------------------------------
 if not exist requirements.txt (
-    echo [ERROR] 未找到 requirements.txt
+    echo [ERROR] requirements.txt was not found
     pause
     exit /b 1
 )
 
-:: -------------------------------------------------
-:: 3️⃣ 初始化 .env
-:: -------------------------------------------------
+REM -------------------------------------------------
+REM 3. Initialize .env
+REM -------------------------------------------------
 if not exist .env (
     if exist .env.development (
-        echo [INFO] 未检测到 .env，正在从 .env.development 复制...
+        echo [INFO] .env not found, copying from .env.development...
         copy /Y .env.development .env >nul
         if errorlevel 1 (
-            echo [ERROR] .env 初始化失败
+            echo [ERROR] Failed to initialize .env
             pause
             exit /b 1
         )
-        echo [INFO] 已生成 .env
+        echo [INFO] .env created
     ) else (
-        echo [WARN] 未找到 .env，也未找到 .env.development
+        echo [WARN] Neither .env nor .env.development was found
     )
 ) else (
-    echo [INFO] .env 已存在，跳过初始化
+    echo [INFO] .env already exists, skip initialization
 )
 
 echo.
 
-:: -------------------------------------------------
-:: 4️⃣ 创建虚拟环境
-:: -------------------------------------------------
+REM -------------------------------------------------
+REM 4. Create virtual environment
+REM -------------------------------------------------
 set "VENV_DIR=venv"
 set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
 
 if not exist "%VENV_PYTHON%" (
-    echo [INFO] 创建虚拟环境...
+    echo [INFO] Creating virtual environment...
     python -m venv "%VENV_DIR%"
     if errorlevel 1 (
-        echo [ERROR] 虚拟环境创建失败
+        echo [ERROR] Failed to create virtual environment
         pause
         exit /b 1
     )
 ) else (
-    echo [INFO] 虚拟环境已存在
+    echo [INFO] Virtual environment already exists
 )
 
 echo.
 
-:: -------------------------------------------------
-:: 5️⃣ 使用 venv 中的 Python
-:: -------------------------------------------------
+REM -------------------------------------------------
+REM 5. Use Python from venv
+REM -------------------------------------------------
 if not exist "%VENV_PYTHON%" (
-    echo [ERROR] 未找到虚拟环境中的 python: %VENV_PYTHON%
+    echo [ERROR] Python in virtual environment was not found: %VENV_PYTHON%
     pause
     exit /b 1
 )
 
-echo [INFO] 当前使用虚拟环境 Python:
+echo [INFO] Using Python from virtual environment:
 "%VENV_PYTHON%" --version
 echo.
 
-:: -------------------------------------------------
-:: 6️⃣ 安装依赖
-:: -------------------------------------------------
-echo [INFO] 升级 pip...
+REM -------------------------------------------------
+REM 6. Install base dependencies
+REM -------------------------------------------------
+echo [INFO] Upgrading pip...
 "%VENV_PYTHON%" -m pip install --upgrade pip
 if errorlevel 1 (
-    echo [ERROR] pip 升级失败
+    echo [ERROR] Failed to upgrade pip
     pause
     exit /b 1
 )
 
 echo.
-echo [INFO] 安装依赖...
+echo [INFO] Installing base backend dependencies...
 "%VENV_PYTHON%" -m pip install -r requirements.txt
 if errorlevel 1 (
     echo.
-    echo [ERROR] 依赖安装失败
+    echo [ERROR] Failed to install dependencies
     pause
     exit /b 1
 )
 
 echo.
 echo ==========================================
-echo   Setup 完成
+echo   Setup Complete
 echo ==========================================
 echo.
-
-:: -------------------------------------------------
-:: 7️⃣ 启动服务
-:: -------------------------------------------------
-echo [INFO] 启动 uvicorn...
-"%VENV_PYTHON%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+echo [INFO] Start backend: run_backend.bat
+echo [INFO] Run tests: test_backend.bat
 
 endlocal
