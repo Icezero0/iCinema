@@ -18,7 +18,7 @@ class RoomSettingsRepository:
         selected_room_video_source_type: RoomVideoSourceType = (
             RoomVideoSourceType.EXTERNAL_URL
         ),
-        sync_policy: RoomSyncPolicy = RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy: RoomSyncPolicy = RoomSyncPolicy.AUTO_SYNC,
         active_sync_permission: RoomActiveSyncPermission = (
             RoomActiveSyncPermission.OWNER_AND_MANAGER
         ),

@@ -64,6 +64,12 @@ class PlaybackStatusType(StrEnum):
     PAUSED = "paused"
 
 
+class PlaybackHoldReason(StrEnum):
+    NONE = "none"
+    MANUAL = "manual"
+    STALL = "stall"
+
+
 class UserPlayerStatusType(StrEnum):
     READY = "ready"
     STALLING = "stalling"

@@ -88,6 +88,7 @@ class RoomVideoCommandHandler:
                 publisher=publisher,
                 room_id=room_id,
                 command=command,
+                sync_policy=policy.sync_policy,
             )
 
         if command.action == WsCommandAction.PLAYBACK_PAUSE:
@@ -95,6 +96,7 @@ class RoomVideoCommandHandler:
                 publisher=publisher,
                 room_id=room_id,
                 command=command,
+                sync_policy=policy.sync_policy,
             )
 
         if command.action == WsCommandAction.PLAYBACK_SEEK:
@@ -102,6 +104,7 @@ class RoomVideoCommandHandler:
                 publisher=publisher,
                 room_id=room_id,
                 command=command,
+                sync_policy=policy.sync_policy,
             )
 
         raise BadRequestError(f"Unsupported room video command action: {command.action}")
@@ -179,6 +182,7 @@ class RoomVideoCommandHandler:
         publisher: RealtimePublisher,
         room_id: int,
         command: WsCommandPayload,
+        sync_policy: RoomSyncPolicy,
     ) -> dict[str, Any]:
         data = command.data or {}
 
@@ -199,6 +203,7 @@ class RoomVideoCommandHandler:
             room_id=room_id,
             position_seconds=position_seconds,
             anchor_ts_ms=anchor_ts_ms,
+            sync_policy=sync_policy,
             playback_rate=playback_rate,
         )
 
@@ -220,6 +225,7 @@ class RoomVideoCommandHandler:
         publisher: RealtimePublisher,
         room_id: int,
         command: WsCommandPayload,
+        sync_policy: RoomSyncPolicy,
     ) -> dict[str, Any]:
         data = command.data or {}
 
@@ -240,6 +246,7 @@ class RoomVideoCommandHandler:
             room_id=room_id,
             position_seconds=position_seconds,
             anchor_ts_ms=anchor_ts_ms,
+            sync_policy=sync_policy,
             playback_rate=playback_rate,
         )
 
@@ -261,6 +268,7 @@ class RoomVideoCommandHandler:
         publisher: RealtimePublisher,
         room_id: int,
         command: WsCommandPayload,
+        sync_policy: RoomSyncPolicy,
     ) -> dict[str, Any]:
         data = command.data or {}
 
@@ -277,6 +285,7 @@ class RoomVideoCommandHandler:
             room_id=room_id,
             position_seconds=position_seconds,
             anchor_ts_ms=anchor_ts_ms,
+            sync_policy=sync_policy,
         )
 
         logger.info(
@@ -368,7 +377,7 @@ class RoomVideoCommandHandler:
 
         if settings is None:
             return RoomVideoRuntimePolicy(
-                sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+                sync_policy=RoomSyncPolicy.AUTO_SYNC,
                 active_sync_permission=RoomActiveSyncPermission.OWNER_AND_MANAGER,
             )
 

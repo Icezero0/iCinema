@@ -89,8 +89,8 @@ class RoomSettings(Base):
     sync_policy: Mapped[RoomSyncPolicy] = mapped_column(
         String(32),
         nullable=False,
-        default=RoomSyncPolicy.AUTO_PAUSE,
-        server_default=RoomSyncPolicy.AUTO_PAUSE.value,
+        default=RoomSyncPolicy.AUTO_SYNC,
+        server_default=RoomSyncPolicy.AUTO_SYNC.value,
     )
     active_sync_permission: Mapped[RoomActiveSyncPermission] = mapped_column(
         String(32),

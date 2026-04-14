@@ -175,26 +175,24 @@ class RoomCommandHandler:
             return
 
         presence = await self.presence_service.get_presence_state(room_id=room_id)
-        if not presence.present_user_ids:
-            await self.video_runtime_service.clear_room_runtime(room_id=room_id)
-        else:
-            sync_policy = await self._get_room_sync_policy(db=db, room_id=room_id)
-            user_player_states_update = await self.video_runtime_service.remove_user_player_state(
-                room_id=room_id,
-                user_id=connection.user_id,
-                sync_policy=sync_policy,
+        sync_policy = await self._get_room_sync_policy(db=db, room_id=room_id)
+        session_exit_result = await self.video_runtime_service.handle_room_session_exit(
+            room_id=room_id,
+            user_id=connection.user_id,
+            sync_policy=sync_policy,
+            room_empty=not presence.present_user_ids,
+        )
+        if not session_exit_result.room_cleared and session_exit_result.user_player_states is not None:
+            await publisher.publish_user_player_states(
+                user_player_states=session_exit_result.user_player_states,
             )
-            if user_player_states_update is not None:
-                await publisher.publish_user_player_states(
-                    user_player_states=user_player_states_update.user_player_states,
+            if (
+                session_exit_result.auto_action == AutoPlaybackAction.PLAY
+                and session_exit_result.auto_playback is not None
+            ):
+                await publisher.publish_playback_play(
+                    playback=session_exit_result.auto_playback,
                 )
-                if (
-                    user_player_states_update.auto_action == AutoPlaybackAction.PLAY
-                    and user_player_states_update.auto_playback is not None
-                ):
-                    await publisher.publish_playback_play(
-                        playback=user_player_states_update.auto_playback,
-                    )
 
         await publisher.publish_presence(
             presence=presence,
@@ -212,7 +210,7 @@ class RoomCommandHandler:
             room_id=room_id,
         )
         if settings is None:
-            return RoomSyncPolicy.AUTO_PAUSE
+            return RoomSyncPolicy.AUTO_SYNC
         return settings.sync_policy
 
     @staticmethod

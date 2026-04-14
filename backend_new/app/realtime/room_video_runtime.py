@@ -8,6 +8,7 @@ from app.core.exceptions import BadRequestError
 from app.modules.rooms.constants import RoomSyncPolicy, RoomVideoSourceType
 from app.realtime.constants import (
     AutoPlaybackAction,
+    PlaybackHoldReason,
     PlaybackStatusType,
     UserPlayerStatusType,
 )
@@ -31,13 +32,21 @@ class UserPlayerStatesUpdateResult:
 
 
 @dataclass
+class RoomSessionExitResult:
+    room_cleared: bool
+    user_player_states: UserPlayerStatesState | None = None
+    auto_playback: PlaybackState | None = None
+    auto_action: AutoPlaybackAction | None = None
+
+
+@dataclass
 class RoomVideoRuntimeState:
     room_id: int
     room_video_source: RoomVideoSourceState | None = None
     playback: PlaybackState | None = None
     user_player_states: dict[int, RoomUserPlayerState] = field(default_factory=dict)
     stalling_user_ids: set[int] = field(default_factory=set)
-    paused_by_stall: bool = False
+    playback_hold_reason: PlaybackHoldReason = PlaybackHoldReason.NONE
 
 
 class RoomVideoRuntimeService:
@@ -168,7 +177,7 @@ class RoomVideoRuntimeService:
             state.playback = playback
             state.user_player_states.clear()
             state.stalling_user_ids.clear()
-            state.paused_by_stall = False
+            state.playback_hold_reason = PlaybackHoldReason.NONE
 
             return (
                 self._copy_room_video_source(room_video_source),
@@ -182,11 +191,17 @@ class RoomVideoRuntimeService:
         room_id: int,
         position_seconds: float,
         anchor_ts_ms: int,
+        sync_policy: RoomSyncPolicy,
         playback_rate: float = 1.0,
     ) -> PlaybackState:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
             self._require_room_video_source_set_locked(state)
+
+            if sync_policy == RoomSyncPolicy.AUTO_SYNC and state.stalling_user_ids:
+                raise BadRequestError(
+                    "Cannot resume playback while some users are still stalling"
+                )
 
             playback = PlaybackState(
                 room_id=room_id,
@@ -196,7 +211,7 @@ class RoomVideoRuntimeService:
                 playback_rate=playback_rate,
             )
             state.playback = playback
-            state.paused_by_stall = False
+            state.playback_hold_reason = PlaybackHoldReason.NONE
             return self._copy_playback(playback)
 
     async def pause(
@@ -205,6 +220,7 @@ class RoomVideoRuntimeService:
         room_id: int,
         position_seconds: float,
         anchor_ts_ms: int,
+        sync_policy: RoomSyncPolicy,
         playback_rate: float = 1.0,
     ) -> PlaybackState:
         async with self._lock:
@@ -219,7 +235,11 @@ class RoomVideoRuntimeService:
                 playback_rate=playback_rate,
             )
             state.playback = playback
-            state.paused_by_stall = False
+            state.playback_hold_reason = (
+                PlaybackHoldReason.MANUAL
+                if sync_policy == RoomSyncPolicy.AUTO_SYNC
+                else PlaybackHoldReason.NONE
+            )
             return self._copy_playback(playback)
 
     async def seek(
@@ -228,24 +248,28 @@ class RoomVideoRuntimeService:
         room_id: int,
         position_seconds: float,
         anchor_ts_ms: int,
+        sync_policy: RoomSyncPolicy,
     ) -> PlaybackState:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
             self._require_room_video_source_set_locked(state)
 
             current = state.playback
-            status = current.status if current is not None else PlaybackStatusType.PAUSED
             playback_rate = current.playback_rate if current is not None else 1.0
 
             playback = PlaybackState(
                 room_id=room_id,
-                status=status,
+                status=PlaybackStatusType.PAUSED,
                 position_seconds=position_seconds,
                 anchor_ts_ms=anchor_ts_ms,
                 playback_rate=playback_rate,
             )
             state.playback = playback
-            state.paused_by_stall = False
+            state.playback_hold_reason = (
+                PlaybackHoldReason.MANUAL
+                if sync_policy == RoomSyncPolicy.AUTO_SYNC
+                else PlaybackHoldReason.NONE
+            )
             return self._copy_playback(playback)
 
     async def report_user_player_status(
@@ -284,7 +308,7 @@ class RoomVideoRuntimeService:
             auto_playback: PlaybackState | None = None
             auto_action: AutoPlaybackAction | None = None
 
-            if sync_policy == RoomSyncPolicy.AUTO_PAUSE:
+            if sync_policy == RoomSyncPolicy.AUTO_SYNC:
                 entered_stalling = (
                     status == UserPlayerStatusType.STALLING
                     and previous_status != UserPlayerStatusType.STALLING
@@ -298,7 +322,7 @@ class RoomVideoRuntimeService:
                     entered_stalling
                     and state.playback is not None
                     and state.playback.status == PlaybackStatusType.PLAYING
-                    and not state.paused_by_stall
+                    and state.playback_hold_reason != PlaybackHoldReason.STALL
                 ):
                     anchor_ts_ms = now_ms()
                     auto_playback = PlaybackState(
@@ -312,9 +336,13 @@ class RoomVideoRuntimeService:
                         playback_rate=state.playback.playback_rate,
                     )
                     state.playback = auto_playback
-                    state.paused_by_stall = True
+                    state.playback_hold_reason = PlaybackHoldReason.STALL
                     auto_action = AutoPlaybackAction.PAUSE
-                elif left_stalling and not state.stalling_user_ids and state.paused_by_stall:
+                elif (
+                    left_stalling
+                    and not state.stalling_user_ids
+                    and state.playback_hold_reason == PlaybackHoldReason.STALL
+                ):
                     if state.playback is not None:
                         anchor_ts_ms = now_ms()
                         auto_playback = PlaybackState(
@@ -326,7 +354,7 @@ class RoomVideoRuntimeService:
                         )
                         state.playback = auto_playback
                         auto_action = AutoPlaybackAction.PLAY
-                    state.paused_by_stall = False
+                    state.playback_hold_reason = PlaybackHoldReason.NONE
 
             payload = self._build_user_player_states_locked(state)
             return UserPlayerStatesUpdateResult(
@@ -335,21 +363,37 @@ class RoomVideoRuntimeService:
                 auto_action=auto_action,
             )
 
-    async def remove_user_player_state(
+    async def handle_room_session_exit(
         self,
         *,
         room_id: int,
         user_id: int,
         sync_policy: RoomSyncPolicy,
-    ) -> UserPlayerStatesUpdateResult | None:
+        room_empty: bool,
+    ) -> RoomSessionExitResult:
         async with self._lock:
+            if room_empty:
+                self._room_states.pop(room_id, None)
+                return RoomSessionExitResult(room_cleared=True)
+
             state = self._room_states.get(room_id)
             if state is None:
-                return None
+                return RoomSessionExitResult(
+                    room_cleared=False,
+                    user_player_states=UserPlayerStatesState(
+                        room_id=room_id,
+                        user_player_states=[],
+                    ),
+                )
 
             previous_state = state.user_player_states.pop(user_id, None)
             if previous_state is None:
-                return None
+                return RoomSessionExitResult(
+                    room_cleared=False,
+                    user_player_states=self._copy_user_player_states(
+                        self._build_user_player_states_locked(state)
+                    ),
+                )
 
             if previous_state.status == UserPlayerStatusType.STALLING:
                 state.stalling_user_ids.discard(user_id)
@@ -358,10 +402,10 @@ class RoomVideoRuntimeService:
             auto_action: AutoPlaybackAction | None = None
 
             if (
-                sync_policy == RoomSyncPolicy.AUTO_PAUSE
+                sync_policy == RoomSyncPolicy.AUTO_SYNC
                 and previous_state.status == UserPlayerStatusType.STALLING
                 and not state.stalling_user_ids
-                and state.paused_by_stall
+                and state.playback_hold_reason == PlaybackHoldReason.STALL
             ):
                 if state.playback is not None:
                     anchor_ts_ms = now_ms()
@@ -374,14 +418,36 @@ class RoomVideoRuntimeService:
                     )
                     state.playback = auto_playback
                     auto_action = AutoPlaybackAction.PLAY
-                state.paused_by_stall = False
+                state.playback_hold_reason = PlaybackHoldReason.NONE
 
             payload = self._build_user_player_states_locked(state)
-            return UserPlayerStatesUpdateResult(
+            return RoomSessionExitResult(
+                room_cleared=False,
                 user_player_states=self._copy_user_player_states(payload),
                 auto_playback=self._copy_playback(auto_playback),
                 auto_action=auto_action,
             )
+
+    async def remove_user_player_state(
+        self,
+        *,
+        room_id: int,
+        user_id: int,
+        sync_policy: RoomSyncPolicy,
+    ) -> UserPlayerStatesUpdateResult | None:
+        result = await self.handle_room_session_exit(
+            room_id=room_id,
+            user_id=user_id,
+            sync_policy=sync_policy,
+            room_empty=False,
+        )
+        if result.user_player_states is None:
+            return None
+        return UserPlayerStatesUpdateResult(
+            user_player_states=result.user_player_states,
+            auto_playback=result.auto_playback,
+            auto_action=result.auto_action,
+        )
 
     async def clear_room_runtime(
         self,

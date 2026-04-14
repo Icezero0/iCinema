@@ -37,7 +37,7 @@ class RoomVideoSourceType(StrEnum):
 
 
 class RoomSyncPolicy(StrEnum):
-    AUTO_PAUSE = "auto_pause"
+    AUTO_SYNC = "auto_sync"
     DISABLED = "disabled"
 
 
