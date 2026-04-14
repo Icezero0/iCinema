@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from app.core.exceptions import AppError, register_exception_handlers
 
 
+# AppError 会被统一异常处理器转换为标准错误响应
 async def test_app_error_is_translated_to_standard_error_response() -> None:
     app = FastAPI()
     register_exception_handlers(app)

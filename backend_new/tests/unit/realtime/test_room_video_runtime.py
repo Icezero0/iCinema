@@ -10,6 +10,7 @@ from app.realtime.constants import (
 from app.realtime.room_video_runtime import RoomVideoRuntimeService
 
 
+# 设置房间视频源后会重置播放状态和用户播放器状态
 async def test_set_room_video_source_resets_playback_and_player_state() -> None:
     service = RoomVideoRuntimeService()
 
@@ -28,7 +29,8 @@ async def test_set_room_video_source_resets_playback_and_player_state() -> None:
     assert user_player_states.user_player_states == []
 
 
-async def test_auto_pause_and_resume_when_stalling_user_reports_status() -> None:
+# AUTO_SYNC 模式下用户从 STALLING 到 READY 会触发自动暂停和自动恢复
+async def test_auto_sync_and_resume_when_stalling_user_reports_status() -> None:
     service = RoomVideoRuntimeService()
     room_id = 202
 
@@ -41,7 +43,7 @@ async def test_auto_pause_and_resume_when_stalling_user_reports_status() -> None
         room_id=room_id,
         position_seconds=12.5,
         anchor_ts_ms=1000,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
         playback_rate=1.0,
     )
 
@@ -50,7 +52,7 @@ async def test_auto_pause_and_resume_when_stalling_user_reports_status() -> None
         user_id=1,
         status=UserPlayerStatusType.STALLING,
         reported_at_ms=1100,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     assert stalling_result.auto_action == AutoPlaybackAction.PAUSE
@@ -62,7 +64,7 @@ async def test_auto_pause_and_resume_when_stalling_user_reports_status() -> None
         user_id=1,
         status=UserPlayerStatusType.READY,
         reported_at_ms=1200,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     assert recovered_result.auto_action == AutoPlaybackAction.PLAY
@@ -70,7 +72,8 @@ async def test_auto_pause_and_resume_when_stalling_user_reports_status() -> None
     assert recovered_result.auto_playback.status == PlaybackStatusType.PLAYING
 
 
-async def test_manual_pause_blocks_auto_resume_in_auto_pause_mode() -> None:
+# AUTO_SYNC 模式下手动暂停后即使卡顿恢复也不会自动恢复播放
+async def test_manual_pause_blocks_auto_resume_in_auto_sync_mode() -> None:
     service = RoomVideoRuntimeService()
     room_id = 303
 
@@ -83,14 +86,14 @@ async def test_manual_pause_blocks_auto_resume_in_auto_pause_mode() -> None:
         room_id=room_id,
         position_seconds=5.0,
         anchor_ts_ms=1000,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     await service.pause(
         room_id=room_id,
         position_seconds=6.0,
         anchor_ts_ms=1100,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     await service.report_user_player_status(
@@ -98,14 +101,14 @@ async def test_manual_pause_blocks_auto_resume_in_auto_pause_mode() -> None:
         user_id=1,
         status=UserPlayerStatusType.STALLING,
         reported_at_ms=1200,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
     recovered_result = await service.report_user_player_status(
         room_id=room_id,
         user_id=1,
         status=UserPlayerStatusType.READY,
         reported_at_ms=1300,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     assert recovered_result.auto_action is None
@@ -114,7 +117,8 @@ async def test_manual_pause_blocks_auto_resume_in_auto_pause_mode() -> None:
     assert playback.status == PlaybackStatusType.PAUSED
 
 
-async def test_manual_seek_in_auto_pause_mode_pauses_until_manual_play() -> None:
+# AUTO_SYNC 模式下手动 seek 后房间播放会进入暂停状态
+async def test_manual_seek_in_auto_sync_mode_pauses_until_manual_play() -> None:
     service = RoomVideoRuntimeService()
     room_id = 404
 
@@ -127,21 +131,22 @@ async def test_manual_seek_in_auto_pause_mode_pauses_until_manual_play() -> None
         room_id=room_id,
         position_seconds=8.0,
         anchor_ts_ms=1000,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     playback = await service.seek(
         room_id=room_id,
         position_seconds=42.0,
         anchor_ts_ms=2000,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     assert playback.status == PlaybackStatusType.PAUSED
     assert playback.position_seconds == 42.0
 
 
-async def test_manual_play_is_rejected_while_someone_is_stalling_in_auto_pause_mode() -> None:
+# AUTO_SYNC 模式下只要仍有用户 STALLING 就不能手动恢复播放
+async def test_manual_play_is_rejected_while_someone_is_stalling_in_auto_sync_mode() -> None:
     service = RoomVideoRuntimeService()
     room_id = 505
 
@@ -155,7 +160,7 @@ async def test_manual_play_is_rejected_while_someone_is_stalling_in_auto_pause_m
         user_id=1,
         status=UserPlayerStatusType.STALLING,
         reported_at_ms=1000,
-        sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
     )
 
     with pytest.raises(BadRequestError):
@@ -163,5 +168,5 @@ async def test_manual_play_is_rejected_while_someone_is_stalling_in_auto_pause_m
             room_id=room_id,
             position_seconds=0.0,
             anchor_ts_ms=1100,
-            sync_policy=RoomSyncPolicy.AUTO_PAUSE,
+            sync_policy=RoomSyncPolicy.AUTO_SYNC,
         )

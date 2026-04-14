@@ -5,6 +5,7 @@ from app.modules.rooms.constants import RoomPermission, RoomRole
 from app.modules.rooms.permissions import has_room_permission, require_room_permission
 
 
+# 已授权的角色和权限组合会返回 True
 @pytest.mark.parametrize(
     ("role", "permission"),
     [
@@ -20,6 +21,7 @@ def test_has_room_permission_returns_true_for_allowed_combinations(
     assert has_room_permission(role, permission) is True
 
 
+# 未授权的角色和权限组合会抛出 ForbiddenError
 @pytest.mark.parametrize(
     ("role", "permission"),
     [

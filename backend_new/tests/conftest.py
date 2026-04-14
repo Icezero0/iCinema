@@ -10,3 +10,4 @@ if str(BACKEND_ROOT) not in sys.path:
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DATA_DIR", str(BACKEND_ROOT / ".test_data"))
+os.environ["DEBUG"] = "false"
