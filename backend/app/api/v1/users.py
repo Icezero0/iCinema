@@ -4,6 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.modules.auth.deps import get_current_user
+from app.modules.rooms.constants import RoomRole
+from app.modules.rooms.room.schemas import (
+    UserRoomSummaryListResponse,
+    UserRoomSummaryResponse,
+)
 from app.modules.users.models import User
 from app.modules.users.schemas import (
     AvatarUploadResponse,
@@ -29,6 +34,7 @@ async def get_me(
     user = await user_service.get_user_by_id(db, current_user.id)
     return UserMeResponse.model_validate(user)
 
+
 @router.patch("/me", response_model=UserMeResponse)
 async def patch_me(
     payload: UserPatch,
@@ -51,6 +57,40 @@ async def patch_my_avatar(
 
     return AvatarUploadResponse(
         avatar_url=f"{settings.avatar_public_prefix}/{updated.avatar_key}"
+    )
+
+
+@router.get("/me/rooms", response_model=UserRoomSummaryListResponse)
+async def get_my_rooms(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    role: RoomRole | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserRoomSummaryListResponse:
+    data = await user_service.get_my_rooms(
+        db,
+        user=current_user,
+        page=page,
+        page_size=page_size,
+        role=role,
+    )
+    return UserRoomSummaryListResponse(
+        items=[
+            UserRoomSummaryResponse(
+                id=room.id,
+                name=room.name,
+                owner_id=room.owner_id,
+                owner=room.owner,
+                my_role=my_role,
+                visibility=room.visibility,
+            )
+            for room, my_role in data["items"]
+        ],
+        total=data["total"],
+        page=data["page"],
+        page_size=data["page_size"],
+        total_pages=data["total_pages"],
     )
 
 

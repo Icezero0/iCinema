@@ -17,6 +17,10 @@ from app.modules.rooms.constants import (
     RoomRole,
 )
 from app.modules.rooms.join_request.repository import RoomJoinRequestRepository
+from app.modules.rooms.join_request.schemas import (
+    RoomJoinRequestListScope,
+    RoomJoinRequestSortBy,
+)
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.models import RoomJoinRequest
 from app.modules.rooms.permissions import require_room_permission
@@ -257,6 +261,69 @@ class RoomJoinRequestService:
             room_id=room_id,
             status=status,
             source=source,
+        )
+
+        total_pages = ceil(total / page_size) if total > 0 else 0
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
+    async def get_join_requests(
+        self,
+        db: AsyncSession,
+        *,
+        user: User,
+        page: int,
+        page_size: int,
+        status: RoomJoinRequestStatus | None = None,
+        room_id: int | None = None,
+        initiator_user_id: int | None = None,
+        target_user_id: int | None = None,
+        scope: RoomJoinRequestListScope = RoomJoinRequestListScope.ALL_RELATED_TO_ME,
+        sort_by: RoomJoinRequestSortBy = RoomJoinRequestSortBy.CREATED_AT,
+    ) -> dict:
+        reviewer_room_ids: list[int] = []
+        if scope in {
+            RoomJoinRequestListScope.PENDING_FOR_ME,
+            RoomJoinRequestListScope.ALL_RELATED_TO_ME,
+        }:
+            reviewer_room_ids = await self.membership_service.get_room_ids_by_permission(
+                db,
+                user_id=user.id,
+                permission=RoomPermission.REVIEW_JOIN_REQUEST,
+            )
+
+        repo_room_ids: list[int] | None = None
+        repo_initiator_user_id = initiator_user_id
+        repo_target_user_id = target_user_id
+        repo_related_user_id: int | None = None
+        resolved_status = status
+
+        if scope == RoomJoinRequestListScope.PENDING_FOR_ME:
+            repo_room_ids = reviewer_room_ids
+            resolved_status = RoomJoinRequestStatus.PENDING
+        elif scope == RoomJoinRequestListScope.CREATED_BY_ME:
+            repo_initiator_user_id = user.id
+        else:
+            repo_related_user_id = user.id
+
+        items, total = await self.repo.get_requests(
+            db,
+            page=page,
+            page_size=page_size,
+            room_ids=repo_room_ids,
+            room_id=room_id,
+            initiator_user_id=repo_initiator_user_id,
+            target_user_id=repo_target_user_id,
+            status=resolved_status,
+            related_user_id=repo_related_user_id,
+            include_room_ids_for_related=reviewer_room_ids,
+            sort_by=sort_by.value,
         )
 
         total_pages = ceil(total / page_size) if total > 0 else 0

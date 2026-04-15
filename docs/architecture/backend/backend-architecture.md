@@ -2,7 +2,7 @@
 
 版本：v1  
 状态：Draft  
-适用范围：`backend_new`
+适用范围：`backend`
 
 ## 1. 文档定位
 
@@ -291,12 +291,30 @@ Repository 不负责业务规则。
 - 查询当前用户信息
 - 修改当前用户资料
 - 上传头像
+- 查询当前用户可进入的房间集合
 - 查询用户列表与用户详情
 
 特点：
 
 - 用户头像不直接存在 `users` 表中，而是通过媒体资源体系维护
 - 返回给前端的是 `avatar_url`，而不是底层文件路径
+- 提供 `GET /api/v1/users/me/rooms` 作为“我的房间”聚合接口
+
+`GET /api/v1/users/me/rooms` 当前支持：
+
+- 分页：`page`、`page_size`
+- 角色过滤：`role=owner|manager|member`
+
+返回摘要字段包括：
+
+- `id`
+- `name`
+- `owner_id`
+- `owner`
+- `is_public`
+- `my_role`
+
+该接口用于前端首页和“我的房间”列表，不要求前端通过“房间列表 + 成员列表”自行拼装用户可进入房间集合。
 
 ## 7.3 rooms
 
@@ -315,6 +333,13 @@ Repository 不负责业务规则。
 - `join_request`：加入申请与邀请流
 
 房间权限通过 `RoomRole + RoomPermission` 组合实现。
+
+`join_request` 子域当前既支持：
+
+- 房间内上下文接口：`/api/v1/rooms/{room_id}/join-requests`
+- 全局审批中心接口：`/api/v1/join-requests`
+
+其中全局接口用于前端审批中心、首页审批摘要等场景。
 
 ## 7.4 messages
 
@@ -400,6 +425,8 @@ realtime 层内部主要组件：
 - 创建房间：`rooms router -> RoomService -> RoomRepository + membership/settings`
 - 发送消息：`messages router -> MessageService -> MessageRepository + MediaService`
 - 标记通知已读：`notifications router -> NotificationService`
+- 查询我的房间：`users router -> UserService -> RoomRepository`
+- 查询审批中心列表：`room_join_request router -> RoomJoinRequestService -> membership/join_request repository`
 
 ## 8.2 WebSocket 调用链
 
@@ -456,6 +483,7 @@ HTTP 主要用于：
 
 - 注册登录
 - 用户资料查询与修改
+- 我的房间摘要查询
 - 房间创建与查询
 - 房间设置查询与修改
 - 成员与审批管理
@@ -482,6 +510,13 @@ WebSocket 主要用于：
 - 结构化、需要分页、需要鉴权的持久化数据以 HTTP 为主
 - 高频、小体积、运行时在线状态以 WebSocket 为主
 - 部分 WS 事件只推送“数据已变化”的信号，前端再回源 HTTP 获取详情
+
+典型聚合型 HTTP 读取接口包括：
+
+- `GET /api/v1/users/me/rooms`
+  用于直接返回当前用户创建或加入的房间摘要
+- `GET /api/v1/join-requests`
+  用于直接返回当前用户待审批、我发起或与我相关的 join request 列表
 
 ## 11. 事务与提交约定
 
@@ -543,6 +578,30 @@ WebSocket 主要用于：
 - `owner_only`
 - `owner_and_manager`
 - `all_members`
+
+## 12.5 审批中心范围约定
+
+全局接口 `GET /api/v1/join-requests` 当前支持以下 `scope`：
+
+- `pending_for_me`
+  返回当前用户可审批的待处理申请
+- `created_by_me`
+  返回当前用户发起的申请或邀请
+- `all_related_to_me`
+  返回与当前用户相关，或当前用户有审批权限可见的申请
+
+当前接口还支持：
+
+- 分页：`page`、`page_size`
+- 过滤：`status`、`room_id`、`initiator_user_id`、`target_user_id`
+- 排序：`sort_by=created_at|updated_at`
+
+返回结构除 join request 本体外，还直接带有最少够用的关联对象：
+
+- `room`
+- `initiator`
+- `target`
+- `room_action_by`
 
 ## 13. 实时运行时设计
 
@@ -693,6 +752,11 @@ WS 错误格式见 `ws-protocol.md`。
 - 收到 `room_info / room_settings / room_members / notification` 等信号型事件后，前端应主动回源 HTTP 拉最新数据
 - 收到 `session_closed` 后应立即清理对应房间本地状态
 
+在接口使用上，建议优先采用以下聚合接口而不是前端自行拼装：
+
+- “我的房间”使用 `GET /api/v1/users/me/rooms`
+- 审批中心与审批摘要使用 `GET /api/v1/join-requests`
+
 ## 18.2 后端协作约定
 
 - Router 尽量保持薄
@@ -700,6 +764,12 @@ WS 错误格式见 `ws-protocol.md`。
 - Repository 不承载业务规则
 - 新增 service 方法时遵守提交命名约定
 - 新增影响在线状态的 HTTP 接口时，需同时考虑是否补充 realtime 广播或会话清理
+
+新增聚合查询接口时，优先遵循以下原则：
+
+- 在 service 层定义明确的查询语义，而不是把复杂拼装留给前端
+- 在 repository 层完成分页、排序和主要过滤
+- 返回结构尽量直接带前端渲染所需的最小关联信息，减少 N+1 HTTP 请求
 
 ## 18.3 文档协作约定
 
