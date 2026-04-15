@@ -78,7 +78,7 @@ watch(roomId, fetchRoom);
             <dt>{{ t("room.fields.visibility") }}</dt>
             <dd>
               {{
-                room.is_public
+                room.visibility === "public"
                   ? t("room.fields.public")
                   : t("room.fields.private")
               }}

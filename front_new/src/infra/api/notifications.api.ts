@@ -35,34 +35,6 @@ export type NotificationUnreadCountResponse = {
   unread_count: number;
 };
 
-export type RoomJoinRequestSource = "apply" | "invite" | "member_invite";
-export type RoomJoinRequestStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "cancelled";
-export type RoomJoinRequestAction = "pending" | "approved" | "rejected";
-
-export type RoomJoinRequestResponse = {
-  id: number;
-  room_id: number;
-  initiator_user_id: number;
-  target_user_id: number;
-  source: RoomJoinRequestSource;
-  status: RoomJoinRequestStatus;
-
-  room_action: RoomJoinRequestAction;
-  target_action: RoomJoinRequestAction;
-  room_action_by_user_id: number | null;
-
-  created_at: string | null;
-  updated_at: string | null;
-
-  initiator: UserBrief | null;
-  target: UserBrief | null;
-  room_action_by: UserBrief | null;
-};
-
 export async function listNotifications(params?: {
   page?: number;
   page_size?: number;
@@ -91,25 +63,4 @@ export async function markNotificationAsRead(notificationId: number) {
 
 export async function markAllNotificationsAsRead() {
   await http.post("/notifications/read-all");
-}
-
-export async function getJoinRequest(requestId: number) {
-  const { data } = await http.get<RoomJoinRequestResponse>(
-    `/join-requests/${requestId}`,
-  );
-  return data;
-}
-
-export async function approveJoinRequest(requestId: number) {
-  const { data } = await http.post<RoomJoinRequestResponse>(
-    `/join-requests/${requestId}/approve`,
-  );
-  return data;
-}
-
-export async function rejectJoinRequest(requestId: number) {
-  const { data } = await http.post<RoomJoinRequestResponse>(
-    `/join-requests/${requestId}/reject`,
-  );
-  return data;
 }

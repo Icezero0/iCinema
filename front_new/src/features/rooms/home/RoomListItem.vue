@@ -30,8 +30,12 @@ defineEmits<{
     <div class="contentBlock">
       <div class="topLine">
         <div class="title">{{ room.name }}</div>
-        <span class="badge" :data-public="String(!!room.is_public)">
-          {{ room.is_public ? t("room.fields.public") : t("room.fields.private") }}
+        <span class="badge" :data-public="String(room.visibility === 'public')">
+          {{
+            room.visibility === "public"
+              ? t("room.fields.public")
+              : t("room.fields.private")
+          }}
         </span>
       </div>
 
@@ -40,12 +44,17 @@ defineEmits<{
         <span v-if="metaText">
           {{ metaText }}
         </span>
+        <span v-else-if="room.owner_name">
+          {{ t("home.myRooms.ownerPrefix") }} {{ room.owner_name }}
+        </span>
+        <span v-else-if="room.my_role">
+          {{ t("home.myRooms.rolePrefix") }} {{ room.my_role }}
+        </span>
+        <span v-else-if="room.join_audit_mode">
+          {{ t("home.roomList.auditModePrefix") }} {{ room.join_audit_mode }}
+        </span>
         <span v-else>
-          {{
-            room.config
-              ? t("home.roomList.configured")
-              : t("home.roomList.defaultSettings")
-          }}
+          {{ t("home.roomList.defaultSettings") }}
         </span>
       </div>
     </div>

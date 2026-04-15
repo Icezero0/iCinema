@@ -11,7 +11,6 @@ defineProps<{
   enterText: string;
   loadingText: string;
   rooms: Room[];
-  ownerLabelPrefix?: string;
   loading?: boolean;
 }>();
 
@@ -52,9 +51,6 @@ defineEmits<{
         v-for="room in rooms"
         :key="room.id"
         :room="room"
-        :meta-text="
-          ownerLabelPrefix ? `${ownerLabelPrefix} #${room.owner_id}` : undefined
-        "
         :action-label="enterText"
         action-variant="primary"
         @action="$emit('enter', room.id)"

@@ -86,6 +86,9 @@ export default {
   },
   notifications: {
     title: "Notifications",
+    placeholderJoinRequest: "There is a new room-join approval to review.",
+    placeholderWorkflow: "There is a new workflow notification.",
+    placeholderGeneric: "There is a new system notification.",
     empty: {
       title: "No notifications",
       hint: "Invitations and requests will show up here.",
@@ -104,9 +107,11 @@ export default {
       join: "Join room",
       enter: "Enter",
       ownerPrefix: "Owner",
+      rolePrefix: "Role",
     },
     roomList: {
       configured: "Configured",
+      auditModePrefix: "Audit",
       defaultSettings: "Default settings",
     },
     create: {
@@ -135,10 +140,30 @@ export default {
   },
   joinRequests: {
     title: "Approvals",
-    placeholderTitle: "Approvals page scaffold is ready",
-    placeholderBody:
-      "In the next step, join-request workflows will be further separated from notifications and handled here as their own entity-driven page.",
-    openNotifications: "Open notifications first",
+    pageHint: "This page now handles real join-request queries and review workflows instead of relying on notifications as a proxy flow page.",
+    loadFailed: "Failed to load approvals.",
+    empty: "There are no matching approval records.",
+    filters: {
+      scope: "Scope",
+      statusLabel: "Status",
+      sortBy: "Sort by",
+      pendingForMe: "Pending for me",
+      createdByMe: "Created by me",
+      allRelated: "All related",
+      allStatus: "All statuses",
+      updatedAt: "Updated time",
+      createdAt: "Created time",
+    },
+    actions: {
+      approve: "Approve",
+      reject: "Reject",
+    },
+    status: {
+      pending: "Pending",
+      approved: "Approved",
+      rejected: "Rejected",
+      cancelled: "Cancelled",
+    },
   },
   room: {
     title: "Room",

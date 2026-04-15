@@ -8,18 +8,17 @@ export type TextSegmentIn = {
 
 export type EmojiSegmentIn = {
   type: "emoji";
-  name: string;
-  unicode?: string | null;
+  id: string;
 };
 
 export type ImageSegmentIn = {
   type: "image";
-  asset_id: number;
+  id: number;
 };
 
 export type StickerSegmentIn = {
   type: "sticker";
-  asset_id: number;
+  id: number;
 };
 
 export type MessageSegmentIn =
@@ -39,19 +38,18 @@ export type TextSegmentOut = {
 
 export type EmojiSegmentOut = {
   type: "emoji";
-  name: string;
-  unicode: string | null;
+  id: string;
 };
 
 export type ImageSegmentOut = {
   type: "image";
-  asset_id: number;
+  id: number;
   url: string | null;
 };
 
 export type StickerSegmentOut = {
   type: "sticker";
-  asset_id: number;
+  id: number;
   url: string | null;
 };
 

@@ -23,7 +23,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
-  (e: "submit", payload: { name: string; is_public: boolean }): void;
+  (e: "submit", payload: { name: string; visibility: "public" | "private" }): void;
 }>();
 
 const name = ref("");
@@ -50,7 +50,7 @@ function submit() {
 
   emit("submit", {
     name: name.value.trim(),
-    is_public: isPublic.value,
+    visibility: isPublic.value ? "public" : "private",
   });
 }
 </script>

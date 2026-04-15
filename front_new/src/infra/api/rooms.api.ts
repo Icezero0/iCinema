@@ -1,11 +1,18 @@
 import { http } from "@/infra/http/client";
 
+export type RoomVisibility = "public" | "private";
+export type RoomJoinAuditMode =
+  | "auto_approve"
+  | "manual_review"
+  | "auto_reject";
 export type Room = {
   id: number;
   name: string;
   owner_id: number;
-  is_public: boolean | null;
-  config: string | null;
+  owner_name?: string | null;
+  visibility: RoomVisibility;
+  my_role?: RoomRole | null;
+  join_audit_mode?: RoomJoinAuditMode | null;
 };
 
 export type RoomListResponse = {
@@ -18,14 +25,14 @@ export type RoomListResponse = {
 
 export type RoomCreatePayload = {
   name: string;
-  is_public?: boolean | null;
-  config?: string | null;
+  visibility?: RoomVisibility;
+  join_audit_mode?: RoomJoinAuditMode;
 };
 
 export type RoomPatchPayload = {
   name?: string | null;
-  is_public?: boolean | null;
-  config?: string | null;
+  visibility?: RoomVisibility | null;
+  join_audit_mode?: RoomJoinAuditMode | null;
 };
 
 export type RoomRole = "owner" | "manager" | "member";
@@ -70,6 +77,7 @@ export type RoomJoinRequest = {
   room_action_by_user_id: number | null;
   created_at: string | null;
   updated_at: string | null;
+  room?: RoomBrief | null;
   initiator: RoomUserBrief | null;
   target: RoomUserBrief | null;
   room_action_by: RoomUserBrief | null;
@@ -103,28 +111,106 @@ export type RoomSettingsPatchPayload = {
   active_sync_permission?: RoomActiveSyncPermission | null;
 };
 
+type RoomResponse = {
+  id: number;
+  name: string;
+  owner_id: number;
+  visibility: RoomVisibility;
+  join_audit_mode: RoomJoinAuditMode;
+};
+
+export type RoomBrief = {
+  id: number;
+  name: string;
+  owner_id: number;
+  visibility: RoomVisibility;
+};
+
+type UserRoomSummaryResponse = {
+  id: number;
+  name: string;
+  owner_id: number;
+  owner: RoomUserBrief;
+  my_role: RoomRole;
+  is_public: boolean;
+};
+
+type UserRoomSummaryListResponse = {
+  items: UserRoomSummaryResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};
+
+function mapRoomResponse(room: RoomResponse): Room {
+  return {
+    id: room.id,
+    name: room.name,
+    owner_id: room.owner_id,
+    visibility: room.visibility,
+    join_audit_mode: room.join_audit_mode,
+  };
+}
+
+function mapUserRoomSummary(room: UserRoomSummaryResponse): Room {
+  return {
+    id: room.id,
+    name: room.name,
+    owner_id: room.owner_id,
+    owner_name: room.owner?.username || room.owner?.email || null,
+    visibility: room.is_public ? "public" : "private",
+    my_role: room.my_role,
+  };
+}
+
 export async function getRooms(params?: {
   page?: number;
   page_size?: number;
   name?: string | null;
 }) {
-  const { data } = await http.get<RoomListResponse>("/rooms", { params });
-  return data;
+  const { data } = await http.get<{
+    items: RoomResponse[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+  }>("/rooms", { params });
+
+  return {
+    ...data,
+    items: data.items.map(mapRoomResponse),
+  } satisfies RoomListResponse;
+}
+
+export async function getMyRooms(params?: {
+  page?: number;
+  page_size?: number;
+  role?: RoomRole | null;
+}) {
+  const { data } = await http.get<UserRoomSummaryListResponse>("/users/me/rooms", {
+    params,
+  });
+
+  return {
+    ...data,
+    items: data.items.map(mapUserRoomSummary),
+  } satisfies RoomListResponse;
 }
 
 export async function createRoom(payload: RoomCreatePayload) {
-  const { data } = await http.post<Room>("/rooms", payload);
-  return data;
+  const { data } = await http.post<RoomResponse>("/rooms", payload);
+  return mapRoomResponse(data);
 }
 
 export async function getRoomById(roomId: number) {
-  const { data } = await http.get<Room>(`/rooms/${roomId}`);
-  return data;
+  const { data } = await http.get<RoomResponse>(`/rooms/${roomId}`);
+  return mapRoomResponse(data);
 }
 
 export async function patchRoom(roomId: number, payload: RoomPatchPayload) {
-  const { data } = await http.patch<Room>(`/rooms/${roomId}`, payload);
-  return data;
+  const { data } = await http.patch<RoomResponse>(`/rooms/${roomId}`, payload);
+  return mapRoomResponse(data);
 }
 
 export async function deleteRoom(roomId: number) {

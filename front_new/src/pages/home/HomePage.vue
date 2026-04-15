@@ -4,7 +4,6 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useAuthStore } from "@/stores/auth.store";
 import { useRoomsStore } from "@/stores/rooms.store";
-import { useEntitiesStore } from "@/stores/entities.store";
 import HomeHero from "@/features/home/HomeHero.vue";
 import MyRoomsSection from "@/features/rooms/home/MyRoomsSection.vue";
 import CreateRoomDialog from "@/features/rooms/home/CreateRoomDialog.vue";
@@ -13,7 +12,6 @@ const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 const rooms = useRoomsStore();
-const entities = useEntitiesStore();
 
 const dialogOpen = ref(false);
 const feedback = ref("");
@@ -27,11 +25,13 @@ const defaultRoomName = computed(
 onMounted(() => {
   void (async () => {
     await rooms.fetchHomeRooms();
-    await entities.ensureUsers(rooms.myRooms.map((room) => room.owner_id));
   })();
 });
 
-async function handleCreateRoom(payload: { name: string; is_public: boolean }) {
+async function handleCreateRoom(payload: {
+  name: string;
+  visibility: "public" | "private";
+}) {
   feedback.value = "";
 
   try {
@@ -100,7 +100,6 @@ function enterRoom(roomId: number) {
           :enter-text="t('home.myRooms.enter')"
           :loading-text="t('common.loading')"
           :rooms="rooms.myRooms"
-          :owner-label-prefix="t('home.myRooms.ownerPrefix')"
           :loading="rooms.isLoading"
           @create="openCreateDialog"
           @join="openPublicRooms"

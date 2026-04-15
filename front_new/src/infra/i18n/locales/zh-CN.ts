@@ -86,6 +86,9 @@ export default {
   },
   notifications: {
     title: "通知",
+    placeholderJoinRequest: "有新的入房审批需要处理。",
+    placeholderWorkflow: "有一条新的流程通知。",
+    placeholderGeneric: "有一条新的系统通知。",
     empty: {
       title: "暂无通知",
       hint: "新的邀请或申请会在这里显示。",
@@ -104,9 +107,11 @@ export default {
       join: "加入房间",
       enter: "进入",
       ownerPrefix: "房主",
+      rolePrefix: "角色",
     },
     roomList: {
       configured: "已配置",
+      auditModePrefix: "审批",
       defaultSettings: "默认设置",
     },
     create: {
@@ -135,10 +140,30 @@ export default {
   },
   joinRequests: {
     title: "审批中心",
-    placeholderTitle: "审批中心骨架已就位",
-    placeholderBody:
-      "下一阶段会把 join request 流程从 notifications 中进一步拆开，在这里承载真正的审批处理和状态查看。",
-    openNotifications: "先看通知",
+    pageHint: "这里承载真正的 join request 查询和审批，不再依赖 notification 列表充当流程页。",
+    loadFailed: "加载审批列表失败。",
+    empty: "当前没有匹配的审批记录。",
+    filters: {
+      scope: "范围",
+      statusLabel: "状态",
+      sortBy: "排序",
+      pendingForMe: "待我处理",
+      createdByMe: "我发起的",
+      allRelated: "全部相关",
+      allStatus: "全部状态",
+      updatedAt: "按更新时间",
+      createdAt: "按创建时间",
+    },
+    actions: {
+      approve: "批准",
+      reject: "拒绝",
+    },
+    status: {
+      pending: "待处理",
+      approved: "已批准",
+      rejected: "已拒绝",
+      cancelled: "已取消",
+    },
   },
   room: {
     title: "房间",

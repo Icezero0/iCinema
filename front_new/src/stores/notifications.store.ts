@@ -3,12 +3,14 @@ import {
   listNotifications,
   getUnreadCount,
   markNotificationAsRead,
-  getJoinRequest,
-  approveJoinRequest,
-  rejectJoinRequest,
   type Notification,
-  type RoomJoinRequestResponse,
 } from "@/infra/api/notifications.api";
+import {
+  approveJoinRequestById,
+  getJoinRequestById,
+  rejectJoinRequestById,
+} from "@/infra/api/join-requests.api";
+import type { RoomJoinRequest } from "@/infra/api/rooms.api";
 
 type State = {
   items: Notification[];
@@ -25,7 +27,7 @@ type State = {
 
   error: string | null;
 
-  joinRequestsById: Record<number, RoomJoinRequestResponse>;
+  joinRequestsById: Record<number, RoomJoinRequest>;
 };
 
 export const useNotificationsStore = defineStore("notifications", {
@@ -72,7 +74,7 @@ export const useNotificationsStore = defineStore("notifications", {
       await Promise.all(
         ids.map(async (requestId) => {
           try {
-            const detail = await getJoinRequest(requestId);
+            const detail = await getJoinRequestById(requestId);
             this.joinRequestsById[requestId] = detail;
           } catch {
             // 单个 hydrate 失败不阻断整个列表
@@ -182,7 +184,7 @@ export const useNotificationsStore = defineStore("notifications", {
       }
 
       try {
-        const detail = await approveJoinRequest(n.related_id);
+        const detail = await approveJoinRequestById(n.related_id);
         this.joinRequestsById[n.related_id] = detail;
 
         const updated = await markNotificationAsRead(notificationId);
@@ -207,7 +209,7 @@ export const useNotificationsStore = defineStore("notifications", {
       }
 
       try {
-        const detail = await rejectJoinRequest(n.related_id);
+        const detail = await rejectJoinRequestById(n.related_id);
         this.joinRequestsById[n.related_id] = detail;
 
         const updated = await markNotificationAsRead(notificationId);
