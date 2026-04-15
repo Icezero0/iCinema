@@ -4,6 +4,13 @@ export default {
     loading: "Loading…",
     backHome: "Back to Home",
   },
+  sidebar: {
+    home: "Home",
+    publicRooms: "Public Rooms",
+    notifications: "Notifications",
+    profile: "Profile",
+    joinRequests: "Approvals",
+  },
   auth: {
     login: {
       title: "Welcome back",
@@ -84,6 +91,68 @@ export default {
       hint: "Invitations and requests will show up here.",
     },
     inviteYouToJoin: "invited you to join {room}",
+  },
+  home: {
+    headline: "Welcome back, {name}",
+    subline:
+      "This page now focuses on the core space first: your rooms. Creating, joining, and continuing all start here.",
+    myRooms: {
+      title: "My Rooms",
+      hint: "This section combines rooms you created and rooms you've already joined.",
+      empty: "You haven't created or joined any rooms yet.",
+      create: "Create room",
+      join: "Join room",
+      enter: "Enter",
+      ownerPrefix: "Owner",
+    },
+    roomList: {
+      configured: "Configured",
+      defaultSettings: "Default settings",
+    },
+    create: {
+      title: "Create room",
+      submit: "Create",
+      nameLabel: "Room name",
+      namePlaceholder: "Enter a room name",
+      visibilityLabel: "Room visibility",
+      publicLabel: "Public room",
+      privateHint: "Turn this off to keep the room private.",
+      defaultSuffix: "'s room",
+    },
+    feedback: {
+      roomCreated: "Room created: {room}",
+      createFailed: "Failed to create room.",
+      joinRequested: "Your request has been sent and is waiting for the owner.",
+      requestFailed: "Failed to submit your request.",
+    },
+  },
+  publicRooms: {
+    title: "Public Rooms",
+    hint: "This page lists public rooms from other users. Outside the room, we only show stable room information and leave realtime state to the room itself.",
+    empty: "No public rooms are available right now.",
+    request: "Request access",
+    requested: "Requested",
+  },
+  joinRequests: {
+    title: "Approvals",
+    placeholderTitle: "Approvals page scaffold is ready",
+    placeholderBody:
+      "In the next step, join-request workflows will be further separated from notifications and handled here as their own entity-driven page.",
+    openNotifications: "Open notifications first",
+  },
+  room: {
+    title: "Room",
+    placeholder:
+      "The room page skeleton is now in place. Members, settings, messages, and realtime features will be added next.",
+    invalidId: "Invalid room id.",
+    loadFailed: "Failed to load the room.",
+    fields: {
+      id: "Room ID",
+      owner: "Owner",
+      visibility: "Visibility",
+      public: "Public",
+      private: "Private",
+    },
   },
 
 };

@@ -27,9 +27,26 @@ export default [
         component: () => import("@/pages/home/HomePage.vue"),
       },
       {
+        path: "rooms/:id",
+        name: "room",
+        component: () => import("@/pages/room/RoomPage.vue"),
+      },
+      {
         path: "profile",
         name: "profile",
         component: () => import("@/pages/profile/ProfileEditPage.vue"),
+      },
+      {
+        path: "join-requests",
+        name: "join-requests",
+        component: () =>
+          import("@/pages/join-requests/JoinRequestsPage.vue"),
+      },
+      {
+        path: "public-rooms",
+        name: "public-rooms",
+        component: () =>
+          import("@/pages/public-rooms/PublicRoomsPage.vue"),
       },
       {
         path: "notifications",

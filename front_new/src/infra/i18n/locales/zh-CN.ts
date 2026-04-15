@@ -5,6 +5,13 @@ export default {
     loading: "加载中…",
     backHome: "返回首页",
   },
+  sidebar: {
+    home: "首页",
+    publicRooms: "公共房间",
+    notifications: "通知",
+    profile: "个人资料",
+    joinRequests: "审批中心",
+  },
   auth: {
     login: {
       title: "欢迎回来",
@@ -84,6 +91,68 @@ export default {
       hint: "新的邀请或申请会在这里显示。",
     },
     inviteYouToJoin: "邀请您加入 {room}",
+  },
+  home: {
+    headline: "{name}，欢迎回来",
+    subline:
+      "这里先聚焦最核心的空间：你的房间。创建、加入和继续进入，都从这里开始。",
+    myRooms: {
+      title: "我的房间",
+      hint: "这里汇总你创建的房间和你已经加入的房间。",
+      empty: "你还没有创建或加入任何房间。",
+      create: "创建房间",
+      join: "加入房间",
+      enter: "进入",
+      ownerPrefix: "房主",
+    },
+    roomList: {
+      configured: "已配置",
+      defaultSettings: "默认设置",
+    },
+    create: {
+      title: "创建房间",
+      submit: "创建",
+      nameLabel: "房间名称",
+      namePlaceholder: "输入房间名称",
+      visibilityLabel: "房间可见性",
+      publicLabel: "公开房间",
+      privateHint: "关闭后仅保留为私有房间。",
+      defaultSuffix: "的房间",
+    },
+    feedback: {
+      roomCreated: "已创建房间：{room}",
+      createFailed: "创建房间失败。",
+      joinRequested: "申请已提交，等待房主处理。",
+      requestFailed: "提交申请失败。",
+    },
+  },
+  publicRooms: {
+    title: "公共房间",
+    hint: "这里展示其他用户公开的房间。房间外先只展示稳定信息，实时状态等进入房间后再看。",
+    empty: "暂无可申请的公共房间。",
+    request: "申请加入",
+    requested: "已申请",
+  },
+  joinRequests: {
+    title: "审批中心",
+    placeholderTitle: "审批中心骨架已就位",
+    placeholderBody:
+      "下一阶段会把 join request 流程从 notifications 中进一步拆开，在这里承载真正的审批处理和状态查看。",
+    openNotifications: "先看通知",
+  },
+  room: {
+    title: "房间",
+    placeholder:
+      "房间页骨架已经建立。下一阶段将在这里接入成员、设置、消息和实时能力。",
+    invalidId: "房间 ID 无效。",
+    loadFailed: "加载房间失败。",
+    fields: {
+      id: "房间 ID",
+      owner: "房主",
+      visibility: "可见性",
+      public: "公开",
+      private: "私有",
+    },
   },
 
 };
