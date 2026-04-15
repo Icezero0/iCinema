@@ -192,7 +192,7 @@ class MessageService:
             raise ValueError(f"Unsupported segment type: {segment.type}")
 
         for emoji_id in used_emoji_ids:
-            await self.media_service.touch_user_emoji_usage(
+            await self.media_service.touch_user_emoji_usage_in_tx(
                 db,
                 user_id=user.id,
                 emoji_id=emoji_id,

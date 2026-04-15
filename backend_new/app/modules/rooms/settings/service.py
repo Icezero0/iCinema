@@ -70,12 +70,13 @@ class RoomSettingsService:
             raise NotFoundError("Room settings not found")
         return settings
 
-    async def create_default_settings(
+    async def create_default_settings_in_tx(
         self,
         db: AsyncSession,
         *,
         room_id: int,
     ) -> RoomSettings:
+        # This helper participates in the caller's transaction and does not commit.
         return await self.repo.create_settings(
             db,
             room_id=room_id,
@@ -102,7 +103,7 @@ class RoomSettingsService:
         if settings:
             return settings
 
-        settings = await self.create_default_settings(db, room_id=room_id)
+        settings = await self.create_default_settings_in_tx(db, room_id=room_id)
         await db.commit()
         await db.refresh(settings)
         return settings
@@ -116,7 +117,7 @@ class RoomSettingsService:
     ) -> RoomSettings:
         settings = await self.find_room_settings_by_room_id(db, room_id=room_id)
         if not settings:
-            settings = await self.create_default_settings(db, room_id=room_id)
+            settings = await self.create_default_settings_in_tx(db, room_id=room_id)
 
         settings.selected_room_video_source_type = source_type
         settings = await self.repo.save_settings(db, settings)
@@ -143,7 +144,7 @@ class RoomSettingsService:
 
         settings = await self.find_room_settings_by_room_id(db, room_id=room_id)
         if not settings:
-            settings = await self.create_default_settings(db, room_id=room_id)
+            settings = await self.create_default_settings_in_tx(db, room_id=room_id)
 
         updates = payload.model_dump(exclude_unset=True)
 

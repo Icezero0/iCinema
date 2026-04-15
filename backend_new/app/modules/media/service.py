@@ -54,13 +54,14 @@ class MediaService:
             return f"{settings.video_public_prefix}/{asset.storage_key}"
         raise NotFoundError("Unsupported media asset type")
 
-    async def create_avatar_asset(
+    async def create_avatar_asset_in_tx(
         self,
         db: AsyncSession,
         *,
         file: UploadFile,
         user: User,
     ) -> MediaAsset:
+        # This helper participates in the caller's transaction and does not commit.
         prepared = await self.storage.prepare_upload(
             file=file,
             asset_type=MediaAssetType.AVATAR,
@@ -126,6 +127,7 @@ class MediaService:
                 asset_id=asset.id,
                 expires_at=expires_at,
             )
+            await db.commit()
             await db.refresh(asset)
             return asset
 
@@ -148,7 +150,7 @@ class MediaService:
             expires_at=expires_at,
         )
 
-        db.commit()
+        await db.commit()
         return asset
 
     async def create_sticker_asset(
@@ -186,6 +188,7 @@ class MediaService:
                     source=StickerLibrarySource.UPLOAD,
                     sort_order=next_sort_order,
                 )
+            await db.commit()
             return existing
 
         saved = self.storage.save_prepared_upload(
@@ -219,7 +222,7 @@ class MediaService:
             sort_order=next_sort_order,
         )
         
-        db.commit()
+        await db.commit()
         return asset
 
     async def collect_sticker(
@@ -254,7 +257,7 @@ class MediaService:
                 sort_order=next_sort_order,
             )
 
-        db.commit()
+        await db.commit()
         return asset
 
     async def get_user_sticker_library(
@@ -481,7 +484,7 @@ class MediaService:
             raise BadRequestError("Invalid emoji id")
         return emoji
 
-    async def touch_user_emoji_usage(
+    async def touch_user_emoji_usage_in_tx(
         self,
         db: AsyncSession,
         *,
@@ -489,6 +492,7 @@ class MediaService:
         emoji_id: str,
         provider: str = EmojiProvider.QFACE,
     ) -> None:
+        # This helper participates in the caller's transaction and does not commit.
         now = datetime.now(timezone.utc)
 
         usage = await self.repo.find_user_emoji_usage(

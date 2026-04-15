@@ -107,7 +107,7 @@ class UserService:
         return await self.hydrate_user_avatar_key(db, user)
 
     async def update_avatar(self, db: AsyncSession, user: User, file) -> User:
-        await self.media_service.create_avatar_asset(
+        await self.media_service.create_avatar_asset_in_tx(
             db,
             file=file,
             user=user,

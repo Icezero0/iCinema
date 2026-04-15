@@ -68,7 +68,7 @@ class RoomJoinRequestService:
             raise ForbiddenError("This room is not accepting join requests.")
 
         if room.join_audit_mode == RoomJoinAuditMode.AUTO_APPROVE:
-            await self.membership_service.add_room_member(
+            await self.membership_service.add_room_member_in_tx(
                 db,
                 room_id=room_id,
                 user_id=user.id,
@@ -454,7 +454,7 @@ class RoomJoinRequestService:
         recipient_user_id: int,
         request_id: int,
     ) -> None:
-        await self.notification_service.send_notification(
+        await self.notification_service.create_notification_in_tx(
             db,
             payload=NotificationCreate(
                 recipient_user_id=recipient_user_id,
@@ -483,7 +483,7 @@ class RoomJoinRequestService:
         ):
             request.status = RoomJoinRequestStatus.APPROVED
 
-            await self.membership_service.add_room_member(
+            await self.membership_service.add_room_member_in_tx(
                 db,
                 room_id=request.room_id,
                 user_id=request.target_user_id,
