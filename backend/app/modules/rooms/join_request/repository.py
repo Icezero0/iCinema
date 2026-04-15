@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -85,11 +85,15 @@ class RoomJoinRequestRepository:
         *,
         page: int,
         page_size: int,
+        room_ids: list[int] | None = None,
         room_id: int | None = None,
         initiator_user_id: int | None = None,
         target_user_id: int | None = None,
         status: RoomJoinRequestStatus | None = None,
         source: RoomJoinRequestSource | None = None,
+        related_user_id: int | None = None,
+        include_room_ids_for_related: list[int] | None = None,
+        sort_by: str = "created_at",
     ) -> tuple[list[RoomJoinRequest], int]:
         stmt = select(RoomJoinRequest).options(
             selectinload(RoomJoinRequest.room),
@@ -99,6 +103,12 @@ class RoomJoinRequestRepository:
         )
 
         count_stmt = select(func.count(RoomJoinRequest.id))
+
+        if room_ids is not None:
+            if not room_ids:
+                return [], 0
+            stmt = stmt.where(RoomJoinRequest.room_id.in_(room_ids))
+            count_stmt = count_stmt.where(RoomJoinRequest.room_id.in_(room_ids))
 
         if room_id is not None:
             stmt = stmt.where(RoomJoinRequest.room_id == room_id)
@@ -126,11 +136,28 @@ class RoomJoinRequestRepository:
             stmt = stmt.where(RoomJoinRequest.source == source)
             count_stmt = count_stmt.where(RoomJoinRequest.source == source)
 
-        stmt = (
-            stmt.order_by(
-                RoomJoinRequest.created_at.desc(),
-                RoomJoinRequest.id.desc(),
+        if related_user_id is not None:
+            related_filter = or_(
+                RoomJoinRequest.initiator_user_id == related_user_id,
+                RoomJoinRequest.target_user_id == related_user_id,
+                RoomJoinRequest.room_action_by_user_id == related_user_id,
             )
+            if include_room_ids_for_related:
+                related_filter = or_(
+                    related_filter,
+                    RoomJoinRequest.room_id.in_(include_room_ids_for_related),
+                )
+            stmt = stmt.where(related_filter)
+            count_stmt = count_stmt.where(related_filter)
+
+        sort_column = (
+            RoomJoinRequest.updated_at
+            if sort_by == "updated_at"
+            else RoomJoinRequest.created_at
+        )
+
+        stmt = (
+            stmt.order_by(sort_column.desc(), RoomJoinRequest.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

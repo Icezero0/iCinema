@@ -53,6 +53,17 @@ class RoomMembershipRepository:
         )
         return list(result.scalars().all())
 
+    async def get_members_by_user_id(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+    ) -> list[RoomMember]:
+        result = await db.execute(
+            select(RoomMember).where(RoomMember.user_id == user_id)
+        )
+        return list(result.scalars().all())
+
     async def delete_members_by_room_and_user_id(
         self,
         db: AsyncSession,
