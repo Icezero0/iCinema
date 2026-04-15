@@ -10,6 +10,7 @@ export type Room = {
   name: string;
   owner_id: number;
   owner_name?: string | null;
+  owner_avatar_url?: string | null;
   visibility: RoomVisibility;
   my_role?: RoomRole | null;
   join_audit_mode?: RoomJoinAuditMode | null;
@@ -159,6 +160,7 @@ function mapUserRoomSummary(room: UserRoomSummaryResponse): Room {
     name: room.name,
     owner_id: room.owner_id,
     owner_name: room.owner?.username || room.owner?.email || null,
+    owner_avatar_url: room.owner?.avatar_url || null,
     visibility: room.is_public ? "public" : "private",
     my_role: room.my_role,
   };

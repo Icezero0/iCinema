@@ -31,6 +31,7 @@ onMounted(() => {
 async function handleCreateRoom(payload: {
   name: string;
   visibility: "public" | "private";
+  join_audit_mode: "auto_approve" | "manual_review" | "auto_reject";
 }) {
   feedback.value = "";
 
@@ -70,8 +71,14 @@ function enterRoom(roomId: number) {
       :name-label="t('home.create.nameLabel')"
       :name-placeholder="t('home.create.namePlaceholder')"
       :visibility-label="t('home.create.visibilityLabel')"
-      :public-label="t('home.create.publicLabel')"
+      :visibility-public-label="t('home.create.visibilityPublicLabel')"
+      :visibility-private-label="t('home.create.visibilityPrivateLabel')"
       :private-hint="t('home.create.privateHint')"
+      :join-audit-label="t('home.create.joinAuditLabel')"
+      :join-audit-hint="t('home.create.joinAuditHint')"
+      :join-audit-manual-label="t('home.create.joinAuditManualLabel')"
+      :join-audit-auto-approve-label="t('home.create.joinAuditAutoApproveLabel')"
+      :join-audit-auto-reject-label="t('home.create.joinAuditAutoRejectLabel')"
       :default-name="defaultRoomName"
       @submit="handleCreateRoom"
     />

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import type { Room } from "@/infra/api/rooms.api";
+import { computed } from "vue";
+
+const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
 
 const { t } = useI18n();
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     room: Room;
     metaText?: string;
@@ -19,6 +22,12 @@ withDefaults(
     actionDisabled: false,
   },
 );
+
+const ownerAvatarUrl = computed(() => {
+  const avatarPath = props.room.owner_avatar_url;
+  if (!avatarPath) return "";
+  return avatarPath.startsWith("http") ? avatarPath : `${apiOrigin}${avatarPath}`;
+});
 
 defineEmits<{
   (e: "action"): void;
@@ -40,21 +49,14 @@ defineEmits<{
       </div>
 
       <div class="meta">
-        <span>#{{ room.id }}</span>
-        <span v-if="metaText">
-          {{ metaText }}
-        </span>
-        <span v-else-if="room.owner_name">
-          {{ t("home.myRooms.ownerPrefix") }} {{ room.owner_name }}
-        </span>
-        <span v-else-if="room.my_role">
-          {{ t("home.myRooms.rolePrefix") }} {{ room.my_role }}
-        </span>
-        <span v-else-if="room.join_audit_mode">
-          {{ t("home.roomList.auditModePrefix") }} {{ room.join_audit_mode }}
-        </span>
-        <span v-else>
-          {{ t("home.roomList.defaultSettings") }}
+        <BaseAvatar
+          class="ownerAvatar"
+          size="xs"
+          :src="ownerAvatarUrl"
+          :name="room.owner_name || undefined"
+        />
+        <span class="ownerName">
+          {{ room.owner_name || t("home.roomList.defaultSettings") }}
         </span>
       </div>
     </div>
@@ -89,6 +91,7 @@ defineEmits<{
   font-size: 14px;
   font-weight: 650;
   color: var(--c-text);
+  cursor: text;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -107,6 +110,9 @@ defineEmits<{
   font-size: 12px;
   white-space: nowrap;
   flex: 0 0 auto;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .badge[data-public="true"] {
@@ -117,9 +123,25 @@ defineEmits<{
 .meta {
   margin-top: 6px;
   display: flex;
+  align-items: center;
   gap: 12px;
   font-size: 12px;
   color: var(--c-text-muted);
+}
+
+.ownerAvatar {
+  flex: 0 0 auto;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ownerName {
+  min-width: 0;
+  cursor: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 640px) {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import type { RoomJoinAuditMode } from "@/infra/api/rooms.api";
 
 const props = withDefaults(
   defineProps<{
@@ -11,8 +12,14 @@ const props = withDefaults(
     nameLabel: string;
     namePlaceholder: string;
     visibilityLabel: string;
-    publicLabel: string;
+    visibilityPublicLabel: string;
+    visibilityPrivateLabel: string;
     privateHint: string;
+    joinAuditLabel: string;
+    joinAuditHint: string;
+    joinAuditManualLabel: string;
+    joinAuditAutoApproveLabel: string;
+    joinAuditAutoRejectLabel: string;
     defaultName?: string;
   }>(),
   {
@@ -23,18 +30,27 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: "update:modelValue", v: boolean): void;
-  (e: "submit", payload: { name: string; visibility: "public" | "private" }): void;
+  (
+    e: "submit",
+    payload: {
+      name: string;
+      visibility: "public" | "private";
+      join_audit_mode: RoomJoinAuditMode;
+    },
+  ): void;
 }>();
 
 const name = ref("");
-const isPublic = ref(true);
+const visibility = ref<"public" | "private">("public");
+const joinAuditMode = ref<RoomJoinAuditMode>("manual_review");
 
 watch(
   () => props.modelValue,
   (open) => {
     if (!open) return;
     name.value = props.defaultName || "";
-    isPublic.value = true;
+    visibility.value = "public";
+    joinAuditMode.value = "manual_review";
   },
   { immediate: true },
 );
@@ -50,7 +66,8 @@ function submit() {
 
   emit("submit", {
     name: name.value.trim(),
-    visibility: isPublic.value ? "public" : "private",
+    visibility: visibility.value,
+    join_audit_mode: joinAuditMode.value,
   });
 }
 </script>
@@ -73,14 +90,62 @@ function submit() {
         </label>
 
         <label class="toggleRow">
-          <span class="toggleCopy">
+          <span class="controlCopy">
             <span class="label">{{ visibilityLabel }}</span>
             <span class="hint">{{ privateHint }}</span>
           </span>
 
-          <span class="toggleControl">
-            <input v-model="isPublic" class="checkbox" type="checkbox" />
-            <span class="toggleText">{{ publicLabel }}</span>
+          <span class="segmentedControl" role="radiogroup" :aria-label="visibilityLabel">
+            <button
+              type="button"
+              class="segment"
+              :data-active="String(visibility === 'public')"
+              @click="visibility = 'public'"
+            >
+              {{ visibilityPublicLabel }}
+            </button>
+            <button
+              type="button"
+              class="segment"
+              :data-active="String(visibility === 'private')"
+              @click="visibility = 'private'"
+            >
+              {{ visibilityPrivateLabel }}
+            </button>
+          </span>
+        </label>
+
+        <label class="toggleRow">
+          <span class="controlCopy">
+            <span class="label">{{ joinAuditLabel }}</span>
+            <span class="hint">{{ joinAuditHint }}</span>
+          </span>
+
+          <span class="segmentedControl auditControl" role="radiogroup" :aria-label="joinAuditLabel">
+            <button
+              type="button"
+              class="segment"
+              :data-active="String(joinAuditMode === 'manual_review')"
+              @click="joinAuditMode = 'manual_review'"
+            >
+              {{ joinAuditManualLabel }}
+            </button>
+            <button
+              type="button"
+              class="segment"
+              :data-active="String(joinAuditMode === 'auto_approve')"
+              @click="joinAuditMode = 'auto_approve'"
+            >
+              {{ joinAuditAutoApproveLabel }}
+            </button>
+            <button
+              type="button"
+              class="segment"
+              :data-active="String(joinAuditMode === 'auto_reject')"
+              @click="joinAuditMode = 'auto_reject'"
+            >
+              {{ joinAuditAutoRejectLabel }}
+            </button>
           </span>
         </label>
       </div>
@@ -150,27 +215,46 @@ function submit() {
   background: color-mix(in srgb, var(--c-surface) 78%, var(--c-bg));
 }
 
-.toggleCopy {
+.controlCopy {
   display: grid;
   gap: 4px;
 }
 
-.toggleControl {
+.segmentedControl {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: var(--c-text);
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--c-border);
+  background: color-mix(in srgb, var(--c-surface) 88%, var(--c-bg));
   flex: 0 0 auto;
 }
 
-.checkbox {
-  width: 16px;
-  height: 16px;
-  margin: 0;
+.auditControl {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-.toggleText {
+.segment {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-text-muted);
   font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.segment[data-active="true"] {
+  background: color-mix(in srgb, var(--c-primary) 16%, var(--c-surface));
+  color: var(--c-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-primary) 26%, var(--c-border));
 }
 
 .actions {
@@ -184,6 +268,15 @@ function submit() {
   .toggleRow {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .segmentedControl,
+  .auditControl {
+    width: 100%;
+  }
+
+  .segment {
+    flex: 1 1 auto;
   }
 
   .actions {

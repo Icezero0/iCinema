@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { useAuthStore } from "@/stores/auth.store";
 import {
   applyRoomJoinRequest,
   createRoom,
@@ -83,9 +84,24 @@ export const useRoomsStore = defineStore("rooms", {
       this.error = null;
 
       try {
+        const auth = useAuthStore();
         const created = await createRoom(payload);
-        this.myRooms = [created, ...this.myRooms.filter((x) => x.id !== created.id)];
-        return created;
+        const hydratedCreated: Room = {
+          ...created,
+          owner_name: auth.me?.username || auth.me?.email || created.owner_name || null,
+          owner_avatar_url: auth.me?.avatar_url || created.owner_avatar_url || null,
+          my_role: "owner",
+        };
+        this.myRooms = [
+          hydratedCreated,
+          ...this.myRooms.filter((x) => x.id !== hydratedCreated.id),
+        ];
+        if (hydratedCreated.visibility === "public") {
+          this.publicRooms = this.publicRooms.filter(
+            (x) => x.id !== hydratedCreated.id,
+          );
+        }
+        return hydratedCreated;
       } catch (error: any) {
         const message = extractErrorMessage(error, "Failed to create room");
         this.error = message;

@@ -16,6 +16,14 @@ const { t } = useI18n();
 
         <RouterLink
           class="navLink"
+          to="/profile"
+          exact-active-class="router-link-exact-active"
+        >
+          {{ t("sidebar.profile") }}
+        </RouterLink>
+
+        <RouterLink
+          class="navLink"
           to="/public-rooms"
           exact-active-class="router-link-exact-active"
         >
@@ -29,14 +37,6 @@ const { t } = useI18n();
         >
           {{ t("sidebar.notifications") }}
         </RouterLink>
-
-      <RouterLink
-        class="navLink"
-        to="/profile"
-        exact-active-class="router-link-exact-active"
-      >
-        {{ t("sidebar.profile") }}
-      </RouterLink>
 
       <RouterLink
         class="navLink"
