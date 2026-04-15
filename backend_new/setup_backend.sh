@@ -104,9 +104,16 @@ echo "[INFO] Installing base backend dependencies..."
 "$VENV_PYTHON" -m pip install -r requirements.txt
 
 echo
+echo "[INFO] Running Alembic upgrade head..."
+"$VENV_PYTHON" -m alembic upgrade head
+
+echo
 echo "=========================================="
 echo "  Setup Complete"
 echo "=========================================="
+echo
+echo "[INFO] Database schema has been upgraded to the latest Alembic revision."
+echo "[INFO] Startup will run Alembic again as a safe fallback."
 echo
 echo "[INFO] Start backend: ./run_backend.sh"
 echo "[INFO] Run tests: ./test_backend.sh"

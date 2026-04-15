@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from app.core.startup import ensure_runtime_paths
+from app.core.startup import initialize_runtime
 from jobs.cleanup_expired_images import run_cleanup_expired_images_once
 from jobs.scheduler import run_interval_job
 
@@ -12,7 +12,7 @@ async def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s - %(message)s",
     )
 
-    await ensure_runtime_paths()
+    await initialize_runtime()
 
     tasks = [
         asyncio.create_task(

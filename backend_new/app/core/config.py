@@ -81,6 +81,10 @@ class Settings(BaseSettings):
         return f"sqlite+aiosqlite:///{self.db_path.as_posix()}"
 
     @property
+    def alembic_database_url(self) -> str:
+        return self.database_url.replace("+aiosqlite", "")
+
+    @property
     def upload_dir_path(self) -> Path:
         if self.upload_dir:
             return Path(self.upload_dir).resolve()

@@ -112,9 +112,22 @@ if errorlevel 1 (
 )
 
 echo.
+echo [INFO] Running Alembic upgrade head...
+"%VENV_PYTHON%" -m alembic upgrade head
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Failed to upgrade database schema with Alembic
+    pause
+    exit /b 1
+)
+
+echo.
 echo ==========================================
 echo   Setup Complete
 echo ==========================================
+echo.
+echo [INFO] Database schema has been upgraded to the latest Alembic revision.
+echo [INFO] Startup will run Alembic again as a safe fallback.
 echo.
 echo [INFO] Start backend: run_backend.bat
 echo [INFO] Run tests: test_backend.bat
