@@ -6,6 +6,8 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.core.validators import normalize_email
 from app.modules.media.service import MediaService
+from app.modules.rooms.constants import RoomRole
+from app.modules.rooms.room.repository import RoomRepository
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 from app.modules.users.schemas import UserCreate, UserPatch
@@ -15,6 +17,7 @@ class UserService:
     def __init__(self) -> None:
         self.repo = UserRepository()
         self.media_service = MediaService()
+        self.room_repo = RoomRepository()
 
     async def hydrate_user_avatar_key(self, db: AsyncSession, user: User) -> User:
         avatar_key = await self.media_service.get_user_avatar_storage_key(db, user.id)
@@ -79,6 +82,36 @@ class UserService:
         )
 
         items = await self.hydrate_users_avatar_key(db, items)
+
+        total_pages = ceil(total / page_size) if total > 0 else 0
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
+    async def get_my_rooms(
+        self,
+        db: AsyncSession,
+        *,
+        user: User,
+        page: int,
+        page_size: int,
+        role: RoomRole | None = None,
+    ) -> dict:
+        items, total = await self.room_repo.get_user_rooms(
+            db,
+            user_id=user.id,
+            page=page,
+            page_size=page_size,
+            role=role,
+        )
+
+        owners = [room.owner for room, _ in items if room.owner is not None]
+        await self.hydrate_users_avatar_key(db, owners)
 
         total_pages = ceil(total / page_size) if total > 0 else 0
 

@@ -104,3 +104,69 @@ async def test_invite_join_request_notifies_target_and_reviewers(
     assert response.status_code == 200
     notified_user_ids = [call.kwargs["user_id"] for call in publish_notification.await_args_list]
     assert notified_user_ids == [target.id, owner.id]
+
+
+# 验证 join request 列表接口支持按 scope 返回与当前用户相关的请求。
+async def test_get_join_requests_lists_related_requests(
+    api_client,
+    factories,
+    auth_headers,
+) -> None:
+    reviewer = await factories.create_user(username="reviewer")
+    initiator = await factories.create_user(username="initiator")
+    target = await factories.create_user(username="target")
+    outsider = await factories.create_user(username="outsider")
+
+    room = await factories.create_room(owner=reviewer, name="Review Room")
+    other_room = await factories.create_room(owner=outsider, name="Other Room")
+
+    visible_request = await factories.create_join_request(
+        room=room,
+        initiator=initiator,
+        target=target,
+    )
+    hidden_request = await factories.create_join_request(
+        room=other_room,
+        initiator=outsider,
+        target=target,
+    )
+    await factories.commit()
+
+    response = await api_client.get(
+        "/api/v1/join-requests?scope=pending_for_me",
+        headers=auth_headers(reviewer),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == visible_request.id
+    assert body["items"][0]["room"]["name"] == "Review Room"
+    assert body["items"][0]["initiator"]["username"] == "initiator"
+    assert body["items"][0]["target"]["username"] == "target"
+    assert all(item["id"] != hidden_request.id for item in body["items"])
+
+
+# 验证 join request 列表接口支持 created_by_me 过滤。
+async def test_get_join_requests_filters_created_by_me(
+    api_client,
+    factories,
+    auth_headers,
+) -> None:
+    me = await factories.create_user(username="creator")
+    owner = await factories.create_user(username="owner")
+    target = await factories.create_user(username="target")
+    room = await factories.create_room(owner=owner, name="Target Room")
+    await factories.create_join_request(room=room, initiator=me, target=target)
+    await factories.create_join_request(room=room, initiator=owner, target=me)
+    await factories.commit()
+
+    response = await api_client.get(
+        "/api/v1/join-requests?scope=created_by_me",
+        headers=auth_headers(me),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["initiator"]["username"] == "creator"

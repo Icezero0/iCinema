@@ -92,6 +92,27 @@ class RoomMembershipService:
 
         return user_ids
 
+    async def get_room_ids_by_permission(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        permission: RoomPermission,
+    ) -> list[int]:
+        members = await self.repo.get_members_by_user_id(db, user_id=user_id)
+        room_ids: list[int] = []
+
+        for member in members:
+            try:
+                role = RoomRole(member.role)
+            except ValueError:
+                continue
+
+            if has_room_permission(role=role, permission=permission):
+                room_ids.append(member.room_id)
+
+        return room_ids
+
     async def remove_room_member(
         self,
         db: AsyncSession,

@@ -1,8 +1,9 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 
-from app.modules.rooms.constants import RoomJoinAuditMode, RoomVisibility
+from app.modules.rooms.constants import RoomJoinAuditMode, RoomRole, RoomVisibility
 from app.modules.rooms.models import Room, RoomMember
 
 
@@ -73,6 +74,59 @@ class RoomRepository:
 
         result = await db.execute(stmt)
         items = list(result.scalars().all())
+        return items, total
+
+    async def get_user_rooms(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        page: int,
+        page_size: int,
+        role: RoomRole | None = None,
+    ) -> tuple[list[tuple[Room, RoomRole]], int]:
+        membership = aliased(RoomMember)
+
+        base_stmt = (
+            select(Room, membership.role.label("member_role"))
+            .outerjoin(
+                membership,
+                and_(
+                    membership.room_id == Room.id,
+                    membership.user_id == user_id,
+                ),
+            )
+            .where(
+                or_(
+                    Room.owner_id == user_id,
+                    membership.user_id == user_id,
+                )
+            )
+        )
+
+        if role is not None:
+            if role == RoomRole.OWNER:
+                base_stmt = base_stmt.where(Room.owner_id == user_id)
+            else:
+                base_stmt = base_stmt.where(membership.role == role.value)
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        stmt = (
+            base_stmt.options(selectinload(Room.owner))
+            .order_by(Room.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+
+        result = await db.execute(stmt)
+        items: list[tuple[Room, RoomRole]] = []
+        for room, member_role in result.all():
+            resolved_role = RoomRole.OWNER if room.owner_id == user_id else RoomRole(member_role)
+            items.append((room, resolved_role))
+
         return items, total
 
     async def save_room(self, db: AsyncSession, room: Room) -> Room:
