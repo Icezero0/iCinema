@@ -120,6 +120,67 @@ class RoomPresenceService:
         async with self._lock:
             return self._build_presence_state_locked(room_id)
 
+    async def evict_room_user(
+        self,
+        *,
+        manager: RealtimeManager,
+        room_id: int,
+        user_id: int,
+    ) -> str | None:
+        async with self._lock:
+            room_connections = self.room_user_connections.get(room_id)
+            if room_connections is None:
+                return None
+
+            connection_id = room_connections.get(user_id)
+            if connection_id is None:
+                return None
+
+            connection = manager.connections.get(connection_id)
+            if connection is not None:
+                await self._leave_room_locked(
+                    manager=manager,
+                    connection=connection,
+                    room_id=room_id,
+                )
+            else:
+                room_connections.pop(user_id, None)
+                if not room_connections:
+                    self.room_user_connections.pop(room_id, None)
+
+            return connection_id
+
+    async def evict_room_users(
+        self,
+        *,
+        manager: RealtimeManager,
+        room_id: int,
+    ) -> list[tuple[int, str]]:
+        async with self._lock:
+            room_connections = self.room_user_connections.get(room_id)
+            if room_connections is None:
+                return []
+
+            targets = list(room_connections.items())
+            evicted: list[tuple[int, str]] = []
+
+            for user_id, connection_id in targets:
+                connection = manager.connections.get(connection_id)
+                if connection is not None:
+                    await self._leave_room_locked(
+                        manager=manager,
+                        connection=connection,
+                        room_id=room_id,
+                    )
+                else:
+                    room_connections.pop(user_id, None)
+                    if not room_connections:
+                        self.room_user_connections.pop(room_id, None)
+                        room_connections = None
+                evicted.append((user_id, connection_id))
+
+            return evicted
+
     async def _leave_room_locked(
         self,
         *,

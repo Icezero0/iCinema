@@ -120,6 +120,6 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     left_room_id,
                 )
 
-                await publisher.publish_presence(
+                await publisher.publish_room_user_presence(
                     presence=presence,
                 )

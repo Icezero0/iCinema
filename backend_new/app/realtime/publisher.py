@@ -102,7 +102,7 @@ class RealtimePublisher:
             data=message.model_dump(mode="json"),
         )
 
-    async def publish_presence(
+    async def publish_room_user_presence(
         self,
         *,
         presence: PresenceState,
@@ -110,12 +110,12 @@ class RealtimePublisher:
     ) -> None:
         await self._publish_event(
             channel=room_channel(presence.room_id),
-            event=WsEventType.PRESENCE,
+            event=WsEventType.ROOM_USER_PRESENCE,
             data=presence.model_dump(mode="json"),
             exclude_connection_ids=exclude_connection_ids,
         )
 
-    async def publish_session(
+    async def publish_session_closed(
         self,
         *,
         connection_id: str,
@@ -125,7 +125,7 @@ class RealtimePublisher:
         await self.manager.send_to_connection(
             connection_id=connection_id,
             message=build_event_message(
-                event=WsEventType.SESSION,
+                event=WsEventType.SESSION_CLOSED,
                 data={
                     "room_id": room_id,
                     "reason": reason,

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_realtime_publisher
 from app.core.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.notifications.constants import NotificationType
@@ -11,6 +12,7 @@ from app.modules.notifications.schemas import (
 )
 from app.modules.notifications.service import NotificationService
 from app.modules.users.models import User
+from app.realtime.publisher import RealtimePublisher
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -60,12 +62,14 @@ async def mark_notification_as_read(
     notification_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    publisher: RealtimePublisher = Depends(get_realtime_publisher),
 ) -> NotificationResponse:
     notification = await notification_service.mark_as_read(
         db,
         notification_id=notification_id,
         user=current_user,
     )
+    await publisher.publish_notification(user_id=current_user.id)
     return NotificationResponse.model_validate(notification)
 
 
@@ -73,8 +77,10 @@ async def mark_notification_as_read(
 async def mark_all_notifications_as_read(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    publisher: RealtimePublisher = Depends(get_realtime_publisher),
 ) -> None:
     await notification_service.mark_all_as_read(
         db,
         user=current_user,
     )
+    await publisher.publish_notification(user_id=current_user.id)

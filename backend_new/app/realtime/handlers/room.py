@@ -108,7 +108,7 @@ class RoomCommandHandler:
         )
 
         if replaced_connection_id is not None:
-            await publisher.publish_session(
+            await publisher.publish_session_closed(
                 connection_id=replaced_connection_id,
                 room_id=room_id,
                 reason="entered_elsewhere",
@@ -144,11 +144,11 @@ class RoomCommandHandler:
                             playback=user_player_states_update.auto_playback,
                         )
 
-            await publisher.publish_presence(
+            await publisher.publish_room_user_presence(
                 presence=left_presence,
             )
 
-        await publisher.publish_presence(
+        await publisher.publish_room_user_presence(
             presence=current_presence,
             exclude_connection_ids={connection.connection_id},
         )
@@ -194,7 +194,7 @@ class RoomCommandHandler:
                     playback=session_exit_result.auto_playback,
                 )
 
-        await publisher.publish_presence(
+        await publisher.publish_room_user_presence(
             presence=presence,
             exclude_connection_ids={connection.connection_id},
         )

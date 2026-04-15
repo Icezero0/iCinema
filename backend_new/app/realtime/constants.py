@@ -33,8 +33,8 @@ class WsEventType(StrEnum):
     ROOM_SETTINGS = "room_settings"
     ROOM_MEMBERS = "room_members"
 
-    PRESENCE = "presence"
-    SESSION = "session"
+    ROOM_USER_PRESENCE = "room_user_presence"
+    SESSION_CLOSED = "session_closed"
 
     MESSAGE = "message"
 
