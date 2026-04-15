@@ -1,57 +1,135 @@
 @echo off
-chcp 65001 >nul
 setlocal
 
-echo [INFO] 当前目录为 %cd%
-set VENV_DIR=venv
+echo ==========================================
+echo   FastAPI Backend Setup Script
+echo ==========================================
+echo.
 
-::------------------------------------------
-:: [1] 安装 SQLite3（如果未安装）
-::------------------------------------------
-where sqlite3 >nul 2>nul
+echo [INFO] Current directory: %cd%
+echo.
+
+REM -------------------------------------------------
+REM 1. Check Python
+REM -------------------------------------------------
+python --version >nul 2>nul
 if errorlevel 1 (
-    echo [INFO] 未检测到 sqlite3，正在下载并安装...
-
-    set SQLITE_URL=https://www.sqlite.org/2024/sqlite-tools-win-x64-3440200.zip
-    set SQLITE_ZIP=sqlite.zip
-    set SQLITE_DIR=sqlite-tools
-
-    curl -L -o %SQLITE_ZIP% %SQLITE_URL%
-    powershell -Command "Expand-Archive -Path '%SQLITE_ZIP%' -DestinationPath '%SQLITE_DIR%'"
-    move %SQLITE_DIR%\sqlite3.exe . >nul
-    del /q %SQLITE_ZIP%
-    rmdir /s /q %SQLITE_DIR%
-    echo [INFO] sqlite3 安装完成。
-) else (
-    echo [INFO] 已检测到 sqlite3，跳过安装。
+    echo [ERROR] Python was not found.
+    echo.
+    echo Please install Python 3.12 or newer:
+    echo https://www.python.org/downloads/windows/
+    pause
+    exit /b 1
 )
 
-::------------------------------------------
-:: [2] 创建虚拟环境（如果不存在）
-::------------------------------------------
-if not exist %VENV_DIR%\Scripts\activate.bat (
-    echo [INFO] 正在创建 Python 虚拟环境...
-    python -m venv %VENV_DIR%
-) else (
-    echo [INFO] 虚拟环境已存在，跳过创建。
+echo [INFO] Python detected
+python --version
+echo.
+
+REM -------------------------------------------------
+REM 2. Check requirements.txt
+REM -------------------------------------------------
+if not exist requirements.txt (
+    echo [ERROR] requirements.txt was not found
+    pause
+    exit /b 1
 )
 
-::------------------------------------------
-:: [3] 激活虚拟环境
-::------------------------------------------
-call %VENV_DIR%\Scripts\activate.bat
+REM -------------------------------------------------
+REM 3. Initialize .env
+REM -------------------------------------------------
+if not exist .env (
+    if exist .env.development (
+        echo [INFO] .env not found, copying from .env.development...
+        copy /Y .env.development .env >nul
+        if errorlevel 1 (
+            echo [ERROR] Failed to initialize .env
+            pause
+            exit /b 1
+        )
+        echo [INFO] .env created
+    ) else (
+        echo [WARN] Neither .env nor .env.development was found
+    )
+) else (
+    echo [INFO] .env already exists, skip initialization
+)
 
-::------------------------------------------
-:: [4] 安装依赖
-::------------------------------------------
-echo [INFO] 正在安装后端依赖（requirements.txt）...
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+echo.
 
-::------------------------------------------
-:: [5] 启动后端服务
-::------------------------------------------
-echo [INFO] 启动 uvicorn 开发服务器...
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+REM -------------------------------------------------
+REM 4. Create virtual environment
+REM -------------------------------------------------
+set "VENV_DIR=venv"
+set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
+
+if not exist "%VENV_PYTHON%" (
+    echo [INFO] Creating virtual environment...
+    python -m venv "%VENV_DIR%"
+    if errorlevel 1 (
+        echo [ERROR] Failed to create virtual environment
+        pause
+        exit /b 1
+    )
+) else (
+    echo [INFO] Virtual environment already exists
+)
+
+echo.
+
+REM -------------------------------------------------
+REM 5. Use Python from venv
+REM -------------------------------------------------
+if not exist "%VENV_PYTHON%" (
+    echo [ERROR] Python in virtual environment was not found: %VENV_PYTHON%
+    pause
+    exit /b 1
+)
+
+echo [INFO] Using Python from virtual environment:
+"%VENV_PYTHON%" --version
+echo.
+
+REM -------------------------------------------------
+REM 6. Install base dependencies
+REM -------------------------------------------------
+echo [INFO] Upgrading pip...
+"%VENV_PYTHON%" -m pip install --upgrade pip
+if errorlevel 1 (
+    echo [ERROR] Failed to upgrade pip
+    pause
+    exit /b 1
+)
+
+echo.
+echo [INFO] Installing base backend dependencies...
+"%VENV_PYTHON%" -m pip install -r requirements.txt
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Failed to install dependencies
+    pause
+    exit /b 1
+)
+
+echo.
+echo [INFO] Running Alembic upgrade head...
+"%VENV_PYTHON%" -m alembic upgrade head
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Failed to upgrade database schema with Alembic
+    pause
+    exit /b 1
+)
+
+echo.
+echo ==========================================
+echo   Setup Complete
+echo ==========================================
+echo.
+echo [INFO] Database schema has been upgraded to the latest Alembic revision.
+echo [INFO] Startup will run Alembic again as a safe fallback.
+echo.
+echo [INFO] Start backend: run_backend.bat
+echo [INFO] Run tests: test_backend.bat
 
 endlocal
