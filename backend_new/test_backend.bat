@@ -15,6 +15,20 @@ if not exist requirements-dev.txt (
     exit /b 1
 )
 
+if /I "%~1"=="--help-tests" (
+    echo(Usage:
+    echo(  test_backend.bat
+    echo(  test_backend.bat tests\api\test_media_api.py
+    echo(  test_backend.bat tests\api\test_media_api.py::test_upload_image_returns_public_url
+    echo(  test_backend.bat tests\unit\modules\media -k sticker
+    echo(
+    echo(Notes:
+    echo(  - No arguments runs the full test suite
+    echo(  - Any other arguments are passed directly to pytest
+    endlocal
+    exit /b 0
+)
+
 echo [INFO] Installing test dependencies...
 "%VENV_PYTHON%" -m pip install -r requirements-dev.txt
 if errorlevel 1 (
@@ -24,7 +38,11 @@ if errorlevel 1 (
 )
 
 echo.
-echo [INFO] Running pytest...
+if "%~1"=="" (
+    echo [INFO] Running full pytest suite...
+) else (
+    echo [INFO] Running pytest with selectors: %*
+)
 "%VENV_PYTHON%" -m pytest %*
 
 endlocal

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,7 +126,7 @@ class NotificationService:
 
         if not notification.is_read:
             notification.is_read = True
-            notification.read_at = datetime.utcnow()
+            notification.read_at = datetime.now(timezone.utc)
             notification = await self.repo.save_notification(db, notification)
             await db.commit()
 

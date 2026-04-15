@@ -22,11 +22,11 @@ class RecordingPublisher:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
 
-    async def publish_session(self, **kwargs) -> None:
-        self.calls.append(("publish_session", kwargs))
+    async def publish_session_closed(self, **kwargs) -> None:
+        self.calls.append(("publish_session_closed", kwargs))
 
-    async def publish_presence(self, **kwargs) -> None:
-        self.calls.append(("publish_presence", kwargs))
+    async def publish_room_user_presence(self, **kwargs) -> None:
+        self.calls.append(("publish_room_user_presence", kwargs))
 
     async def publish_user_player_states(self, **kwargs) -> None:
         self.calls.append(("publish_user_player_states", kwargs))
@@ -169,11 +169,11 @@ async def test_handle_room_enter_returns_snapshot_and_publishes_presence(monkeyp
         "user_player_states": player_states.model_dump(mode="json"),
     }
     assert publisher.calls[0] == (
-        "publish_session",
+        "publish_session_closed",
         {"connection_id": "old-conn", "room_id": 20, "reason": "entered_elsewhere"},
     )
     assert publisher.calls[1] == (
-        "publish_presence",
+        "publish_room_user_presence",
         {
             "presence": PresenceState(room_id=20, present_user_ids=[2]),
             "exclude_connection_ids": {"conn-2"},
@@ -274,6 +274,6 @@ async def test_handle_room_leave_publishes_session_exit_updates(monkeypatch) -> 
     assert publisher.calls[0][0] == "publish_user_player_states"
     assert publisher.calls[1] == ("publish_playback_play", {"playback": playback})
     assert publisher.calls[2] == (
-        "publish_presence",
+        "publish_room_user_presence",
         {"presence": presence, "exclude_connection_ids": {"conn-4"}},
     )

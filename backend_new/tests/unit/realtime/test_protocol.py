@@ -16,13 +16,13 @@ from app.realtime.protocol import (
 # build_event_message 会生成带有事件负载的标准消息结构
 def test_build_event_message_returns_standard_event_message() -> None:
     message = build_event_message(
-        event=WsEventType.PRESENCE,
+        event=WsEventType.ROOM_USER_PRESENCE,
         data={"room_id": 1},
     )
 
     assert message.type == WsMessageType.EVENT
     assert message.payload == {
-        "event": WsEventType.PRESENCE,
+        "event": WsEventType.ROOM_USER_PRESENCE,
         "data": {"room_id": 1},
     }
 

@@ -104,7 +104,10 @@ async def test_publish_sends_message_to_subscribed_connections_except_excluded_o
 
     await manager.publish(
         channel=channel,
-        message=build_event_message(event=WsEventType.PRESENCE, data={"room_id": 88}),
+        message=build_event_message(
+            event=WsEventType.ROOM_USER_PRESENCE,
+            data={"room_id": 88},
+        ),
         exclude_connection_ids={connection2.connection_id},
     )
 
