@@ -1,0 +1,89 @@
+export default {
+  common: {
+    cancel: "Cancel",
+    loading: "Loading…",
+    backHome: "Back to Home",
+  },
+  auth: {
+    login: {
+      title: "Welcome back",
+      subtitle: "Sign in to continue.",
+      registeredHint: "Account created. Please sign in.",
+      email: "Email",
+      password: "Password",
+      submit: "Sign in",
+      submitting: "Signing in…",
+      noAccount: "No account?",
+      createOne: "Create one",
+      missing: "Please enter your email and password.",
+      invalid: "Invalid email or password.",
+    },
+    register: {
+      title: "Create your account",
+      email: "Email",
+      username: "Username",
+      password: "Password",
+      confirmPassword: "Confirm password",
+      passwordMismatch: "Passwords do not match.",
+      submit: "Create account",
+      submitting: "Creating account…",
+      missing: "Please fill in all required fields.",
+      failed: "Failed to create account.",
+      haveAccount: "Already have an account?",
+      signIn: "Sign in",
+    },
+  },
+  account: {
+    menu: {
+      editProfile: "Edit profile",
+      theme: "Theme",
+      logout: "Logout",
+      themeLight: "Light",
+      themeDark: "Dark",
+    },
+  },
+  profile: {
+    title: "Profile",
+    avatarHint: "Click the avatar to upload",
+    username: "Username",
+    email: "Email",
+    emailReadonlyHint: "Email cannot be changed for now.",
+    newPassword: "New password",
+    confirmNewPassword: "Confirm new password",
+    noChange: "No change",
+    save: "Save",
+    cancel: "Cancel",
+    toast: {
+      saved: "Saved",
+      saveFailed: "Failed to save",
+      avatarFailed: "Failed to load the image",
+    },
+    errors: {
+      usernameRequired: "Please enter a username",
+      passwordMismatch: "Passwords do not match",
+      emailMissing: "Email is missing",
+    },
+    confirmLeave: "You have unsaved changes. Leave without saving?",
+    unsaved: {
+      title: "Unsaved changes",
+      message:
+        "You have changes that haven't been saved. Leave without saving?",
+      stay: "Stay",
+      leave: "Leave",
+    },
+    crop: {
+      title: "Crop photo",
+      reset: "Reset",
+      use: "Use photo",
+    },
+  },
+  notifications: {
+    title: "Notifications",
+    empty: {
+      title: "No notifications",
+      hint: "Invitations and requests will show up here.",
+    },
+    inviteYouToJoin: "invited you to join {room}",
+  },
+
+};
