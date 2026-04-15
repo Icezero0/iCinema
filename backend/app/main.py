@@ -1,54 +1,53 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import users, rooms, notifications, messages
-from .websocket import routes as websocket_routes
-from contextlib import asynccontextmanager
-from app.database import engine
-from app.models import Base
+from app.api.v1.router import api_router
+from app.api.public_resources import router as public_resources_router
+from app.core.config import get_settings
+from app.core.exceptions import register_exception_handlers
+from app.core.startup import initialize_runtime
+from app.realtime.bootstrap import setup_realtime
+from app.realtime.ws_router import router as ws_router
 
-import logging
-import os
+settings = get_settings()
 
-logging.basicConfig(level=logging.INFO)
 
-# 创建上传目录存在
-avatars_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/upload/avatars'))
-os.makedirs(avatars_dir, exist_ok=True)
-
-# 生命周期配置
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await initialize_runtime()
     yield
-    await engine.dispose()
-    
-
-app = FastAPI(lifespan=lifespan)
-
-# 配置CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 在生产环境中应该设置具体的源
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
-# 静态文件服务
-# app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/avatars", StaticFiles(directory="../data/upload/avatars"), name="avatars")
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title=settings.app_name,
+        debug=settings.debug,
+        lifespan=lifespan,
+    )
 
-# 包含路由
-app.include_router(users.router, tags=["users"])
-app.include_router(rooms.router, tags=["rooms"])
-app.include_router(notifications.router, tags=["notifications"])
-app.include_router(messages.router, tags=["messages"])
-app.include_router(websocket_routes.router, tags=["websocket"])
+    setup_realtime(app)
 
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to iCinema API"}
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    register_exception_handlers(app)
+
+    app.include_router(public_resources_router)
+    app.include_router(api_router, prefix=settings.api_v1_prefix)
+    app.include_router(ws_router)
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return app
+
+
+app = create_app()
