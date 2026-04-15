@@ -148,8 +148,13 @@ def rebuild_rooms(conn: sqlite3.Connection) -> None:
     Rebuild rooms to ensure:
     - created_at defaults to CURRENT_TIMESTAMP
     - is_public defaults to 0
-    - preserve config/owner/name/id
+    - visibility is NOT NULL with default 'private'
+    - join_audit_mode is NOT NULL with default 'manual_review'
+    - preserve config / owner / name / id
     - remove legacy is_active field if still present
+    - if old is_public exists, backfill visibility from it:
+        is_public = 1 -> public
+        else -> private
     """
     cur = conn.cursor()
 
@@ -167,39 +172,77 @@ def rebuild_rooms(conn: sqlite3.Connection) -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 owner_id INTEGER NOT NULL,
                 is_public BOOLEAN NOT NULL DEFAULT 0,
+                visibility VARCHAR(16) NOT NULL DEFAULT 'private',
+                join_audit_mode VARCHAR(32) NOT NULL DEFAULT 'manual_review',
                 config VARCHAR
             )
             """
         )
 
         cols = {row[1] for row in cur.execute("PRAGMA table_info(rooms)").fetchall()}
+
         has_is_public = "is_public" in cols
         has_config = "config" in cols
+        has_visibility = "visibility" in cols
+        has_join_audit_mode = "join_audit_mode" in cols
 
-        if has_is_public and has_config:
-            select_sql = """
-                INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, COALESCE(is_public, 0), config
-                FROM rooms
-            """
-        elif has_is_public and not has_config:
-            select_sql = """
-                INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, COALESCE(is_public, 0), NULL
-                FROM rooms
-            """
-        elif not has_is_public and has_config:
-            select_sql = """
-                INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, 0, config
-                FROM rooms
+        # is_public select expression
+        if has_is_public:
+            is_public_expr = "COALESCE(is_public, 0)"
+        else:
+            is_public_expr = "0"
+
+        # visibility select expression
+        # 优先保留已存在的 visibility；否则从 is_public 回填；再否则默认 private
+        if has_visibility:
+            visibility_expr = """
+                COALESCE(
+                    NULLIF(TRIM(visibility), ''),
+                    CASE WHEN COALESCE(is_public, 0) = 1 THEN 'public' ELSE 'private' END
+                )
+            """ if has_is_public else """
+                COALESCE(NULLIF(TRIM(visibility), ''), 'private')
             """
         else:
-            select_sql = """
-                INSERT INTO rooms_new (id, name, created_at, owner_id, is_public, config)
-                SELECT id, name, COALESCE(created_at, CURRENT_TIMESTAMP), owner_id, 0, NULL
-                FROM rooms
-            """
+            visibility_expr = """
+                CASE WHEN COALESCE(is_public, 0) = 1 THEN 'public' ELSE 'private' END
+            """ if has_is_public else "'private'"
+
+        # join_audit_mode select expression
+        # 若旧表已有该字段，优先保留；否则统一默认 manual_review
+        if has_join_audit_mode:
+            join_audit_mode_expr = "COALESCE(NULLIF(TRIM(join_audit_mode), ''), 'manual_review')"
+        else:
+            join_audit_mode_expr = "'manual_review'"
+
+        # config select expression
+        if has_config:
+            config_expr = "config"
+        else:
+            config_expr = "NULL"
+
+        select_sql = f"""
+            INSERT INTO rooms_new (
+                id,
+                name,
+                created_at,
+                owner_id,
+                is_public,
+                visibility,
+                join_audit_mode,
+                config
+            )
+            SELECT
+                id,
+                name,
+                COALESCE(created_at, CURRENT_TIMESTAMP),
+                owner_id,
+                {is_public_expr},
+                {visibility_expr},
+                {join_audit_mode_expr},
+                {config_expr}
+            FROM rooms
+        """
 
         cur.execute(select_sql)
 
@@ -218,13 +261,37 @@ def rebuild_rooms(conn: sqlite3.Connection) -> None:
 def rooms_needs_rebuild(conn: sqlite3.Connection) -> bool:
     created_at_info = get_column_info(conn, "rooms", "created_at")
     is_public_info = get_column_info(conn, "rooms", "is_public")
+    visibility_info = get_column_info(conn, "rooms", "visibility")
+    join_audit_mode_info = get_column_info(conn, "rooms", "join_audit_mode")
     is_active_exists = ensure_column_exists(conn, "rooms", "is_active")
 
     created_at_missing_default = created_at_info is None or created_at_info[4] != "CURRENT_TIMESTAMP"
+
     is_public_missing_default = is_public_info is None or is_public_info[4] != "0"
     is_public_nullable = is_public_info is not None and is_public_info[3] != 1
 
-    return is_active_exists or created_at_missing_default or is_public_missing_default or is_public_nullable
+    visibility_missing = visibility_info is None
+    visibility_nullable = visibility_info is not None and visibility_info[3] != 1
+    visibility_missing_default = visibility_info is None or visibility_info[4] != "'private'"
+
+    join_audit_mode_missing = join_audit_mode_info is None
+    join_audit_mode_nullable = join_audit_mode_info is not None and join_audit_mode_info[3] != 1
+    join_audit_mode_missing_default = (
+        join_audit_mode_info is None or join_audit_mode_info[4] != "'manual_review'"
+    )
+
+    return (
+        is_active_exists
+        or created_at_missing_default
+        or is_public_missing_default
+        or is_public_nullable
+        or visibility_missing
+        or visibility_nullable
+        or visibility_missing_default
+        or join_audit_mode_missing
+        or join_audit_mode_nullable
+        or join_audit_mode_missing_default
+    )
 
 
 def main() -> None:
@@ -257,6 +324,7 @@ def main() -> None:
 
     finally:
         conn.close()
+
 
 if __name__ == "__main__":
     main()

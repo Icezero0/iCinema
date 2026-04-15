@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,12 +78,13 @@ class NotificationService:
             recipient_user_id=user.id,
         )
 
-    async def send_notification(
+    async def create_notification_in_tx(
         self,
         db: AsyncSession,
         *,
         payload: NotificationCreate,
     ) -> None:
+        # This helper participates in the caller's transaction and does not commit.
         await self.repo.create_notification(
             db,
             recipient_user_id=payload.recipient_user_id,
@@ -93,7 +94,6 @@ class NotificationService:
             related_id=payload.related_id,
         )
 
-    
     async def create_notification(
         self,
         db: AsyncSession,
@@ -126,7 +126,7 @@ class NotificationService:
 
         if not notification.is_read:
             notification.is_read = True
-            notification.read_at = datetime.utcnow()
+            notification.read_at = datetime.now(timezone.utc)
             notification = await self.repo.save_notification(db, notification)
             await db.commit()
 

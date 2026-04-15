@@ -17,8 +17,11 @@ def main() -> None:
     scripts = [
         scripts_dir / "migrate_user_domain.py",
         scripts_dir / "migrate_room_domain.py",
+        scripts_dir / "migrate_room_settings.py",
+        scripts_dir / "migrate_room_join_request.py",
         scripts_dir / "migrate_notification_domain.py",
         scripts_dir / "migrate_message_domain.py",
+        scripts_dir / "migrate_media_assets.py",
     ]
 
     for script in scripts:

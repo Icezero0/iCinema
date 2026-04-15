@@ -56,7 +56,7 @@ class RoomMembershipService:
             "total": len(items),
         }
 
-    async def add_room_member(
+    async def add_room_member_in_tx(
         self,
         db: AsyncSession,
         *,
@@ -64,6 +64,7 @@ class RoomMembershipService:
         user_id: int,
         role: RoomRole = RoomRole.MEMBER,
     ) -> RoomMember:
+        # This helper participates in the caller's transaction and does not commit.
         return await self.repo.create_member(
             db,
             room_id=room_id,

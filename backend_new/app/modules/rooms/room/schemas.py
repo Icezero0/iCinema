@@ -1,12 +1,16 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.validators import normalize_optional_non_empty_str, normalize_required_str
+from app.modules.rooms.constants import (
+    RoomJoinAuditMode,
+    RoomVisibility,
+)
 
 
 class RoomCreate(BaseModel):
     name: str
-    is_public: bool | None = True
-    config: str | None = None
+    visibility: RoomVisibility = RoomVisibility.PRIVATE
+    join_audit_mode: RoomJoinAuditMode = RoomJoinAuditMode.MANUAL_REVIEW
 
     @field_validator("name", mode="before")
     @classmethod
@@ -16,8 +20,8 @@ class RoomCreate(BaseModel):
 
 class RoomPatch(BaseModel):
     name: str | None = None
-    is_public: bool | None = None
-    config: str | None = None
+    visibility: RoomVisibility | None = None
+    join_audit_mode: RoomJoinAuditMode | None = None
 
     @field_validator("name", mode="before")
     @classmethod
@@ -31,8 +35,8 @@ class RoomResponse(BaseModel):
     id: int
     name: str
     owner_id: int
-    is_public: bool | None
-    config: str | None
+    visibility: RoomVisibility
+    join_audit_mode: RoomJoinAuditMode
 
 
 class RoomListResponse(BaseModel):

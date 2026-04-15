@@ -7,9 +7,14 @@ from app.db.base import Base
 from app.modules.users.models import User
 
 from app.modules.rooms.constants import (
+    RoomActiveSyncPermission,
+    RoomJoinAuditMode,
+    RoomJoinRequestAction,
     RoomJoinRequestSource,
     RoomJoinRequestStatus,
-    RoomJoinRequestAction,
+    RoomVideoSourceType,
+    RoomSyncPolicy,
+    RoomVisibility,
 )
 
 
@@ -18,24 +23,95 @@ class Room(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+
     owner_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    is_public: Mapped[bool | None] = mapped_column(nullable=True)
-    config: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    visibility: Mapped[RoomVisibility] = mapped_column(
+        String(16),
+        nullable=False,
+        default=RoomVisibility.PRIVATE,
+        server_default=RoomVisibility.PRIVATE.value,
+        index=True,
+    )
+    join_audit_mode: Mapped[RoomJoinAuditMode] = mapped_column(
+        String(32),
+        nullable=False,
+        default=RoomJoinAuditMode.MANUAL_REVIEW,
+        server_default=RoomJoinAuditMode.MANUAL_REVIEW.value,
+        index=True,
+    )
+
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
     )
 
     owner: Mapped["User"] = relationship("User", foreign_keys=[owner_id])
+
     members: Mapped[list["RoomMember"]] = relationship(
         "RoomMember",
         back_populates="room",
         cascade="all, delete-orphan",
+    )
+
+    settings: Mapped["RoomSettings | None"] = relationship(
+        "RoomSettings",
+        back_populates="room",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class RoomSettings(Base):
+    __tablename__ = "room_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    room_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("rooms.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    selected_room_video_source_type: Mapped[RoomVideoSourceType] = mapped_column(
+        String(32),
+        nullable=False,
+        default=RoomVideoSourceType.EXTERNAL_URL,
+        server_default=RoomVideoSourceType.EXTERNAL_URL.value,
+    )
+    sync_policy: Mapped[RoomSyncPolicy] = mapped_column(
+        String(32),
+        nullable=False,
+        default=RoomSyncPolicy.AUTO_SYNC,
+        server_default=RoomSyncPolicy.AUTO_SYNC.value,
+    )
+    active_sync_permission: Mapped[RoomActiveSyncPermission] = mapped_column(
+        String(32),
+        nullable=False,
+        default=RoomActiveSyncPermission.OWNER_AND_MANAGER,
+        server_default=RoomActiveSyncPermission.OWNER_AND_MANAGER.value,
+    )
+
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    room: Mapped["Room"] = relationship(
+        "Room",
+        back_populates="settings",
     )
 
 

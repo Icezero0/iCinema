@@ -9,15 +9,16 @@ from app.core.exceptions import (
     NotFoundError,
 )
 from app.modules.rooms.constants import (
-    RoomRole,
+    RoomJoinAuditMode,
     RoomJoinRequestAction,
     RoomJoinRequestSource,
     RoomJoinRequestStatus,
     RoomPermission,
+    RoomRole,
 )
 from app.modules.rooms.join_request.repository import RoomJoinRequestRepository
-from app.modules.rooms.models import RoomJoinRequest
 from app.modules.rooms.membership.service import RoomMembershipService
+from app.modules.rooms.models import RoomJoinRequest
 from app.modules.rooms.permissions import require_room_permission
 from app.modules.rooms.room.service import RoomService
 from app.modules.users.models import User
@@ -27,8 +28,9 @@ from app.modules.notifications.constants import (
     NotificationRelatedType,
     NotificationType,
 )
-from app.modules.notifications.service import NotificationService
 from app.modules.notifications.schemas import NotificationCreate
+from app.modules.notifications.service import NotificationService
+
 
 class RoomJoinRequestService:
     def __init__(self) -> None:
@@ -48,8 +50,9 @@ class RoomJoinRequestService:
         *,
         room_id: int,
         user: User,
-    ) -> RoomJoinRequest:
-        await self.room_service.get_room_by_id(db, room_id)
+    ) -> RoomJoinRequest | None:
+        room = await self.room_service.get_room_by_id(db, room_id)
+
         await self._ensure_user_not_member(
             db,
             room_id=room_id,
@@ -60,6 +63,19 @@ class RoomJoinRequestService:
             room_id=room_id,
             target_user_id=user.id,
         )
+
+        if room.join_audit_mode == RoomJoinAuditMode.AUTO_REJECT:
+            raise ForbiddenError("This room is not accepting join requests.")
+
+        if room.join_audit_mode == RoomJoinAuditMode.AUTO_APPROVE:
+            await self.membership_service.add_room_member_in_tx(
+                db,
+                room_id=room_id,
+                user_id=user.id,
+                role=RoomRole.MEMBER,
+            )
+            await db.commit()
+            return None
 
         request = await self.repo.create_request(
             db,
@@ -102,15 +118,12 @@ class RoomJoinRequestService:
         await self.room_service.get_room_by_id(db, room_id)
         await self.user_service.get_user_by_id(db, target_user_id)
 
-        role = await self.membership_service.find_room_role(
+        role = await self._require_room_permission(
             db,
             room_id=room_id,
-            user_id=user.id,
+            user=user,
+            permission=RoomPermission.INVITE_USER,
         )
-        if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
-
-        require_room_permission(role, RoomPermission.INVITE_USER)
 
         await self._ensure_user_not_member(
             db,
@@ -129,8 +142,16 @@ class RoomJoinRequestService:
         except ForbiddenError:
             can_review = False
 
-        room_action = RoomJoinRequestAction.APPROVED if can_review else RoomJoinRequestAction.PENDING
-        source = RoomJoinRequestSource.INVITE if can_review else RoomJoinRequestSource.MEMBER_INVITE
+        room_action = (
+            RoomJoinRequestAction.APPROVED
+            if can_review
+            else RoomJoinRequestAction.PENDING
+        )
+        source = (
+            RoomJoinRequestSource.INVITE
+            if can_review
+            else RoomJoinRequestSource.MEMBER_INVITE
+        )
         room_action_by_user_id = user.id if can_review else None
 
         request = await self.repo.create_request(
@@ -145,14 +166,12 @@ class RoomJoinRequestService:
             room_action_by_user_id=room_action_by_user_id,
         )
 
-        # 被邀请人始终收到通知
         await self._send_room_join_request_notification(
             db,
             recipient_user_id=target_user_id,
             request_id=request.id,
         )
 
-        # 只有邀请人没有审核权限时，房间侧 reviewer 才需要收到通知
         if not can_review:
             reviewer_user_ids = await self.membership_service.get_room_user_ids_by_permission(
                 db,
@@ -365,6 +384,25 @@ class RoomJoinRequestService:
         if request.status != RoomJoinRequestStatus.PENDING:
             raise BadRequestError("Request already handled.")
 
+    async def _require_room_permission(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+        user: User,
+        permission: RoomPermission,
+    ) -> str:
+        role = await self.membership_service.find_room_role(
+            db,
+            room_id=room_id,
+            user_id=user.id,
+        )
+        if role is None:
+            raise ForbiddenError("You do not have permission to perform this action")
+
+        require_room_permission(role, permission)
+        return role
+
     async def _ensure_no_pending_request(
         self,
         db: AsyncSession,
@@ -402,15 +440,12 @@ class RoomJoinRequestService:
         room_id: int,
         user: User,
     ) -> None:
-        role = await self.membership_service.find_room_role(
+        await self._require_room_permission(
             db,
             room_id=room_id,
-            user_id=user.id,
+            user=user,
+            permission=RoomPermission.REVIEW_JOIN_REQUEST,
         )
-        if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
-
-        require_room_permission(role, RoomPermission.REVIEW_JOIN_REQUEST)
 
     async def _send_room_join_request_notification(
         self,
@@ -419,7 +454,7 @@ class RoomJoinRequestService:
         recipient_user_id: int,
         request_id: int,
     ) -> None:
-        await self.notification_service.send_notification(
+        await self.notification_service.create_notification_in_tx(
             db,
             payload=NotificationCreate(
                 recipient_user_id=recipient_user_id,
@@ -448,7 +483,7 @@ class RoomJoinRequestService:
         ):
             request.status = RoomJoinRequestStatus.APPROVED
 
-            await self.membership_service.add_room_member(
+            await self.membership_service.add_room_member_in_tx(
                 db,
                 room_id=request.room_id,
                 user_id=request.target_user_id,

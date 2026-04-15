@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_realtime_publisher
 from app.core.database import get_db
 from app.modules.auth.deps import get_current_user
+from app.modules.rooms.constants import RoomJoinRequestStatus
 from app.modules.rooms.join_request.schemas import RoomJoinRequestResponse
 from app.modules.rooms.join_request.service import RoomJoinRequestService
 from app.modules.users.models import User
+from app.realtime.publisher import RealtimePublisher
 
 router = APIRouter(prefix="/join-requests", tags=["join-requests"])
 
@@ -31,12 +34,15 @@ async def approve_join_request(
     request_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    publisher: RealtimePublisher = Depends(get_realtime_publisher),
 ) -> RoomJoinRequestResponse:
     request = await join_request_service.approve_request(
         db,
         request_id=request_id,
         user=current_user,
     )
+    if request.status == RoomJoinRequestStatus.APPROVED:
+        await publisher.publish_room_members(room_id=request.room_id)
     return RoomJoinRequestResponse.model_validate(request)
 
 
