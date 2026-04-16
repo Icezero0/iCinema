@@ -8,8 +8,8 @@ from app.modules.rooms.join_request.repository import RoomJoinRequestRepository
 from app.modules.rooms.room.repository import RoomRepository
 
 
-# 验证房间列表查询会返回公开房间和当前用户可访问的私有房间，并按 id 倒序排列。
-async def test_get_rooms_returns_accessible_rooms_in_desc_order(db_session, factories) -> None:
+# 验证房间列表查询只返回公开房间，并按 id 倒序排列。
+async def test_get_rooms_returns_public_rooms_in_desc_order(db_session, factories) -> None:
     owner = await factories.create_user()
     member = await factories.create_user()
     outsider = await factories.create_user()
@@ -22,29 +22,26 @@ async def test_get_rooms_returns_accessible_rooms_in_desc_order(db_session, fact
 
     items, total = await RoomRepository().get_rooms(
         db_session,
-        user_id=member.id,
         page=1,
         page_size=10,
     )
 
-    assert total == 3
-    assert [room.id for room in items] == sorted(
-        [public_room.id, private_owned_room.id, private_member_room.id],
-        reverse=True,
-    )
+    assert total == 1
+    assert [room.id for room in items] == [public_room.id]
+    assert private_owned_room.id not in [room.id for room in items]
+    assert private_member_room.id not in [room.id for room in items]
     assert hidden_room.id not in [room.id for room in items]
 
 
 # 验证房间列表查询支持按名称做不区分大小写的筛选。
 async def test_get_rooms_filters_by_name_case_insensitively(db_session, factories) -> None:
     owner = await factories.create_user()
-    await factories.create_room(owner=owner, name="Movie Night")
-    await factories.create_room(owner=owner, name="Study Room")
+    await factories.create_room(owner=owner, name="Movie Night", visibility=RoomVisibility.PUBLIC)
+    await factories.create_room(owner=owner, name="Study Room", visibility=RoomVisibility.PUBLIC)
     await factories.commit()
 
     items, total = await RoomRepository().get_rooms(
         db_session,
-        user_id=owner.id,
         page=1,
         page_size=10,
         name="movie",
@@ -52,6 +49,34 @@ async def test_get_rooms_filters_by_name_case_insensitively(db_session, factorie
 
     assert total == 1
     assert items[0].name == "Movie Night"
+
+
+# 验证房间列表查询支持按房主用户名和邮箱做不区分大小写的筛选。
+async def test_get_rooms_filters_by_owner_username_and_email(db_session, factories) -> None:
+    owner_a = await factories.create_user(email="alice@example.com", username="Alice")
+    owner_b = await factories.create_user(email="bob@example.com", username="Bob")
+    await factories.create_room(owner=owner_a, name="Alice Public", visibility=RoomVisibility.PUBLIC)
+    await factories.create_room(owner=owner_b, name="Bob Public", visibility=RoomVisibility.PUBLIC)
+    await factories.create_room(owner=owner_b, name="Bob Private", visibility=RoomVisibility.PRIVATE)
+    await factories.commit()
+
+    items, total = await RoomRepository().get_rooms(
+        db_session,
+        page=1,
+        page_size=10,
+        owner_username="ali",
+    )
+    assert total == 1
+    assert items[0].name == "Alice Public"
+
+    items, total = await RoomRepository().get_rooms(
+        db_session,
+        page=1,
+        page_size=10,
+        owner_email="BOB@EXAMPLE",
+    )
+    assert total == 1
+    assert items[0].name == "Bob Public"
 
 
 # 验证入房申请仓储查询会按筛选条件和创建顺序返回结果。

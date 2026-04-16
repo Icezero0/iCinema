@@ -291,6 +291,7 @@ Repository 不负责业务规则。
 - 查询当前用户信息
 - 修改当前用户资料
 - 上传头像
+- 查询当前用户创建的房间集合
 - 查询当前用户可进入的房间集合
 - 查询用户列表与用户详情
 
@@ -298,7 +299,21 @@ Repository 不负责业务规则。
 
 - 用户头像不直接存在 `users` 表中，而是通过媒体资源体系维护
 - 返回给前端的是 `avatar_url`，而不是底层文件路径
+- 提供 `GET /api/v1/users/me/owned-rooms` 作为“我创建的房间”聚合接口
 - 提供 `GET /api/v1/users/me/rooms` 作为“我的房间”聚合接口
+
+`GET /api/v1/users/me/owned-rooms` 当前支持：
+
+- 分页：`page`、`page_size`
+
+返回摘要字段包括：
+
+- `id`
+- `name`
+- `owner_id`
+- `owner`
+- `is_public`
+- `my_role`
 
 `GET /api/v1/users/me/rooms` 当前支持：
 
@@ -321,6 +336,7 @@ Repository 不负责业务规则。
 职责：
 
 - 房间管理
+- 公开房间大厅检索
 - 成员关系管理
 - 房间设置管理
 - 入房申请与邀请审批
@@ -333,6 +349,18 @@ Repository 不负责业务规则。
 - `join_request`：加入申请与邀请流
 
 房间权限通过 `RoomRole + RoomPermission` 组合实现。
+
+`GET /api/v1/rooms` 当前语义为“公开房间检索”，仅返回 `visibility=public` 的房间。
+
+当前支持参数：
+
+- `page`
+- `page_size`
+- `name`
+- `owner_username`
+- `owner_email`
+
+该接口不再承载“我创建/我加入的房间列表”语义；这类用户态聚合查询统一由 `users` 模块接口承担。
 
 `join_request` 子域当前既支持：
 
@@ -513,6 +541,10 @@ WebSocket 主要用于：
 
 典型聚合型 HTTP 读取接口包括：
 
+- `GET /api/v1/rooms`
+  用于公开房间大厅检索，支持按房间名、房主用户名、房主邮箱过滤
+- `GET /api/v1/users/me/owned-rooms`
+  用于直接返回当前用户创建的房间摘要
 - `GET /api/v1/users/me/rooms`
   用于直接返回当前用户创建或加入的房间摘要
 - `GET /api/v1/join-requests`
@@ -584,7 +616,7 @@ WebSocket 主要用于：
 全局接口 `GET /api/v1/join-requests` 当前支持以下 `scope`：
 
 - `pending_for_me`
-  返回当前用户可审批的待处理申请
+  返回当前用户当前可以处理，或因具备审批权限而可见的申请
 - `created_by_me`
   返回当前用户发起的申请或邀请
 - `all_related_to_me`
@@ -594,7 +626,22 @@ WebSocket 主要用于：
 
 - 分页：`page`、`page_size`
 - 过滤：`status`、`room_id`、`initiator_user_id`、`target_user_id`
-- 排序：`sort_by=created_at|updated_at`
+
+`scope` 与 `status` 的关系是正交的：
+
+- `scope=pending_for_me` 只定义“这些申请是否属于我当前可处理，或我具备审批可见性的范围”
+- `status` 只定义“我想看哪一种审批状态”
+
+其中 `pending_for_me` 当前覆盖两类场景：
+
+- 我在该房间中具有 `REVIEW_JOIN_REQUEST` 权限，因此这条申请对我可见
+- 我是该申请的 `target_user_id`，因此我可以对邀请执行同意或拒绝操作
+
+例如：
+
+- `scope=pending_for_me&status=pending` 表示“我当前可处理的待审批项”
+- `scope=pending_for_me&status=approved` 表示“我有审批权限且已通过的审批记录”
+- `scope=pending_for_me&status=rejected` 表示“我有审批权限且已拒绝的审批记录”
 
 返回结构除 join request 本体外，还直接带有最少够用的关联对象：
 
@@ -754,6 +801,8 @@ WS 错误格式见 `ws-protocol.md`。
 
 在接口使用上，建议优先采用以下聚合接口而不是前端自行拼装：
 
+- 公开房间大厅使用 `GET /api/v1/rooms`
+- “我创建的房间”使用 `GET /api/v1/users/me/owned-rooms`
 - “我的房间”使用 `GET /api/v1/users/me/rooms`
 - 审批中心与审批摘要使用 `GET /api/v1/join-requests`
 

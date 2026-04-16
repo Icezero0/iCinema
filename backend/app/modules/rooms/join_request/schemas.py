@@ -1,4 +1,3 @@
-from enum import StrEnum
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,14 +46,3 @@ class RoomJoinRequestListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
-
-
-class RoomJoinRequestListScope(StrEnum):
-    PENDING_FOR_ME = "pending_for_me"
-    CREATED_BY_ME = "created_by_me"
-    ALL_RELATED_TO_ME = "all_related_to_me"
-
-
-class RoomJoinRequestSortBy(StrEnum):
-    CREATED_AT = "created_at"
-    UPDATED_AT = "updated_at"

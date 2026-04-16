@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_realtime_publisher
 from app.core.database import get_db
 from app.modules.auth.deps import get_current_user
-from app.modules.rooms.constants import RoomJoinRequestStatus
+from app.modules.rooms.constants import (
+    RoomJoinRequestListScope,
+    RoomJoinRequestStatus,
+)
 from app.modules.rooms.join_request.schemas import (
     RoomJoinRequestListResponse,
-    RoomJoinRequestListScope,
     RoomJoinRequestResponse,
-    RoomJoinRequestSortBy,
 )
 from app.modules.rooms.join_request.service import RoomJoinRequestService
 from app.modules.users.models import User
@@ -29,7 +30,6 @@ async def get_join_requests(
     initiator_user_id: int | None = Query(default=None, ge=1),
     target_user_id: int | None = Query(default=None, ge=1),
     scope: RoomJoinRequestListScope = Query(default=RoomJoinRequestListScope.ALL_RELATED_TO_ME),
-    sort_by: RoomJoinRequestSortBy = Query(default=RoomJoinRequestSortBy.CREATED_AT),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RoomJoinRequestListResponse:
@@ -43,7 +43,6 @@ async def get_join_requests(
         initiator_user_id=initiator_user_id,
         target_user_id=target_user_id,
         scope=scope,
-        sort_by=sort_by,
     )
     return RoomJoinRequestListResponse(
         items=[RoomJoinRequestResponse.model_validate(item) for item in data["items"]],

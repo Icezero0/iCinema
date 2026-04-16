@@ -441,6 +441,70 @@
                 }
             }
         },
+<<<<<<< HEAD
+=======
+        "/api/v1/users/me/owned-rooms": {
+            "get": {
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get My Owned Rooms",
+                "operationId": "get_my_owned_rooms_api_v1_users_me_owned_rooms_get",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1,
+                            "title": "Page"
+                        }
+                    },
+                    {
+                        "name": "page_size",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 100,
+                            "minimum": 1,
+                            "default": 20,
+                            "title": "Page Size"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserRoomSummaryListResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+>>>>>>> restruction
         "/api/v1/users": {
             "get": {
                 "tags": [
@@ -676,6 +740,41 @@
                             ],
                             "title": "Name"
                         }
+<<<<<<< HEAD
+=======
+                    },
+                    {
+                        "name": "owner_username",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Owner Username"
+                        }
+                    },
+                    {
+                        "name": "owner_email",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Owner Email"
+                        }
+>>>>>>> restruction
                     }
                 ],
                 "responses": {
@@ -1538,6 +1637,7 @@
                             "$ref": "#/components/schemas/RoomJoinRequestListScope",
                             "default": "all_related_to_me"
                         }
+<<<<<<< HEAD
                     },
                     {
                         "name": "sort_by",
@@ -1547,6 +1647,8 @@
                             "$ref": "#/components/schemas/RoomJoinRequestSortBy",
                             "default": "created_at"
                         }
+=======
+>>>>>>> restruction
                     }
                 ],
                 "responses": {
@@ -3108,6 +3210,7 @@
                 ],
                 "title": "RoomJoinRequestResponse"
             },
+<<<<<<< HEAD
             "RoomJoinRequestSortBy": {
                 "type": "string",
                 "enum": [
@@ -3116,6 +3219,8 @@
                 ],
                 "title": "RoomJoinRequestSortBy"
             },
+=======
+>>>>>>> restruction
             "RoomJoinRequestSource": {
                 "type": "string",
                 "enum": [
