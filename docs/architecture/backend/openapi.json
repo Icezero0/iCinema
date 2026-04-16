@@ -441,8 +441,6 @@
                 }
             }
         },
-<<<<<<< HEAD
-=======
         "/api/v1/users/me/owned-rooms": {
             "get": {
                 "tags": [
@@ -504,7 +502,6 @@
                 }
             }
         },
->>>>>>> restruction
         "/api/v1/users": {
             "get": {
                 "tags": [
@@ -740,8 +737,6 @@
                             ],
                             "title": "Name"
                         }
-<<<<<<< HEAD
-=======
                     },
                     {
                         "name": "owner_username",
@@ -774,7 +769,6 @@
                             ],
                             "title": "Owner Email"
                         }
->>>>>>> restruction
                     }
                 ],
                 "responses": {
@@ -1637,18 +1631,6 @@
                             "$ref": "#/components/schemas/RoomJoinRequestListScope",
                             "default": "all_related_to_me"
                         }
-<<<<<<< HEAD
-                    },
-                    {
-                        "name": "sort_by",
-                        "in": "query",
-                        "required": false,
-                        "schema": {
-                            "$ref": "#/components/schemas/RoomJoinRequestSortBy",
-                            "default": "created_at"
-                        }
-=======
->>>>>>> restruction
                     }
                 ],
                 "responses": {
@@ -3210,17 +3192,6 @@
                 ],
                 "title": "RoomJoinRequestResponse"
             },
-<<<<<<< HEAD
-            "RoomJoinRequestSortBy": {
-                "type": "string",
-                "enum": [
-                    "created_at",
-                    "updated_at"
-                ],
-                "title": "RoomJoinRequestSortBy"
-            },
-=======
->>>>>>> restruction
             "RoomJoinRequestSource": {
                 "type": "string",
                 "enum": [
