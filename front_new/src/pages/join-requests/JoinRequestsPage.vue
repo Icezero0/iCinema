@@ -19,14 +19,14 @@ const items = ref<RoomJoinRequest[]>([]);
 const isLoading = ref(false);
 const error = ref("");
 
-const scope = ref<RoomJoinRequestListScope>("pending_for_me");
+const scope = ref<RoomJoinRequestListScope>("all_related_to_me");
 const sortBy = ref<RoomJoinRequestSortBy>("updated_at");
 const status = ref<RoomJoinRequestStatus | "all">("pending");
 
 const scopeOptions = computed(() => [
-  { value: "pending_for_me", label: t("joinRequests.filters.pendingForMe") },
-  { value: "created_by_me", label: t("joinRequests.filters.createdByMe") },
   { value: "all_related_to_me", label: t("joinRequests.filters.allRelated") },
+  { value: "created_by_me", label: t("joinRequests.filters.createdByMe") },
+  { value: "pending_for_me", label: t("joinRequests.filters.pendingForMe") },
 ]);
 
 const statusOptions = computed(() => [
@@ -92,40 +92,32 @@ watch([scope, sortBy, status], fetchItems);
 </script>
 
 <template>
-  <BaseLayout :title="t('joinRequests.title')" :max-width="980">
+  <AppPageShell
+    :title="t('joinRequests.title')"
+    :back-text="t('common.backHome')"
+    :max-width="980"
+  >
     <BaseCard class="card">
-      <div class="header">
-        <div>
-          <h2 class="headline">{{ t("joinRequests.title") }}</h2>
-          <p class="copy">{{ t("joinRequests.pageHint") }}</p>
-        </div>
-      </div>
-
       <div class="filters">
         <label class="field">
           <span class="label">{{ t("joinRequests.filters.scope") }}</span>
-          <select v-model="scope" class="select">
-            <option v-for="opt in scopeOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
+          <BaseSelect v-model="scope" :options="scopeOptions" />
         </label>
 
         <label class="field">
           <span class="label">{{ t("joinRequests.filters.statusLabel") }}</span>
-          <select v-model="status" class="select">
-            <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
+          <BaseSelect v-model="status" :options="statusOptions" />
         </label>
 
         <label class="field">
           <span class="label">{{ t("joinRequests.filters.sortBy") }}</span>
-          <select v-model="sortBy" class="select">
-            <option value="updated_at">{{ t("joinRequests.filters.updatedAt") }}</option>
-            <option value="created_at">{{ t("joinRequests.filters.createdAt") }}</option>
-          </select>
+          <BaseSelect
+            v-model="sortBy"
+            :options="[
+              { value: 'updated_at', label: t('joinRequests.filters.updatedAt') },
+              { value: 'created_at', label: t('joinRequests.filters.createdAt') },
+            ]"
+          />
         </label>
       </div>
 
@@ -159,28 +151,12 @@ watch([scope, sortBy, status], fetchItems);
         </RowListItem>
       </div>
     </BaseCard>
-  </BaseLayout>
+  </AppPageShell>
 </template>
 
 <style scoped>
 .card {
   padding: 22px;
-}
-
-.header {
-  margin-bottom: 18px;
-}
-
-.headline {
-  margin: 0;
-  font-size: 22px;
-  color: var(--c-text);
-}
-
-.copy {
-  margin: 8px 0 0;
-  color: var(--c-text-muted);
-  line-height: 1.6;
 }
 
 .filters {
@@ -198,15 +174,6 @@ watch([scope, sortBy, status], fetchItems);
 .label {
   font-size: 12px;
   color: var(--c-text-muted);
-}
-
-.select {
-  height: 40px;
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-2);
-  background: var(--c-surface);
-  color: var(--c-text);
-  padding: 0 12px;
 }
 
 .state {

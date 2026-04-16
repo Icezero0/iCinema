@@ -153,7 +153,7 @@ export default {
       scope: "范围",
       statusLabel: "状态",
       sortBy: "排序",
-      pendingForMe: "待我处理",
+      pendingForMe: "我处理的",
       createdByMe: "我发起的",
       allRelated: "全部相关",
       allStatus: "全部状态",

@@ -16,7 +16,7 @@ defineProps<{
 
 <style scoped>
 .page {
-  min-height: 100vh;
+  min-height: 100%;
   padding: var(--s-4);
 }
 .container {

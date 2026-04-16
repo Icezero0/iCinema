@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { getRoomById, type Room } from "@/infra/api/rooms.api";
 
 const { t } = useI18n();
 const route = useRoute();
-const router = useRouter();
 
 const room = ref<Room | null>(null);
 const isLoading = ref(false);
@@ -40,22 +39,16 @@ async function fetchRoom() {
   }
 }
 
-function goBack() {
-  router.push("/");
-}
-
 onMounted(fetchRoom);
 watch(roomId, fetchRoom);
 </script>
 
 <template>
-  <BaseLayout :title="t('room.title')" :max-width="880">
-    <div class="topBar">
-      <BaseButton @click="goBack">
-        {{ t("common.backHome") }}
-      </BaseButton>
-    </div>
-
+  <AppPageShell
+    :title="room?.name || t('room.title')"
+    :back-text="t('common.backHome')"
+    :max-width="980"
+  >
     <BaseCard class="card">
       <div v-if="isLoading" class="state">{{ t("common.loading") }}</div>
 
@@ -87,14 +80,10 @@ watch(roomId, fetchRoom);
         </dl>
       </div>
     </BaseCard>
-  </BaseLayout>
+  </AppPageShell>
 </template>
 
 <style scoped>
-.topBar {
-  margin-bottom: 16px;
-}
-
 .card {
   padding: 22px;
 }

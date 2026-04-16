@@ -25,13 +25,6 @@ function isPending(roomId: number) {
 
 <template>
   <BaseCard class="sectionCard">
-    <div class="header">
-      <div>
-        <h2 class="title">{{ title }}</h2>
-        <p class="hint">{{ hint }}</p>
-      </div>
-    </div>
-
     <div v-if="loading" class="state">{{ loadingText }}</div>
 
     <div v-else-if="rooms.length === 0" class="empty">
@@ -55,22 +48,6 @@ function isPending(roomId: number) {
 <style scoped>
 .sectionCard {
   padding: 18px;
-}
-
-.header {
-  margin-bottom: 16px;
-}
-
-.title {
-  margin: 0;
-  font-size: 18px;
-  color: var(--c-text);
-}
-
-.hint {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--c-text-muted);
 }
 
 .list {

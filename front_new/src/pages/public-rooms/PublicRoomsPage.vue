@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
-import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useRoomsStore } from "@/stores/rooms.store";
 import PublicRoomsSection from "@/features/rooms/home/PublicRoomsSection.vue";
 
 const { t } = useI18n();
-const router = useRouter();
 const rooms = useRoomsStore();
 
 onMounted(() => {
@@ -17,19 +15,14 @@ async function handleRequestJoin(roomId: number) {
   await rooms.requestToJoin(roomId);
 }
 
-function goHome() {
-  router.push("/");
-}
 </script>
 
 <template>
-  <BaseLayout :title="t('publicRooms.title')" :max-width="980">
-    <div class="topBar">
-      <BaseButton @click="goHome">
-        {{ t("common.backHome") }}
-      </BaseButton>
-    </div>
-
+  <AppPageShell
+    :title="t('publicRooms.title')"
+    :back-text="t('common.backHome')"
+    :max-width="980"
+  >
     <PublicRoomsSection
       :title="t('publicRooms.title')"
       :hint="t('publicRooms.hint')"
@@ -42,11 +35,5 @@ function goHome() {
       :pending-room-ids="rooms.pendingJoinRoomIds"
       @request="handleRequestJoin"
     />
-  </BaseLayout>
+  </AppPageShell>
 </template>
-
-<style scoped>
-.topBar {
-  margin-bottom: 16px;
-}
-</style>
