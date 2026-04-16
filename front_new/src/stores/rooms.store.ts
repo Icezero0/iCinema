@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { useAuthStore } from "@/stores/auth.store";
+import { useEntitiesStore } from "@/stores/entities.store";
 import {
   applyRoomJoinRequest,
   createRoom,
@@ -56,6 +57,7 @@ export const useRoomsStore = defineStore("rooms", {
       this.error = null;
 
       try {
+        const entities = useEntitiesStore();
         const [myRoomsData, allRoomsData] = await Promise.all([
           getMyRooms({
             page: 1,
@@ -72,6 +74,16 @@ export const useRoomsStore = defineStore("rooms", {
         this.publicRooms = allRoomsData.items.filter(
           (room) => room.visibility === "public" && !myRoomIds.has(room.id),
         );
+
+        entities.upsertRooms(this.myRooms);
+        entities.upsertRooms(this.publicRooms);
+        entities.upsertUsers(
+          this.myRooms.map((room) => ({
+            id: room.owner_id,
+            username: room.owner_name ?? null,
+            avatar_url: room.owner_avatar_url ?? null,
+          })),
+        );
       } catch (error: any) {
         this.error = extractErrorMessage(error, "Failed to load rooms");
       } finally {
@@ -85,6 +97,7 @@ export const useRoomsStore = defineStore("rooms", {
 
       try {
         const auth = useAuthStore();
+        const entities = useEntitiesStore();
         const created = await createRoom(payload);
         const hydratedCreated: Room = {
           ...created,
@@ -101,6 +114,17 @@ export const useRoomsStore = defineStore("rooms", {
             (x) => x.id !== hydratedCreated.id,
           );
         }
+
+        entities.upsertRoom(hydratedCreated);
+        if (auth.me?.id) {
+          entities.upsertUser({
+            id: auth.me.id,
+            email: auth.me.email,
+            username: auth.me.username,
+            avatar_url: auth.me.avatar_url,
+          });
+        }
+
         return hydratedCreated;
       } catch (error: any) {
         const message = extractErrorMessage(error, "Failed to create room");
