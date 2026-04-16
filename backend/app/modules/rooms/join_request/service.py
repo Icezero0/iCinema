@@ -11,16 +11,13 @@ from app.core.exceptions import (
 from app.modules.rooms.constants import (
     RoomJoinAuditMode,
     RoomJoinRequestAction,
+    RoomJoinRequestListScope,
     RoomJoinRequestSource,
     RoomJoinRequestStatus,
     RoomPermission,
     RoomRole,
 )
 from app.modules.rooms.join_request.repository import RoomJoinRequestRepository
-from app.modules.rooms.join_request.schemas import (
-    RoomJoinRequestListScope,
-    RoomJoinRequestSortBy,
-)
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.models import RoomJoinRequest
 from app.modules.rooms.permissions import require_room_permission
@@ -285,7 +282,6 @@ class RoomJoinRequestService:
         initiator_user_id: int | None = None,
         target_user_id: int | None = None,
         scope: RoomJoinRequestListScope = RoomJoinRequestListScope.ALL_RELATED_TO_ME,
-        sort_by: RoomJoinRequestSortBy = RoomJoinRequestSortBy.CREATED_AT,
     ) -> dict:
         reviewer_room_ids: list[int] = []
         if scope in {
@@ -302,11 +298,10 @@ class RoomJoinRequestService:
         repo_initiator_user_id = initiator_user_id
         repo_target_user_id = target_user_id
         repo_related_user_id: int | None = None
-        resolved_status = status
+        repo_visible_target_user_id: int | None = None
 
         if scope == RoomJoinRequestListScope.PENDING_FOR_ME:
-            repo_room_ids = reviewer_room_ids
-            resolved_status = RoomJoinRequestStatus.PENDING
+            repo_visible_target_user_id = user.id
         elif scope == RoomJoinRequestListScope.CREATED_BY_ME:
             repo_initiator_user_id = user.id
         else:
@@ -320,10 +315,10 @@ class RoomJoinRequestService:
             room_id=room_id,
             initiator_user_id=repo_initiator_user_id,
             target_user_id=repo_target_user_id,
-            status=resolved_status,
+            status=status,
             related_user_id=repo_related_user_id,
             include_room_ids_for_related=reviewer_room_ids,
-            sort_by=sort_by.value,
+            visible_target_user_id=repo_visible_target_user_id,
         )
 
         total_pages = ceil(total / page_size) if total > 0 else 0

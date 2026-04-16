@@ -123,6 +123,22 @@ class UserService:
             "total_pages": total_pages,
         }
 
+    async def get_my_owned_rooms(
+        self,
+        db: AsyncSession,
+        *,
+        user: User,
+        page: int,
+        page_size: int,
+    ) -> dict:
+        return await self.get_my_rooms(
+            db,
+            user=user,
+            page=page,
+            page_size=page_size,
+            role=RoomRole.OWNER,
+        )
+
     async def patch_me(self, db: AsyncSession, user: User, payload: UserPatch) -> User:
         updates = payload.model_dump(exclude_unset=True)
 

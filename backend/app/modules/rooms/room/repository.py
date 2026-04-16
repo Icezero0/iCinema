@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.modules.rooms.constants import RoomJoinAuditMode, RoomRole, RoomVisibility
 from app.modules.rooms.models import Room, RoomMember
+from app.modules.users.models import User
 
 
 class RoomRepository:
@@ -40,33 +41,37 @@ class RoomRepository:
         self,
         db: AsyncSession,
         *,
-        user_id: int,
         page: int,
         page_size: int,
         name: str | None = None,
+        owner_username: str | None = None,
+        owner_email: str | None = None,
     ) -> tuple[list[Room], int]:
+        owner = aliased(User)
+
         base_stmt = (
             select(Room)
-            .distinct()
-            .outerjoin(RoomMember, RoomMember.room_id == Room.id)
-            .where(
-                or_(
-                    Room.visibility == RoomVisibility.PUBLIC,
-                    Room.owner_id == user_id,
-                    RoomMember.user_id == user_id,
-                )
-            )
+            .join(owner, Room.owner_id == owner.id)
+            .where(Room.visibility == RoomVisibility.PUBLIC)
         )
 
         if name:
             base_stmt = base_stmt.where(func.lower(Room.name).like(f"%{name.lower()}%"))
+        if owner_username:
+            base_stmt = base_stmt.where(
+                func.lower(owner.username).like(f"%{owner_username.lower()}%")
+            )
+        if owner_email:
+            base_stmt = base_stmt.where(
+                func.lower(owner.email).like(f"%{owner_email.lower()}%")
+            )
 
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
         count_result = await db.execute(count_stmt)
         total = count_result.scalar_one()
 
         stmt = (
-            base_stmt.options(selectinload(Room.settings))
+            base_stmt.options(selectinload(Room.settings), selectinload(Room.owner))
             .order_by(Room.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)

@@ -102,17 +102,19 @@ class RoomService:
         self,
         db: AsyncSession,
         *,
-        user: User,
         page: int,
         page_size: int,
         name: str | None = None,
+        owner_username: str | None = None,
+        owner_email: str | None = None,
     ) -> dict:
         items, total = await self.repo.get_rooms(
             db,
-            user_id=user.id,
             page=page,
             page_size=page_size,
             name=name,
+            owner_username=owner_username,
+            owner_email=owner_email,
         )
 
         total_pages = ceil(total / page_size) if total > 0 else 0

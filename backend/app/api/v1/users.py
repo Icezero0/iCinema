@@ -94,6 +94,38 @@ async def get_my_rooms(
     )
 
 
+@router.get("/me/owned-rooms", response_model=UserRoomSummaryListResponse)
+async def get_my_owned_rooms(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserRoomSummaryListResponse:
+    data = await user_service.get_my_owned_rooms(
+        db,
+        user=current_user,
+        page=page,
+        page_size=page_size,
+    )
+    return UserRoomSummaryListResponse(
+        items=[
+            UserRoomSummaryResponse(
+                id=room.id,
+                name=room.name,
+                owner_id=room.owner_id,
+                owner=room.owner,
+                my_role=my_role,
+                visibility=room.visibility,
+            )
+            for room, my_role in data["items"]
+        ],
+        total=data["total"],
+        page=data["page"],
+        page_size=data["page_size"],
+        total_pages=data["total_pages"],
+    )
+
+
 @router.get("", response_model=UserListResponse)
 async def get_users(
     page: int = Query(default=1, ge=1),

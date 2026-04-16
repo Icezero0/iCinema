@@ -93,7 +93,7 @@ class RoomJoinRequestRepository:
         source: RoomJoinRequestSource | None = None,
         related_user_id: int | None = None,
         include_room_ids_for_related: list[int] | None = None,
-        sort_by: str = "created_at",
+        visible_target_user_id: int | None = None,
     ) -> tuple[list[RoomJoinRequest], int]:
         stmt = select(RoomJoinRequest).options(
             selectinload(RoomJoinRequest.room),
@@ -146,18 +146,26 @@ class RoomJoinRequestRepository:
                 related_filter = or_(
                     related_filter,
                     RoomJoinRequest.room_id.in_(include_room_ids_for_related),
-                )
+            )
             stmt = stmt.where(related_filter)
             count_stmt = count_stmt.where(related_filter)
+        elif visible_target_user_id is not None or include_room_ids_for_related:
+            visibility_conditions = []
+            if visible_target_user_id is not None:
+                visibility_conditions.append(
+                    RoomJoinRequest.target_user_id == visible_target_user_id
+                )
+            if include_room_ids_for_related:
+                visibility_conditions.append(
+                    RoomJoinRequest.room_id.in_(include_room_ids_for_related)
+                )
 
-        sort_column = (
-            RoomJoinRequest.updated_at
-            if sort_by == "updated_at"
-            else RoomJoinRequest.created_at
-        )
+            visibility_filter = or_(*visibility_conditions)
+            stmt = stmt.where(visibility_filter)
+            count_stmt = count_stmt.where(visibility_filter)
 
         stmt = (
-            stmt.order_by(sort_column.desc(), RoomJoinRequest.id.desc())
+            stmt.order_by(RoomJoinRequest.created_at.desc(), RoomJoinRequest.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
