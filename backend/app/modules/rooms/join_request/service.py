@@ -285,7 +285,7 @@ class RoomJoinRequestService:
     ) -> dict:
         reviewer_room_ids: list[int] = []
         if scope in {
-            RoomJoinRequestListScope.PENDING_FOR_ME,
+            RoomJoinRequestListScope.HANDLED_BY_ME,
             RoomJoinRequestListScope.ALL_RELATED_TO_ME,
         }:
             reviewer_room_ids = await self.membership_service.get_room_ids_by_permission(
@@ -300,7 +300,7 @@ class RoomJoinRequestService:
         repo_related_user_id: int | None = None
         repo_visible_target_user_id: int | None = None
 
-        if scope == RoomJoinRequestListScope.PENDING_FOR_ME:
+        if scope == RoomJoinRequestListScope.HANDLED_BY_ME:
             repo_visible_target_user_id = user.id
         elif scope == RoomJoinRequestListScope.CREATED_BY_ME:
             repo_initiator_user_id = user.id

@@ -615,8 +615,8 @@ WebSocket 主要用于：
 
 全局接口 `GET /api/v1/join-requests` 当前支持以下 `scope`：
 
-- `pending_for_me`
-  返回当前用户当前可以处理，或因具备审批权限而可见的申请
+- `handled_by_me`
+  返回由当前用户这一侧负责处理的审批，包括房间审核人侧审批与被邀请目标用户侧审批
 - `created_by_me`
   返回当前用户发起的申请或邀请
 - `all_related_to_me`
@@ -629,19 +629,25 @@ WebSocket 主要用于：
 
 `scope` 与 `status` 的关系是正交的：
 
-- `scope=pending_for_me` 只定义“这些申请是否属于我当前可处理，或我具备审批可见性的范围”
+- `scope=handled_by_me` 只定义“这些申请是否属于由我这一侧处理的审批范围”
 - `status` 只定义“我想看哪一种审批状态”
 
-其中 `pending_for_me` 当前覆盖两类场景：
+其中 `handled_by_me` 当前覆盖两类场景：
 
 - 我在该房间中具有 `REVIEW_JOIN_REQUEST` 权限，因此这条申请对我可见
-- 我是该申请的 `target_user_id`，因此我可以对邀请执行同意或拒绝操作
+- 我是该申请的 `target_user_id`，且该申请来源于邀请，因此这条审批属于我这一侧处理
+
+需要特别注意：
+
+- 用户主动发起的 `apply` 请求虽然 `target_user_id` 也是自己，但它属于“我发起的申请”，不属于 `handled_by_me`
+- 这类请求应归入 `created_by_me`
+- 其他用户邀请我加入房间后，无论我是否已经执行同意或拒绝，它都仍属于 `handled_by_me`
 
 例如：
 
-- `scope=pending_for_me&status=pending` 表示“我当前可处理的待审批项”
-- `scope=pending_for_me&status=approved` 表示“我有审批权限且已通过的审批记录”
-- `scope=pending_for_me&status=rejected` 表示“我有审批权限且已拒绝的审批记录”
+- `scope=handled_by_me&status=pending` 表示“由我这一侧处理，且当前状态仍未结束的审批”
+- `scope=handled_by_me&status=approved` 表示“由我这一侧处理，且当前已通过的审批记录”
+- `scope=handled_by_me&status=rejected` 表示“由我这一侧处理，且当前已拒绝的审批记录”
 
 返回结构除 join request 本体外，还直接带有最少够用的关联对象：
 

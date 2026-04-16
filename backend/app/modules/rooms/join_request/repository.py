@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -153,7 +153,15 @@ class RoomJoinRequestRepository:
             visibility_conditions = []
             if visible_target_user_id is not None:
                 visibility_conditions.append(
-                    RoomJoinRequest.target_user_id == visible_target_user_id
+                    and_(
+                        RoomJoinRequest.target_user_id == visible_target_user_id,
+                        RoomJoinRequest.source.in_(
+                            [
+                                RoomJoinRequestSource.INVITE,
+                                RoomJoinRequestSource.MEMBER_INVITE,
+                            ]
+                        ),
+                    )
                 )
             if include_room_ids_for_related:
                 visibility_conditions.append(

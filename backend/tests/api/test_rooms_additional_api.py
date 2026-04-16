@@ -146,7 +146,7 @@ async def test_invite_join_request_notifies_target_and_reviewers(
     assert notified_user_ids == [target.id, owner.id]
 
 
-# 验证 join request 列表接口中 pending_for_me 表示“我有审批权限可见”。
+# 验证 join request 列表接口中 handled_by_me 表示“由我这一侧处理”的审批。
 async def test_get_join_requests_lists_related_requests(
     api_client,
     factories,
@@ -179,7 +179,7 @@ async def test_get_join_requests_lists_related_requests(
     await factories.commit()
 
     response = await api_client.get(
-        "/api/v1/join-requests?scope=pending_for_me",
+        "/api/v1/join-requests?scope=handled_by_me",
         headers=auth_headers(reviewer),
     )
 
@@ -194,8 +194,8 @@ async def test_get_join_requests_lists_related_requests(
     assert all(item["id"] != hidden_request.id for item in body["items"])
 
 
-# 验证被邀请目标用户也会在 pending_for_me 中看到自己可确认的邀请。
-async def test_get_join_requests_pending_for_me_includes_target_user_requests(
+# 验证被邀请目标用户也会在 handled_by_me 中看到自己处理过或要处理的邀请。
+async def test_get_join_requests_handled_by_me_includes_target_user_requests(
     api_client,
     factories,
     auth_headers,
@@ -226,7 +226,7 @@ async def test_get_join_requests_pending_for_me_includes_target_user_requests(
     await factories.commit()
 
     response = await api_client.get(
-        "/api/v1/join-requests?scope=pending_for_me&status=pending",
+        "/api/v1/join-requests?scope=handled_by_me&status=pending",
         headers=auth_headers(target),
     )
 
@@ -236,6 +236,78 @@ async def test_get_join_requests_pending_for_me_includes_target_user_requests(
     assert body["items"][0]["id"] == visible_request.id
     assert body["items"][0]["target"]["username"] == "target"
     assert all(item["id"] != hidden_request.id for item in body["items"])
+
+
+# 验证主动申请加入房间的请求不会出现在 handled_by_me，而应归入 created_by_me。
+async def test_get_join_requests_handled_by_me_excludes_apply_created_by_me(
+    api_client,
+    factories,
+    auth_headers,
+) -> None:
+    owner = await factories.create_user(username="owner")
+    applicant = await factories.create_user(username="applicant")
+    room = await factories.create_room(owner=owner, name="Apply Room")
+    request = await factories.create_join_request(
+        room=room,
+        initiator=applicant,
+        target=applicant,
+        source=RoomJoinRequestSource.APPLY,
+        status=RoomJoinRequestStatus.PENDING,
+        room_action=RoomJoinRequestAction.PENDING,
+        target_action=RoomJoinRequestAction.APPROVED,
+    )
+    await factories.commit()
+
+    actionable_response = await api_client.get(
+        "/api/v1/join-requests?scope=handled_by_me&status=pending",
+        headers=auth_headers(applicant),
+    )
+
+    assert actionable_response.status_code == 200
+    actionable_body = actionable_response.json()
+    assert actionable_body["total"] == 0
+
+    created_response = await api_client.get(
+        "/api/v1/join-requests?scope=created_by_me&status=pending",
+        headers=auth_headers(applicant),
+    )
+
+    assert created_response.status_code == 200
+    created_body = created_response.json()
+    assert created_body["total"] == 1
+    assert created_body["items"][0]["id"] == request.id
+
+
+# 验证被邀请用户处理完成后，邀请仍保留在 handled_by_me 中。
+async def test_get_join_requests_handled_by_me_keeps_processed_invites(
+    api_client,
+    factories,
+    auth_headers,
+) -> None:
+    owner = await factories.create_user(username="owner")
+    inviter = await factories.create_user(username="inviter")
+    target = await factories.create_user(username="target")
+    room = await factories.create_room(owner=owner, name="Invite Room")
+    request = await factories.create_join_request(
+        room=room,
+        initiator=inviter,
+        target=target,
+        source=RoomJoinRequestSource.INVITE,
+        status=RoomJoinRequestStatus.APPROVED,
+        room_action=RoomJoinRequestAction.APPROVED,
+        target_action=RoomJoinRequestAction.APPROVED,
+    )
+    await factories.commit()
+
+    response = await api_client.get(
+        "/api/v1/join-requests?scope=handled_by_me&status=approved",
+        headers=auth_headers(target),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == request.id
 
 
 # 验证 join request 列表接口支持 created_by_me 过滤。
