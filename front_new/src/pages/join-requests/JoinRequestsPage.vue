@@ -2,25 +2,39 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  XCircleIcon,
+} from "@heroicons/vue/24/outline";
+import {
   approveJoinRequestById,
   rejectJoinRequestById,
   listJoinRequests,
   type RoomJoinRequestListScope,
-  type RoomJoinRequestSortBy,
 } from "@/infra/api/join-requests.api";
 import type {
+  RoomJoinRequestAction,
   RoomJoinRequest,
   RoomJoinRequestStatus,
 } from "@/infra/api/rooms.api";
+import { useAuthStore } from "@/stores/auth.store";
+import { useRoomsStore } from "@/stores/rooms.store";
+import { useEntitiesStore } from "@/stores/entities.store";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const { t } = useI18n();
+const auth = useAuthStore();
+const rooms = useRoomsStore();
+const entities = useEntitiesStore();
+const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
 
 const items = ref<RoomJoinRequest[]>([]);
 const isLoading = ref(false);
 const error = ref("");
+const expandedIds = ref<number[]>([]);
 
 const scope = ref<RoomJoinRequestListScope>("all_related_to_me");
-const sortBy = ref<RoomJoinRequestSortBy>("updated_at");
 const status = ref<RoomJoinRequestStatus | "all">("pending");
 
 const scopeOptions = computed(() => [
@@ -37,6 +51,12 @@ const statusOptions = computed(() => [
   { value: "cancelled", label: t("joinRequests.status.cancelled") },
 ]);
 
+const myRoomRoles = computed(() => {
+  return new Map(
+    rooms.myRooms.map((room) => [room.id, room.my_role ?? null] as const),
+  );
+});
+
 async function fetchItems() {
   isLoading.value = true;
   error.value = "";
@@ -46,11 +66,12 @@ async function fetchItems() {
       page: 1,
       page_size: 30,
       scope: scope.value,
-      sort_by: sortBy.value,
+      sort_by: "updated_at",
       status: status.value === "all" ? null : status.value,
     });
 
     items.value = data.items;
+    entities.upsertJoinRequests(data.items);
   } catch (e: any) {
     error.value =
       e?.response?.data?.detail || e?.message || t("joinRequests.loadFailed");
@@ -69,26 +90,106 @@ async function reject(item: RoomJoinRequest) {
   await fetchItems();
 }
 
+function isExpanded(id: number) {
+  return expandedIds.value.includes(id);
+}
+
+function toggleExpanded(id: number) {
+  expandedIds.value = isExpanded(id)
+    ? expandedIds.value.filter((value) => value !== id)
+    : [...expandedIds.value, id];
+}
+
+function currentUserCanHandleTargetSide(item: RoomJoinRequest) {
+  return auth.me?.id === item.target_user_id && item.target_action === "pending";
+}
+
+function currentUserCanHandleRoomSide(item: RoomJoinRequest) {
+  const role = myRoomRoles.value.get(item.room_id);
+  return (role === "owner" || role === "manager") && item.room_action === "pending";
+}
+
 function canReview(item: RoomJoinRequest) {
-  return scope.value !== "created_by_me" && item.status === "pending";
+  return (
+    item.status === "pending" &&
+    (currentUserCanHandleTargetSide(item) || currentUserCanHandleRoomSide(item))
+  );
 }
 
 function roomName(item: RoomJoinRequest) {
   return item.room?.name || `#${item.room_id}`;
 }
 
-function actorName(item: RoomJoinRequest) {
-  return (
-    item.initiator?.username ||
-    item.initiator?.email ||
-    item.target?.username ||
-    item.target?.email ||
-    "-"
-  );
+function userName(user: RoomJoinRequest["initiator"]) {
+  return user?.username || user?.email || "-";
 }
 
-onMounted(fetchItems);
-watch([scope, sortBy, status], fetchItems);
+function userAvatarUrl(user: RoomJoinRequest["initiator"]) {
+  const avatarPath = user?.avatar_url;
+  if (!avatarPath) return "";
+  return avatarPath.startsWith("http") ? avatarPath : `${apiOrigin}${avatarPath}`;
+}
+
+function joiningUser(item: RoomJoinRequest) {
+  return item.source === "apply" ? item.initiator : item.target;
+}
+
+function requestTitle(item: RoomJoinRequest) {
+  const room = roomName(item);
+
+  if (item.source === "apply") {
+    return t("joinRequests.item.applyTitle", {
+      user: userName(item.initiator),
+      room,
+    });
+  }
+
+  return t("joinRequests.item.inviteTitle", {
+    inviter: userName(item.initiator),
+    invitee: userName(item.target),
+    room,
+  });
+}
+
+function actionIcon(action: RoomJoinRequestAction) {
+  if (action === "approved") return CheckCircleIcon;
+  if (action === "rejected") return XCircleIcon;
+  return ClockIcon;
+}
+
+function actionTone(action: RoomJoinRequestAction) {
+  if (action === "approved") return "success";
+  if (action === "rejected") return "danger";
+  return "pending";
+}
+
+function actionAvatarUrl(user: RoomJoinRequest["room_action_by"]) {
+  const avatarPath = user?.avatar_url;
+  if (!avatarPath) return "";
+  return avatarPath.startsWith("http") ? avatarPath : `${apiOrigin}${avatarPath}`;
+}
+
+function overallTone(status: RoomJoinRequestStatus) {
+  if (status === "approved") return "success";
+  if (status === "rejected" || status === "cancelled") return "danger";
+  return "pending";
+}
+
+function overallIcon(status: RoomJoinRequestStatus) {
+  if (status === "approved") return CheckCircleIcon;
+  if (status === "rejected" || status === "cancelled") return XCircleIcon;
+  return ClockIcon;
+}
+
+async function bootstrap() {
+  if (!rooms.isLoading && rooms.myRooms.length === 0) {
+    await rooms.fetchHomeRooms();
+  }
+  await fetchItems();
+}
+
+onMounted(bootstrap);
+watch([scope, status], fetchItems);
 </script>
 
 <template>
@@ -99,26 +200,23 @@ watch([scope, sortBy, status], fetchItems);
   >
     <BaseCard class="card">
       <div class="filters">
-        <label class="field">
-          <span class="label">{{ t("joinRequests.filters.scope") }}</span>
-          <BaseSelect v-model="scope" :options="scopeOptions" />
-        </label>
+        <BaseSelect
+          v-model="scope"
+          :options="scopeOptions"
+          :label="t('joinRequests.filters.scope')"
+          label-position="start"
+          :width="176"
+          max-width="32vw"
+        />
 
-        <label class="field">
-          <span class="label">{{ t("joinRequests.filters.statusLabel") }}</span>
-          <BaseSelect v-model="status" :options="statusOptions" />
-        </label>
-
-        <label class="field">
-          <span class="label">{{ t("joinRequests.filters.sortBy") }}</span>
-          <BaseSelect
-            v-model="sortBy"
-            :options="[
-              { value: 'updated_at', label: t('joinRequests.filters.updatedAt') },
-              { value: 'created_at', label: t('joinRequests.filters.createdAt') },
-            ]"
-          />
-        </label>
+        <BaseSelect
+          v-model="status"
+          :options="statusOptions"
+          :label="t('joinRequests.filters.statusLabel')"
+          label-position="start"
+          :width="176"
+          max-width="32vw"
+        />
       </div>
 
       <div v-if="isLoading" class="state">{{ t("common.loading") }}</div>
@@ -126,28 +224,103 @@ watch([scope, sortBy, status], fetchItems);
       <div v-else-if="items.length === 0" class="state">{{ t("joinRequests.empty") }}</div>
 
       <div v-else class="list">
-        <RowListItem v-for="item in items" :key="item.id">
+        <RowListItem
+          v-for="item in items"
+          :key="item.id"
+          class="requestItem"
+          :data-status="item.status"
+        >
           <div class="requestBody">
-            <div class="requestTitle">
-              {{ actorName(item) }} · {{ roomName(item) }}
-            </div>
-            <div class="requestMeta">
-              <span>{{ t(`joinRequests.status.${item.status}`) }}</span>
-              <span>{{ item.source }}</span>
-              <span>{{ item.updated_at || item.created_at || "-" }}</span>
-            </div>
-          </div>
+            <button
+              class="summaryButton"
+              type="button"
+              :aria-expanded="isExpanded(item.id)"
+              @mousedown.prevent
+              @click="toggleExpanded(item.id)"
+            >
+              <div class="requestTop">
+                <div class="requestTitle">
+                  {{ requestTitle(item) }}
+                </div>
+                <div class="summaryRight">
+                  <div class="summaryMeta">
+                    <span class="summaryTime">
+                      {{ formatLocalDateTime(item.updated_at || item.created_at) }}
+                    </span>
+                    <span class="overallBadge" :data-tone="overallTone(item.status)">
+                      <AppIcon :icon="overallIcon(item.status)" :size="16" />
+                      <span>{{ t(`joinRequests.status.${item.status}`) }}</span>
+                    </span>
+                  </div>
+                  <AppIcon
+                    class="chevron"
+                    :class="{ expanded: isExpanded(item.id) }"
+                    :icon="ChevronDownIcon"
+                    :size="18"
+                  />
+                </div>
+              </div>
+            </button>
 
-          <template #right>
-            <div v-if="canReview(item)" class="actions">
-              <BaseButton variant="primary" @click="approve(item)">
-                {{ t("joinRequests.actions.approve") }}
-              </BaseButton>
-              <BaseButton variant="danger" @click="reject(item)">
-                {{ t("joinRequests.actions.reject") }}
-              </BaseButton>
-            </div>
-          </template>
+            <Transition name="detail">
+              <div v-if="isExpanded(item.id)" class="detailPanel">
+                <div class="statusGrid">
+                  <div class="statusCard">
+                    <div class="statusCardHeader">
+                      <span class="statusCardTitle">{{ t("joinRequests.item.userSide") }}</span>
+                      <span class="statusPill" :data-tone="actionTone(item.target_action)">
+                        <AppIcon :icon="actionIcon(item.target_action)" :size="16" />
+                        <span>{{ t(`joinRequests.status.${item.target_action}`) }}</span>
+                      </span>
+                    </div>
+
+                    <div class="participantRow">
+                      <BaseAvatar
+                        size="xs"
+                        :src="userAvatarUrl(joiningUser(item))"
+                        :name="userName(joiningUser(item))"
+                      />
+                      <span class="participantName">{{ userName(joiningUser(item)) }}</span>
+                    </div>
+                  </div>
+
+                  <div class="statusCard">
+                    <div class="statusCardHeader">
+                      <span class="statusCardTitle">{{ t("joinRequests.item.roomSide") }}</span>
+                      <span class="statusPill" :data-tone="actionTone(item.room_action)">
+                        <AppIcon :icon="actionIcon(item.room_action)" :size="16" />
+                        <span>{{ t(`joinRequests.status.${item.room_action}`) }}</span>
+                      </span>
+                    </div>
+
+                    <div v-if="item.room_action !== 'pending' && item.room_action_by" class="participantRow">
+                      <span class="participantLabel">{{ t("joinRequests.item.handler") }}</span>
+                      <BaseAvatar
+                        size="xs"
+                        :src="actionAvatarUrl(item.room_action_by)"
+                        :name="userName(item.room_action_by)"
+                      />
+                      <span class="participantName">{{ userName(item.room_action_by) }}</span>
+                    </div>
+                    <div v-else class="participantPlaceholder">
+                      {{ roomName(item) }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="detailFooter">
+                  <div v-if="canReview(item)" class="actions">
+                    <BaseButton variant="primary" @click.stop="approve(item)">
+                      {{ t("joinRequests.actions.approve") }}
+                    </BaseButton>
+                    <BaseButton variant="danger" @click.stop="reject(item)">
+                      {{ t("joinRequests.actions.reject") }}
+                    </BaseButton>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
         </RowListItem>
       </div>
     </BaseCard>
@@ -160,21 +333,12 @@ watch([scope, sortBy, status], fetchItems);
 }
 
 .filters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 18px;
 }
 
-.field {
-  display: grid;
-  gap: 8px;
-}
-
-.label {
-  font-size: 12px;
-  color: var(--c-text-muted);
-}
 
 .state {
   color: var(--c-text-muted);
@@ -193,19 +357,161 @@ watch([scope, sortBy, status], fetchItems);
   min-width: 0;
 }
 
+.summaryButton {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.requestItem[data-status="approved"] {
+  border-color: color-mix(in srgb, #3aa675 20%, var(--c-border));
+}
+
+.requestItem[data-status="rejected"],
+.requestItem[data-status="cancelled"] {
+  border-color: color-mix(in srgb, var(--c-danger) 20%, var(--c-border));
+}
+
+.requestTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summaryRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.summaryMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .requestTitle {
   font-size: 14px;
   font-weight: 650;
   color: var(--c-text);
 }
 
-.requestMeta {
-  margin-top: 6px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.summaryTime {
   font-size: 12px;
   color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--c-text-muted);
+  transition: transform 160ms ease;
+}
+
+.chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.overallBadge,
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  user-select: none;
+}
+
+.overallBadge[data-tone="pending"],
+.statusPill[data-tone="pending"] {
+  background: color-mix(in srgb, var(--c-hover) 72%, var(--c-surface));
+  color: var(--c-text-muted);
+}
+
+.overallBadge[data-tone="success"],
+.statusPill[data-tone="success"] {
+  background: color-mix(in srgb, #3aa675 16%, var(--c-surface));
+  color: #267454;
+}
+
+.overallBadge[data-tone="danger"],
+.statusPill[data-tone="danger"] {
+  background: color-mix(in srgb, var(--c-danger) 14%, var(--c-surface));
+  color: var(--c-danger);
+}
+
+.detailPanel {
+  margin-top: 14px;
+  display: grid;
+  gap: 14px;
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statusCard {
+  padding: 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--c-surface) 84%, white);
+  display: grid;
+  gap: 12px;
+}
+
+.statusCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.statusCardTitle {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--c-text-muted);
+}
+
+.participantRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.participantName {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.participantLabel {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.participantPlaceholder {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.detailFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .actions {
@@ -213,13 +519,122 @@ watch([scope, sortBy, status], fetchItems);
   gap: 8px;
 }
 
+.detail-enter-active,
+.detail-leave-active {
+  transition: all 180ms ease;
+}
+
+.detail-enter-from,
+.detail-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 @media (max-width: 800px) {
   .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .requestTop {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .summaryRight,
+  .statusCardHeader,
+  .detailFooter {
+    width: 100%;
+  }
+
+  .summaryRight {
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .summaryMeta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .statusGrid {
     grid-template-columns: 1fr;
   }
 
+  .statusCard {
+    padding: 12px;
+  }
+
+  .participantRow {
+    flex-wrap: wrap;
+  }
+
   .actions {
+    width: 100%;
     flex-direction: column;
+  }
+
+  .actions :deep(button) {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .filters :deep(.selectRoot) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .card {
+    padding: 8px;
+  }
+
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .requestTitle {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .summaryTime,
+  .participantName,
+  .participantLabel,
+  .participantPlaceholder,
+  .statusCardTitle {
+    font-size: 11px;
+  }
+
+  .overallBadge,
+  .statusPill {
+    min-height: 24px;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+
+  .detailPanel {
+    margin-top: 12px;
+    gap: 12px;
+  }
+
+  .statusGrid {
+    gap: 10px;
+  }
+
+  .statusCard {
+    padding: 10px;
+    border-radius: 14px;
   }
 }
 </style>

@@ -25,4 +25,16 @@ defineProps<{
 .title {
   margin: 0 0 var(--s-3) 0;
 }
+
+@media (max-width: 800px) {
+  .page {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .page {
+    padding: 8px;
+  }
+}
 </style>

@@ -10,7 +10,7 @@ export default {
     publicRooms: "公共房间",
     notifications: "通知",
     profile: "个人资料",
-    joinRequests: "审批中心",
+    joinRequests: "请求",
   },
   auth: {
     login: {
@@ -86,7 +86,7 @@ export default {
   },
   notifications: {
     title: "通知",
-    placeholderJoinRequest: "有新的入房审批需要处理。",
+    placeholderJoinRequest: "有新的加入请求需要处理。",
     placeholderWorkflow: "有一条新的流程通知。",
     placeholderGeneric: "有一条新的系统通知。",
     empty: {
@@ -145,28 +145,33 @@ export default {
     requested: "已申请",
   },
   joinRequests: {
-    title: "审批中心",
-    pageHint: "这里承载真正的 join request 查询和审批，不再依赖 notification 列表充当流程页。",
-    loadFailed: "加载审批列表失败。",
-    empty: "当前没有匹配的审批记录。",
+    title: "请求",
+    pageHint: "这里承载真正的 join request 查询和处理，不再依赖 notification 列表充当流程页。",
+    loadFailed: "加载请求列表失败。",
+    empty: "当前没有匹配的请求记录。",
+    item: {
+      applyTitle: "{user} 申请加入 {room}",
+      inviteTitle: "{inviter} 邀请 {invitee} 加入 {room}",
+      userSide: "用户",
+      roomSide: "房间",
+      handler: "处理人",
+      overall: "整体结果",
+    },
     filters: {
       scope: "范围",
       statusLabel: "状态",
-      sortBy: "排序",
       pendingForMe: "我处理的",
       createdByMe: "我发起的",
       allRelated: "全部相关",
       allStatus: "全部状态",
-      updatedAt: "按更新时间",
-      createdAt: "按创建时间",
     },
     actions: {
-      approve: "批准",
+      approve: "同意",
       reject: "拒绝",
     },
     status: {
       pending: "待处理",
-      approved: "已批准",
+      approved: "已同意",
       rejected: "已拒绝",
       cancelled: "已取消",
     },

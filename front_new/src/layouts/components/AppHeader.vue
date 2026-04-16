@@ -6,7 +6,11 @@ import { useNotificationsStore } from "@/stores/notifications.store";
 
 import AppIcon from "@/ui/base/AppIcon.vue";
 import BaseIconButton from "@/ui/base/BaseIconButton.vue";
-import { Bars3Icon, BellIcon } from "@heroicons/vue/24/outline";
+import {
+  Bars3Icon,
+  BellIcon,
+  ClipboardDocumentCheckIcon,
+} from "@heroicons/vue/24/outline";
 import AccountMenuPopover from "@/layouts/components/AccountMenuPopover.vue";
 import LocaleMenuButton from "@/components/LocaleMenuButton.vue";
 
@@ -36,6 +40,10 @@ function toggleSidebar() {
 
 function goNotifications() {
   router.push("/notifications");
+}
+
+function goJoinRequests() {
+  router.push("/join-requests");
 }
 
 const badgeText = computed(() => {
@@ -76,6 +84,10 @@ onMounted(() => {
           {{ badgeText }}
         </span>
       </div>
+
+      <BaseIconButton aria-label="Approvals" @click="goJoinRequests">
+        <AppIcon :icon="ClipboardDocumentCheckIcon" :size="20" />
+      </BaseIconButton>
 
       <LocaleMenuButton :size="20" />
     </div>

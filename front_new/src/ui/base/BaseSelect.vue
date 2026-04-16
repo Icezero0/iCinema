@@ -15,10 +15,18 @@ const props = withDefaults(
     options: SelectOption[];
     placeholder?: string;
     disabled?: boolean;
+    width?: string | number;
+    maxWidth?: string | number;
+    label?: string;
+    labelPosition?: "top" | "start";
   }>(),
   {
     placeholder: "",
     disabled: false,
+    width: "100%",
+    maxWidth: "100%",
+    label: "",
+    labelPosition: "top",
   },
 );
 
@@ -35,6 +43,17 @@ const selectedOption = computed(() => {
 
 const displayLabel = computed(() => {
   return selectedOption.value?.label || props.placeholder || "";
+});
+
+function normalizeSize(value: string | number) {
+  return typeof value === "number" ? `${value}px` : value;
+}
+
+const rootStyle = computed(() => {
+  return {
+    width: normalizeSize(props.width),
+    maxWidth: normalizeSize(props.maxWidth),
+  };
 });
 
 function close() {
@@ -84,34 +103,61 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootRef" class="selectRoot" :class="{ open, disabled }">
-    <button
-      class="trigger"
-      type="button"
-      :disabled="disabled"
-      :aria-expanded="open"
-      @click="toggle"
-    >
-      <span class="triggerLabel">{{ displayLabel }}</span>
-      <AppIcon class="triggerIcon" :icon="ChevronDownIcon" :size="16" />
-    </button>
+  <div class="fieldRoot" :class="`label-${labelPosition}`">
+    <span v-if="label" class="fieldLabel">{{ label }}</span>
 
-    <Transition name="menu-fade">
-      <div v-show="open" class="menu" role="listbox">
-        <BaseMenuItem
-          v-for="option in options"
-          :key="option.value"
-          :rightIcon="modelValue === option.value ? CheckIcon : undefined"
-          @click="selectOption(option.value)"
-        >
-          {{ option.label }}
-        </BaseMenuItem>
-      </div>
-    </Transition>
+    <div
+      ref="rootRef"
+      class="selectRoot"
+      :class="{ open, disabled }"
+      :style="rootStyle"
+    >
+      <button
+        class="trigger"
+        type="button"
+        :disabled="disabled"
+        :aria-expanded="open"
+        @click="toggle"
+      >
+        <span class="triggerLabel">{{ displayLabel }}</span>
+        <AppIcon class="triggerIcon" :icon="ChevronDownIcon" :size="16" />
+      </button>
+
+      <Transition name="menu-fade">
+        <div v-show="open" class="menu" role="listbox">
+          <BaseMenuItem
+            v-for="option in options"
+            :key="option.value"
+            :rightIcon="modelValue === option.value ? CheckIcon : undefined"
+            @click="selectOption(option.value)"
+          >
+            {{ option.label }}
+          </BaseMenuItem>
+        </div>
+      </Transition>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.fieldRoot {
+  display: grid;
+  gap: 8px;
+}
+
+.fieldRoot.label-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
 .selectRoot {
   position: relative;
 }
@@ -210,5 +256,39 @@ onBeforeUnmount(() => {
 .menu-fade-leave-from {
   opacity: 1;
   transform: translateY(0);
+}
+
+@media (max-width: 520px) {
+  .fieldRoot {
+    gap: 4px;
+  }
+
+  .fieldRoot.label-start {
+    display: grid;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .fieldLabel {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+
+  .trigger {
+    min-height: 36px;
+    gap: 6px;
+    padding: 0 8px;
+    border-radius: 12px;
+  }
+
+  .triggerLabel {
+    font-size: 12px;
+  }
+
+  .menu {
+    top: calc(100% + 6px);
+    border-radius: 12px;
+    padding: 4px;
+  }
 }
 </style>
