@@ -1,17 +1,24 @@
 from unittest.mock import AsyncMock
 
-from app.modules.rooms.constants import RoomJoinAuditMode, RoomRole, RoomVisibility
+from app.modules.rooms.constants import (
+    RoomJoinAuditMode,
+    RoomJoinRequestAction,
+    RoomJoinRequestSource,
+    RoomJoinRequestStatus,
+    RoomRole,
+    RoomVisibility,
+)
 
 
-# 验证房间列表接口会返回当前用户可访问的房间并支持名称筛选。
-async def test_get_rooms_lists_accessible_rooms_with_name_filter(
+# 验证房间列表接口只返回公开房间，并支持名称筛选。
+async def test_get_rooms_lists_public_rooms_with_name_filter(
     api_client,
     factories,
     auth_headers,
 ) -> None:
     user = await factories.create_user()
-    await factories.create_room(owner=user, name="Movie Night")
-    await factories.create_room(owner=user, name="Study Room")
+    await factories.create_room(owner=user, name="Movie Night", visibility=RoomVisibility.PUBLIC)
+    await factories.create_room(owner=user, name="Study Room", visibility=RoomVisibility.PRIVATE)
     await factories.commit()
 
     response = await api_client.get(
@@ -23,6 +30,39 @@ async def test_get_rooms_lists_accessible_rooms_with_name_filter(
     body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["name"] == "Movie Night"
+
+
+# 验证房间列表接口支持按房主用户名和邮箱筛选公开房间。
+async def test_get_rooms_filters_public_rooms_by_owner_identity(
+    api_client,
+    factories,
+    auth_headers,
+) -> None:
+    user = await factories.create_user()
+    owner_a = await factories.create_user(email="alice@example.com", username="Alice")
+    owner_b = await factories.create_user(email="bob@example.com", username="Bob")
+    await factories.create_room(owner=owner_a, name="Alice Public", visibility=RoomVisibility.PUBLIC)
+    await factories.create_room(owner=owner_b, name="Bob Public", visibility=RoomVisibility.PUBLIC)
+    await factories.create_room(owner=owner_b, name="Bob Private", visibility=RoomVisibility.PRIVATE)
+    await factories.commit()
+
+    response = await api_client.get(
+        "/api/v1/rooms?owner_username=ali",
+        headers=auth_headers(user),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "Alice Public"
+
+    response = await api_client.get(
+        "/api/v1/rooms?owner_email=BOB@EXAMPLE",
+        headers=auth_headers(user),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "Bob Public"
 
 
 # 验证更新房间设置接口会触发 realtime 的房间设置广播。
@@ -106,7 +146,7 @@ async def test_invite_join_request_notifies_target_and_reviewers(
     assert notified_user_ids == [target.id, owner.id]
 
 
-# 验证 join request 列表接口支持按 scope 返回与当前用户相关的请求。
+# 验证 join request 列表接口中 pending_for_me 表示“我有审批权限可见”。
 async def test_get_join_requests_lists_related_requests(
     api_client,
     factories,
@@ -125,6 +165,12 @@ async def test_get_join_requests_lists_related_requests(
         initiator=initiator,
         target=target,
     )
+    approved_visible_request = await factories.create_join_request(
+        room=room,
+        initiator=outsider,
+        target=target,
+        status=RoomJoinRequestStatus.APPROVED,
+    )
     hidden_request = await factories.create_join_request(
         room=other_room,
         initiator=outsider,
@@ -139,10 +185,55 @@ async def test_get_join_requests_lists_related_requests(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["total"] == 2
+    assert body["items"][0]["id"] == approved_visible_request.id
+    assert body["items"][1]["id"] == visible_request.id
+    assert body["items"][1]["room"]["name"] == "Review Room"
+    assert body["items"][1]["initiator"]["username"] == "initiator"
+    assert body["items"][1]["target"]["username"] == "target"
+    assert all(item["id"] != hidden_request.id for item in body["items"])
+
+
+# 验证被邀请目标用户也会在 pending_for_me 中看到自己可确认的邀请。
+async def test_get_join_requests_pending_for_me_includes_target_user_requests(
+    api_client,
+    factories,
+    auth_headers,
+) -> None:
+    owner = await factories.create_user(username="owner")
+    inviter = await factories.create_user(username="inviter")
+    target = await factories.create_user(username="target")
+    outsider = await factories.create_user(username="outsider")
+
+    room = await factories.create_room(owner=owner, name="Invite Room")
+    await factories.add_member(room=room, user=inviter, role=RoomRole.MEMBER)
+    visible_request = await factories.create_join_request(
+        room=room,
+        initiator=inviter,
+        target=target,
+        source=RoomJoinRequestSource.INVITE,
+        room_action=RoomJoinRequestAction.APPROVED,
+        target_action=RoomJoinRequestAction.PENDING,
+    )
+    hidden_request = await factories.create_join_request(
+        room=room,
+        initiator=inviter,
+        target=outsider,
+        source=RoomJoinRequestSource.INVITE,
+        room_action=RoomJoinRequestAction.APPROVED,
+        target_action=RoomJoinRequestAction.PENDING,
+    )
+    await factories.commit()
+
+    response = await api_client.get(
+        "/api/v1/join-requests?scope=pending_for_me&status=pending",
+        headers=auth_headers(target),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["id"] == visible_request.id
-    assert body["items"][0]["room"]["name"] == "Review Room"
-    assert body["items"][0]["initiator"]["username"] == "initiator"
     assert body["items"][0]["target"]["username"] == "target"
     assert all(item["id"] != hidden_request.id for item in body["items"])
 

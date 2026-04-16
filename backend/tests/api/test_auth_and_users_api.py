@@ -94,3 +94,28 @@ async def test_get_my_rooms_returns_owned_and_joined_rooms(
     owner_body = owner_only_response.json()
     assert owner_body["total"] == 1
     assert owner_body["items"][0]["name"] == "Owned Room"
+
+
+# 验证我创建的房间接口只返回当前用户创建的房间。
+async def test_get_my_owned_rooms_returns_only_owned_rooms(
+    api_client,
+    factories,
+    auth_headers,
+) -> None:
+    me = await factories.create_user(username="me")
+    other = await factories.create_user(username="other")
+    owned_room = await factories.create_room(owner=me, name="Owned Room")
+    joined_room = await factories.create_room(owner=other, name="Joined Room")
+    await factories.add_member(room=joined_room, user=me)
+    await factories.commit()
+
+    response = await api_client.get(
+        "/api/v1/users/me/owned-rooms",
+        headers=auth_headers(me),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "Owned Room"
+    assert body["items"][0]["my_role"] == "owner"

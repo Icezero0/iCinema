@@ -68,15 +68,18 @@ async def get_rooms(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     name: str | None = Query(default=None),
+    owner_username: str | None = Query(default=None),
+    owner_email: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RoomListResponse:
     data = await room_service.get_rooms(
         db,
-        user=current_user,
         page=page,
         page_size=page_size,
         name=name,
+        owner_username=owner_username,
+        owner_email=owner_email,
     )
     return RoomListResponse(
         items=[RoomResponse.model_validate(room) for room in data["items"]],
