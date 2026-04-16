@@ -10,8 +10,6 @@ export type RoomJoinRequestListScope =
   | "created_by_me"
   | "all_related_to_me";
 
-export type RoomJoinRequestSortBy = "created_at" | "updated_at";
-
 export async function listJoinRequests(params?: {
   page?: number;
   page_size?: number;
@@ -20,7 +18,6 @@ export async function listJoinRequests(params?: {
   initiator_user_id?: number | null;
   target_user_id?: number | null;
   scope?: RoomJoinRequestListScope;
-  sort_by?: RoomJoinRequestSortBy;
 }) {
   const { data } = await http.get<RoomJoinRequestListResponse>(
     "/join-requests",

@@ -170,7 +170,10 @@ export async function getRooms(params?: {
   page?: number;
   page_size?: number;
   name?: string | null;
+  owner_username?: string | null;
+  owner_email?: string | null;
 }) {
+  // Backend currently defaults this endpoint to public rooms only.
   const { data } = await http.get<{
     items: RoomResponse[];
     total: number;

@@ -66,7 +66,6 @@ async function fetchItems() {
       page: 1,
       page_size: 30,
       scope: scope.value,
-      sort_by: "updated_at",
       status: status.value === "all" ? null : status.value,
     });
 
