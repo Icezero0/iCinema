@@ -140,9 +140,23 @@ export default {
   publicRooms: {
     title: "Public Rooms",
     hint: "This page lists public rooms from other users. Outside the room, we only show stable room information and leave realtime state to the room itself.",
-    empty: "No public rooms are available right now.",
+    loadFailed: "Failed to load public rooms.",
+    empty: "No public rooms match the current filters.",
     request: "Request access",
     requested: "Requested",
+    inRoom: "Already joined",
+    notAllowed: "Join not allowed",
+    filters: {
+      nameLabel: "Room name",
+      ownerUsernameLabel: "Owner username",
+      search: "Search",
+      reset: "Reset",
+    },
+    pagination: {
+      prev: "Previous",
+      next: "Next",
+      pageInfo: "Page {page} / {totalPages}, {total} items",
+    },
   },
   joinRequests: {
     title: "Approvals",

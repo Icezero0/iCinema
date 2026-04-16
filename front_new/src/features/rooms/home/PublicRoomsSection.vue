@@ -11,6 +11,7 @@ const props = defineProps<{
   loadingText: string;
   rooms: Room[];
   loading?: boolean;
+  submittingRoomIds?: number[];
   pendingRoomIds: number[];
 }>();
 
@@ -20,6 +21,10 @@ defineEmits<{
 
 function isPending(roomId: number) {
   return props.pendingRoomIds.includes(roomId);
+}
+
+function isSubmitting(roomId: number) {
+  return props.submittingRoomIds?.includes(roomId) ?? false;
 }
 </script>
 
@@ -37,7 +42,7 @@ function isPending(roomId: number) {
         :key="room.id"
         :room="room"
         :action-label="isPending(room.id) ? requestedText : requestText"
-        :action-loading="isPending(room.id)"
+        :action-loading="isSubmitting(room.id)"
         :action-disabled="isPending(room.id)"
         @action="$emit('request', room.id)"
       />

@@ -62,6 +62,7 @@ const props = withDefaults(
 }
 
 .item :deep(button:disabled),
+.item :deep(button:disabled *),
 .item :deep(input:disabled),
 .item :deep(select:disabled),
 .item :deep(textarea:disabled) {

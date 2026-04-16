@@ -40,7 +40,7 @@ const status = ref<RoomJoinRequestStatus | "all">("pending");
 const scopeOptions = computed(() => [
   { value: "all_related_to_me", label: t("joinRequests.filters.allRelated") },
   { value: "created_by_me", label: t("joinRequests.filters.createdByMe") },
-  { value: "pending_for_me", label: t("joinRequests.filters.pendingForMe") },
+  { value: "handled_by_me", label: t("joinRequests.filters.pendingForMe") },
 ]);
 
 const statusOptions = computed(() => [

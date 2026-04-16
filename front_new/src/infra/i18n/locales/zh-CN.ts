@@ -7,7 +7,7 @@ export default {
   },
   sidebar: {
     home: "首页",
-    publicRooms: "公共房间",
+    publicRooms: "公开房间",
     notifications: "通知",
     profile: "个人资料",
     joinRequests: "请求",
@@ -138,11 +138,25 @@ export default {
     },
   },
   publicRooms: {
-    title: "公共房间",
+    title: "公开房间",
     hint: "这里展示其他用户公开的房间。房间外先只展示稳定信息，实时状态等进入房间后再看。",
-    empty: "暂无可申请的公共房间。",
+    loadFailed: "加载公开房间失败。",
+    empty: "暂无符合条件的公开房间。",
     request: "申请加入",
     requested: "已申请",
+    inRoom: "已在房间",
+    notAllowed: "不允许加入",
+    filters: {
+      nameLabel: "房间名",
+      ownerUsernameLabel: "房主用户名",
+      search: "查询",
+      reset: "重置",
+    },
+    pagination: {
+      prev: "上一页",
+      next: "下一页",
+      pageInfo: "第 {page} / {totalPages} 页，共 {total} 项",
+    },
   },
   joinRequests: {
     title: "请求",

@@ -6,7 +6,7 @@ import type {
 } from "@/infra/api/rooms.api";
 
 export type RoomJoinRequestListScope =
-  | "pending_for_me"
+  | "handled_by_me"
   | "created_by_me"
   | "all_related_to_me";
 

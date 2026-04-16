@@ -15,6 +15,7 @@ type State = {
   publicRooms: Room[];
   isLoading: boolean;
   isCreating: boolean;
+  submittingJoinRoomIds: number[];
   pendingJoinRoomIds: number[];
   error: string | null;
 };
@@ -35,6 +36,7 @@ export const useRoomsStore = defineStore("rooms", {
     publicRooms: [],
     isLoading: false,
     isCreating: false,
+    submittingJoinRoomIds: [],
     pendingJoinRoomIds: [],
     error: null,
   }),
@@ -48,6 +50,9 @@ export const useRoomsStore = defineStore("rooms", {
     },
     isJoinPending: (state) => {
       return (roomId: number) => state.pendingJoinRoomIds.includes(roomId);
+    },
+    isJoinSubmitting: (state) => {
+      return (roomId: number) => state.submittingJoinRoomIds.includes(roomId);
     },
   },
 
@@ -136,20 +141,33 @@ export const useRoomsStore = defineStore("rooms", {
     },
 
     async requestToJoin(roomId: number) {
-      if (this.pendingJoinRoomIds.includes(roomId)) return;
+      if (
+        this.pendingJoinRoomIds.includes(roomId) ||
+        this.submittingJoinRoomIds.includes(roomId)
+      ) {
+        return;
+      }
 
       this.error = null;
-      this.pendingJoinRoomIds = [...this.pendingJoinRoomIds, roomId];
+      this.submittingJoinRoomIds = [...this.submittingJoinRoomIds, roomId];
 
       try {
         await applyRoomJoinRequest(roomId);
+        this.submittingJoinRoomIds = this.submittingJoinRoomIds.filter(
+          (id) => id !== roomId,
+        );
+        if (!this.pendingJoinRoomIds.includes(roomId)) {
+          this.pendingJoinRoomIds = [...this.pendingJoinRoomIds, roomId];
+        }
       } catch (error: any) {
         const message = extractErrorMessage(
           error,
           "Failed to submit join request",
         );
         this.error = message;
-        this.pendingJoinRoomIds = this.pendingJoinRoomIds.filter((id) => id !== roomId);
+        this.submittingJoinRoomIds = this.submittingJoinRoomIds.filter(
+          (id) => id !== roomId,
+        );
         throw new Error(message);
       }
     },
