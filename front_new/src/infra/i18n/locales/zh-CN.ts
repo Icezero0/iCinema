@@ -86,12 +86,21 @@ export default {
   },
   notifications: {
     title: "通知",
+    systemTitle: "系统通知",
+    workflowTitle: "流程通知",
     placeholderJoinRequest: "有新的加入请求需要处理。",
     placeholderWorkflow: "有一条新的流程通知。",
     placeholderGeneric: "有一条新的系统通知。",
+    markAllRead: "全部已读",
+    filters: {
+      label: "状态",
+      all: "全部",
+      unread: "未读",
+      read: "已读",
+    },
     empty: {
       title: "暂无通知",
-      hint: "新的邀请或申请会在这里显示。",
+      hint: "新的通知会在这里显示。",
     },
     inviteYouToJoin: "邀请您加入 {room}",
   },
@@ -162,7 +171,10 @@ export default {
     title: "请求",
     pageHint: "这里承载真正的 join request 查询和处理，不再依赖 notification 列表充当流程页。",
     loadFailed: "加载请求列表失败。",
-    empty: "当前没有匹配的请求记录。",
+    empty: {
+      title: "暂无请求",
+      hint: "相关请求会在这里显示。",
+    },
     item: {
       applyTitle: "{user} 申请加入 {room}",
       inviteTitle: "{inviter} 邀请 {invitee} 加入 {room}",

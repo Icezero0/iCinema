@@ -3,6 +3,7 @@ import {
   listNotifications,
   getUnreadCount,
   markNotificationAsRead,
+  markAllNotificationsAsRead,
   type Notification,
 } from "@/infra/api/notifications.api";
 import {
@@ -84,15 +85,30 @@ export const useNotificationsStore = defineStore("notifications", {
     },
 
     async refreshFirstPage(pageSize = 20) {
-      this.pageSize = pageSize;
-      this.page = 1;
+      return this.refreshPage({
+        page: 1,
+        pageSize,
+      });
+    },
+
+    async refreshPage(params?: {
+      page?: number;
+      pageSize?: number;
+      isRead?: boolean | null;
+    }) {
+      const nextPage = params?.page ?? 1;
+      const nextPageSize = params?.pageSize ?? this.pageSize ?? 20;
+
+      this.pageSize = nextPageSize;
+      this.page = nextPage;
       this.isLoading = true;
       this.error = null;
 
       try {
         const data = await listNotifications({
-          page: 1,
-          page_size: pageSize,
+          page: nextPage,
+          page_size: nextPageSize,
+          is_read: params?.isRead ?? null,
         });
 
         this.items = data.items;
@@ -171,6 +187,22 @@ export const useNotificationsStore = defineStore("notifications", {
         }
       } catch (e: any) {
         this.error = e?.message ?? "Failed to mark notification as read";
+        throw e;
+      }
+    },
+
+    async markAllAsRead() {
+      this.error = null;
+
+      try {
+        await markAllNotificationsAsRead();
+        this.items = this.items.map((item) => ({
+          ...item,
+          is_read: true,
+        }));
+        this.unreadCount = 0;
+      } catch (e: any) {
+        this.error = e?.message ?? "Failed to mark all notifications as read";
         throw e;
       }
     },

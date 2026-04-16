@@ -220,7 +220,10 @@ watch([scope, status], fetchItems);
 
       <div v-if="isLoading" class="state">{{ t("common.loading") }}</div>
       <div v-else-if="error" class="state error">{{ error }}</div>
-      <div v-else-if="items.length === 0" class="state">{{ t("joinRequests.empty") }}</div>
+      <div v-else-if="items.length === 0" class="empty">
+        <div class="emptyTitle">{{ t("joinRequests.empty.title") }}</div>
+        <div class="emptyHint">{{ t("joinRequests.empty.hint") }}</div>
+      </div>
 
       <div v-else class="list">
         <RowListItem
@@ -345,6 +348,23 @@ watch([scope, status], fetchItems);
 
 .state.error {
   color: var(--c-danger);
+}
+
+.empty {
+  padding: 18px 6px;
+  color: var(--c-text-muted);
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: 14px;
+  color: var(--c-text);
+  margin-bottom: 6px;
+}
+
+.emptyHint {
+  font-size: 12px;
+  color: var(--c-text-muted);
 }
 
 .list {

@@ -86,12 +86,21 @@ export default {
   },
   notifications: {
     title: "Notifications",
+    systemTitle: "System notification",
+    workflowTitle: "Workflow notification",
     placeholderJoinRequest: "There is a new room-join approval to review.",
     placeholderWorkflow: "There is a new workflow notification.",
     placeholderGeneric: "There is a new system notification.",
+    markAllRead: "Mark all as read",
+    filters: {
+      label: "Status",
+      all: "All",
+      unread: "Unread",
+      read: "Read",
+    },
     empty: {
       title: "No notifications",
-      hint: "Invitations and requests will show up here.",
+      hint: "New notifications will appear here.",
     },
     inviteYouToJoin: "invited you to join {room}",
   },
@@ -162,7 +171,10 @@ export default {
     title: "Approvals",
     pageHint: "This page now handles real join-request queries and review workflows instead of relying on notifications as a proxy flow page.",
     loadFailed: "Failed to load approvals.",
-    empty: "There are no matching approval records.",
+    empty: {
+      title: "No requests",
+      hint: "Related requests will appear here.",
+    },
     item: {
       applyTitle: "{user} requests to join {room}",
       inviteTitle: "{inviter} invites {invitee} to join {room}",
