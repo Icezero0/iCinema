@@ -67,6 +67,6 @@ class RoomJoinRequestAction(StrEnum):
 
 
 class RoomJoinRequestListScope(StrEnum):
-    PENDING_FOR_ME = "pending_for_me"
+    HANDLED_BY_ME = "handled_by_me"
     CREATED_BY_ME = "created_by_me"
     ALL_RELATED_TO_ME = "all_related_to_me"
