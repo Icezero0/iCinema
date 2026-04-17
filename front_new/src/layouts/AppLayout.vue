@@ -61,7 +61,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--c-bg);
   color: var(--c-text);
 }
@@ -69,10 +69,10 @@ onBeforeUnmount(() => {
 .body {
   display: grid;
   grid-template-columns: auto 1fr;
-  min-height: calc(100vh - 56px);
+  min-height: calc(100dvh - 56px);
 }
 
 .content {
-  padding: var(--s-4);
+  padding: 0;
 }
 </style>

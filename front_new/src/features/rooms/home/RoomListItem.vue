@@ -2,6 +2,7 @@
 import { useI18n } from "vue-i18n";
 import type { Room } from "@/infra/api/rooms.api";
 import { computed } from "vue";
+import BasePill from "@/ui/base/BasePill.vue";
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
 
@@ -39,13 +40,17 @@ defineEmits<{
     <div class="contentBlock">
       <div class="topLine">
         <div class="title">{{ room.name }}</div>
-        <span class="badge" :data-public="String(room.visibility === 'public')">
+        <BasePill
+          size="sm"
+          :tone="room.visibility === 'public' ? 'accent' : 'muted'"
+          class="visibilityPill"
+        >
           {{
             room.visibility === "public"
               ? t("room.fields.public")
               : t("room.fields.private")
           }}
-        </span>
+        </BasePill>
       </div>
 
       <div class="meta">
@@ -97,27 +102,9 @@ defineEmits<{
   text-overflow: ellipsis;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 22px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--c-border);
-  background: color-mix(in srgb, var(--c-surface) 72%, var(--c-bg));
-  color: var(--c-text-muted);
-  font-size: 12px;
-  white-space: nowrap;
+.visibilityPill {
   flex: 0 0 auto;
   cursor: default;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.badge[data-public="true"] {
-  color: var(--c-text);
-  border-color: color-mix(in srgb, var(--c-primary) 32%, var(--c-border));
 }
 
 .meta {
