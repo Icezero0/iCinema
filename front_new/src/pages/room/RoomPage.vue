@@ -146,6 +146,8 @@ watch(panelOptions, (nextPanels) => {
                 :play-label="t('room.mock.controls.play')"
                 :pause-label="t('room.mock.controls.pause')"
                 :sync-label="t('room.mock.controls.syncNow')"
+                :source-label="t('room.mock.controls.source')"
+                :source-panel-title="t('room.mock.controls.sourcePanelTitle')"
                 :volume-label="t('room.mock.controls.volume')"
                 @toggle-play="togglePlayback"
                 @update:progress="mockProgress = $event"

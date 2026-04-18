@@ -241,6 +241,8 @@ export default {
         pause: "暂停",
         volume: "音量",
         syncNow: "手动同步",
+        source: "播放源",
+        sourcePanelTitle: "播放源",
       },
       supportTitle: "房间概况",
       localSyncTitle: "本地同步策略",

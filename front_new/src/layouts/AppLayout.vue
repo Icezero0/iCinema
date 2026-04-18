@@ -12,9 +12,7 @@ const auth = useAuthStore();
 const notifications = useNotificationsStore();
 const viewportWidth = ref(typeof window !== "undefined" ? window.innerWidth : 1280);
 const isMobileSidebar = computed(() => viewportWidth.value < 900);
-const sidebarOpen = ref(
-  typeof window !== "undefined" ? window.innerWidth >= 900 : true,
-);
+const sidebarOpen = ref(false);
 
 let stopNotificationSubscription: (() => void) | null = null;
 
@@ -66,7 +64,7 @@ watch(
 
 watch(isMobileSidebar, (isMobile, wasMobile) => {
   if (isMobile === wasMobile) return;
-  sidebarOpen.value = !isMobile;
+  sidebarOpen.value = false;
 });
 
 onBeforeUnmount(() => {

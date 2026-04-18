@@ -241,6 +241,8 @@ export default {
         pause: "Pause",
         volume: "Volume",
         syncNow: "Manual sync",
+        source: "Source",
+        sourcePanelTitle: "Playback Source",
       },
       supportTitle: "Room overview",
       localSyncTitle: "Local sync strategy",
