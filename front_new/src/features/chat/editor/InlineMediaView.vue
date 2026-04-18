@@ -11,6 +11,11 @@ const isCoveredBySelection = ref(false);
 const kind = computed(() => String(props.node.attrs.kind || "image"));
 const src = computed(() => String(props.node.attrs.src || ""));
 const alt = computed(() => String(props.node.attrs.alt || ""));
+const emojiId = computed(() => {
+  const value = props.node.attrs.emojiId;
+  return value == null ? undefined : String(value);
+});
+const animated = computed(() => Boolean(props.node.attrs.animated));
 
 function syncSelectionState() {
   const position = typeof props.getPos === "function" ? props.getPos() : null;
@@ -31,7 +36,10 @@ function syncSelectionState() {
   const nodeEnd = position + props.node.nodeSize;
 
   if (kind.value === "emoji") {
-    isCoveredBySelection.value = from < nodeEnd && to > nodeStart;
+    // For adjacent inline emojis, treat the emoji as selected only when its
+    // anchor position falls inside the selection. A plain overlap check makes
+    // neighboring emojis light up together.
+    isCoveredBySelection.value = nodeStart >= from && nodeStart < to;
     return;
   }
 
@@ -58,6 +66,8 @@ onBeforeUnmount(() => {
       :kind="kind as 'emoji' | 'image' | 'sticker'"
       :src="src"
       :alt="alt"
+      :emoji-id="emojiId"
+      :animated="animated"
       context="editor"
       :selected-range="isCoveredBySelection"
       :selected-node="selected && kind !== 'emoji'"

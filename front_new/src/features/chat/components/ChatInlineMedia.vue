@@ -5,6 +5,8 @@ const props = withDefaults(defineProps<{
   kind: "emoji" | "image" | "sticker";
   src?: string;
   alt: string;
+  emojiId?: string;
+  animated?: boolean;
   context?: "editor" | "message";
   displayMode?: "inline" | "block";
   selectedRange?: boolean;
@@ -13,6 +15,8 @@ const props = withDefaults(defineProps<{
   context: "message",
   displayMode: "inline",
   src: undefined,
+  emojiId: undefined,
+  animated: false,
   selectedRange: false,
   selectedNode: false,
 });
@@ -20,6 +24,7 @@ const props = withDefaults(defineProps<{
 const rootRef = ref<HTMLElement | null>(null);
 const domSelectedRange = ref(false);
 const domSelectedNode = ref(false);
+const domExactlySelected = ref(false);
 
 const supportsNodeSelection = computed(
   () => props.context === "message" && props.kind !== "emoji",
@@ -43,6 +48,7 @@ function syncDomSelectionState() {
   if (props.context !== "message") {
     domSelectedRange.value = false;
     domSelectedNode.value = false;
+    domExactlySelected.value = false;
     return;
   }
 
@@ -51,11 +57,20 @@ function syncDomSelectionState() {
   if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
     domSelectedRange.value = false;
     domSelectedNode.value = false;
+    domExactlySelected.value = false;
     return;
   }
 
   const range = selection.getRangeAt(0);
-  domSelectedRange.value = range.intersectsNode(root);
+  const nodeRange = document.createRange();
+  nodeRange.selectNode(root);
+  domSelectedRange.value =
+    range.compareBoundaryPoints(Range.START_TO_START, nodeRange) <= 0 &&
+    range.compareBoundaryPoints(Range.END_TO_END, nodeRange) >= 0;
+
+  domExactlySelected.value =
+    range.compareBoundaryPoints(Range.START_TO_START, nodeRange) === 0 &&
+    range.compareBoundaryPoints(Range.END_TO_END, nodeRange) === 0;
 
   if (!supportsNodeSelection.value) {
     domSelectedNode.value = false;
@@ -71,10 +86,14 @@ function syncDomSelectionState() {
     range.endContainer === parent &&
     range.startOffset === nodeIndex &&
     range.endOffset === nodeIndex + 1;
+
+  if (domSelectedNode.value) {
+    domSelectedRange.value = false;
+  }
 }
 
 function selectMessageNode() {
-  if (!supportsNodeSelection.value) return;
+  if (props.context !== "message") return;
 
   const root = rootRef.value;
   const selection = window.getSelection();
@@ -90,17 +109,25 @@ function selectMessageNode() {
 function handleDocumentCopy(event: ClipboardEvent) {
   if (
     props.context !== "message" ||
-    !supportsNodeSelection.value ||
-    !mergedSelectedNode.value ||
     !props.src ||
     !event.clipboardData
   ) {
     return;
   }
 
+  const shouldCopyAsSingleMedia =
+    mergedSelectedNode.value ||
+    (props.kind === "emoji" && domExactlySelected.value);
+
+  if (!shouldCopyAsSingleMedia) {
+    return;
+  }
+
   const escapedAlt = props.alt.replace(/"/g, "&quot;");
   const escapedSrc = props.src.replace(/"/g, "&quot;");
-  const html = `<img src="${escapedSrc}" alt="${escapedAlt}" data-kind="${props.kind}">`;
+  const emojiIdAttr = props.emojiId ? ` data-emoji-id="${props.emojiId}"` : "";
+  const animatedAttr = props.animated ? ` data-animated="true"` : "";
+  const html = `<img src="${escapedSrc}" alt="${escapedAlt}" data-kind="${props.kind}"${emojiIdAttr}${animatedAttr}>`;
 
   event.clipboardData.setData("text/html", html);
   event.clipboardData.setData("text/plain", props.alt);
@@ -146,6 +173,8 @@ onBeforeUnmount(() => {
       :src="props.src"
       :alt="props.alt"
       :data-kind="props.kind"
+      :data-emoji-id="props.emojiId || null"
+      :data-animated="props.animated ? 'true' : null"
       draggable="false"
     >
     <span
@@ -164,6 +193,11 @@ onBeforeUnmount(() => {
   display: inline-flex;
   vertical-align: text-bottom;
   border-radius: 0;
+}
+
+.chatInlineMedia::selection,
+.chatInlineMedia *::selection {
+  background: transparent;
 }
 
 .chatInlineMedia--message.chatInlineMedia--block.chatInlineMedia--image,

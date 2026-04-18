@@ -49,9 +49,27 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+function moveCursorBeforeTrailingCursor(editor: any) {
+  const { state, view } = editor;
+  const selection = state.selection;
+  if (!selection.empty) return false;
+
+  const { $from } = selection;
+  const before = $from.nodeBefore;
+  if (!before?.isText || !before.text?.endsWith(TRAILING_CURSOR_TEXT)) return false;
+
+  const hiddenStartPos = selection.from - before.nodeSize;
+  const beforeHidden = state.doc.resolve(hiddenStartPos).nodeBefore;
+  if (!beforeHidden || !getInlineTailPolicy(beforeHidden.type.name)) return false;
+
+  view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, hiddenStartPos)));
+  return true;
+}
+
 function moveAcrossTrailingCursor(
   editor: any,
   direction: "left" | "right",
+  extendSelection = false,
 ) {
   const { state, view } = editor;
   const selection = state.selection;
@@ -64,7 +82,10 @@ function moveAcrossTrailingCursor(
     if (!after?.isText || !after.text?.startsWith(TRAILING_CURSOR_TEXT)) return false;
 
     const nextPos = selection.from + 1;
-    view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, nextPos)));
+    const nextSelection = extendSelection
+      ? TextSelection.create(state.doc, selection.from, nextPos)
+      : TextSelection.create(state.doc, nextPos);
+    view.dispatch(state.tr.setSelection(nextSelection));
     return true;
   }
 
@@ -74,6 +95,12 @@ function moveAcrossTrailingCursor(
   const hiddenStartPos = selection.from - before.nodeSize;
   const beforeHidden = state.doc.resolve(hiddenStartPos).nodeBefore;
   const policy = beforeHidden ? getInlineTailPolicy(beforeHidden.type.name) : null;
+
+  if (beforeHidden && policy && extendSelection) {
+    const targetPos = hiddenStartPos - beforeHidden.nodeSize;
+    view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, hiddenStartPos, targetPos)));
+    return true;
+  }
 
   if (beforeHidden && policy?.selectable) {
     const mediaStartPos = hiddenStartPos - beforeHidden.nodeSize;
@@ -195,6 +222,8 @@ function syncEditorState() {
 function insertEmojiById(emojiId: string) {
   const src = getChatEmojiUrl(emojiId);
   if (!src || !editor.value) return;
+
+  moveCursorBeforeTrailingCursor(editor.value);
 
   editor.value
     .chain()
@@ -385,12 +414,12 @@ const editor = useEditor({
     handleKeyDown: (_view, event) => {
       if (!editor.value) return false;
 
-      if (event.key === "ArrowRight" && moveAcrossTrailingCursor(editor.value, "right")) {
+      if (event.key === "ArrowRight" && moveAcrossTrailingCursor(editor.value, "right", event.shiftKey)) {
         event.preventDefault();
         return true;
       }
 
-      if (event.key === "ArrowLeft" && moveAcrossTrailingCursor(editor.value, "left")) {
+      if (event.key === "ArrowLeft" && moveAcrossTrailingCursor(editor.value, "left", event.shiftKey)) {
         event.preventDefault();
         return true;
       }

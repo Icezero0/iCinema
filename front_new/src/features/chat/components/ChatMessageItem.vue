@@ -76,6 +76,8 @@ function getSegmentLayoutClass(segment: ChatSegment) {
               display-mode="inline"
               :src="getChatEmojiUrl(segment.emojiId) || undefined"
               :alt="getChatEmojiLabel(segment.emojiId)"
+              :emoji-id="segment.emojiId"
+              :animated="segment.animated"
             />
             <span v-else>{{ getChatEmojiLabel(segment.emojiId) }}</span>
           </template>
@@ -191,11 +193,6 @@ function getSegmentLayoutClass(segment: ChatSegment) {
 
 .segment-image-inline {
   display: inline;
-}
-
-.segment-image-emoji {
-  display: inline;
-  white-space: normal;
 }
 
 .segment-emoji {

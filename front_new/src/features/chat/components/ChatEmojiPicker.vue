@@ -28,6 +28,7 @@ function selectEmoji(emojiId: string) {
         type="button"
         role="tab"
         :aria-selected="activeEmojiTab === 'qface'"
+        @mousedown.prevent
         @click="setEmojiTab('qface')"
       >
         {{ t("chat.emojiPanel.tabs.qface") }}
@@ -38,6 +39,7 @@ function selectEmoji(emojiId: string) {
         type="button"
         role="tab"
         :aria-selected="activeEmojiTab === 'emoji'"
+        @mousedown.prevent
         @click="setEmojiTab('emoji')"
       >
         {{ t("chat.emojiPanel.tabs.emoji") }}
@@ -48,6 +50,7 @@ function selectEmoji(emojiId: string) {
         type="button"
         role="tab"
         :aria-selected="activeEmojiTab === 'stickers'"
+        @mousedown.prevent
         @click="setEmojiTab('stickers')"
       >
         {{ t("chat.emojiPanel.tabs.stickers") }}
@@ -62,6 +65,7 @@ function selectEmoji(emojiId: string) {
           class="emojiOption"
           type="button"
           :aria-label="emoji.label"
+          @mousedown.prevent
           @click="selectEmoji(emoji.id)"
         >
           <img

@@ -85,6 +85,7 @@ onBeforeUnmount(() => {
           class="toolButton"
           :aria-label="t('chat.toolbar.emoji')"
           :aria-expanded="emojiPanelOpen"
+          @mousedown.prevent
           @click="toggleEmojiPanel"
         >
           <AppIcon :icon="FaceSmileIcon" :size="16" />
