@@ -11,11 +11,11 @@ import {
 import { getRoomById, type Room } from "@/infra/api/rooms.api";
 import BasePill from "@/ui/base/BasePill.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
-import RoomMemberAvatar from "@/features/room/components/RoomMemberAvatar.vue";
 import ChatPanel from "@/features/chat/components/ChatPanel.vue";
 import RoomPlaybackControls from "@/features/room/components/RoomPlaybackControls.vue";
 import RoomRequestItem from "@/features/room/components/RoomRequestItem.vue";
 import RoomSettingsPanel from "@/features/room/components/RoomSettingsPanel.vue";
+import RoomMembersPanel from "@/features/room/components/RoomMembersPanel.vue";
 import type { RoomPanelKey, RoomRequestMockItem, RoomRole } from "@/features/room/types";
 import { createMockChatMessages, createMockMembers, createMockRequests } from "@/features/room/room.mock";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
@@ -179,22 +179,12 @@ watch(panelOptions, (nextPanels) => {
                   key="members"
                   class="panelBody membersPanelBody"
                 >
-                  <div class="memberList">
-                    <div
-                      v-for="member in mockMembers"
-                      :key="member.id"
-                      class="memberItem"
-                    >
-                      <RoomMemberAvatar
-                        :name="member.name"
-                        :role="member.role"
-                        :status="member.status"
-                      />
-                      <div class="memberMeta">
-                        <div class="memberName">{{ member.name }}</div>
-                      </div>
-                    </div>
-                  </div>
+                  <RoomMembersPanel
+                    :members="mockMembers"
+                    :search-placeholder="t('room.mock.membersSearchPlaceholder')"
+                    :invite-label="t('room.mock.invite')"
+                    :leave-room-label="t('room.mock.leaveRoom')"
+                  />
                 </div>
 
                 <div
@@ -389,8 +379,13 @@ watch(panelOptions, (nextPanels) => {
 }
 
 .membersPanelBody {
-  padding-left: 6px;
-  padding-right: 6px;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.membersPanelBody > * {
+  align-self: stretch;
+  min-height: 0;
 }
 
 :deep(.chatPanelFill) {
@@ -402,36 +397,6 @@ watch(panelOptions, (nextPanels) => {
 .requestList {
   display: grid;
   gap: 10px;
-}
-
-.memberList {
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 6px;
-}
-
-.memberItem {
-  padding: 6px 2px 4px;
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  gap: 6px;
-}
-
-.memberMeta {
-  width: 100%;
-  display: grid;
-  justify-items: center;
-}
-
-.memberName {
-  font-size: 13px;
-  color: var(--c-text);
-  max-width: 5em;
-  margin: 0 auto;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .workspacePanel-enter-active,

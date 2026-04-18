@@ -269,6 +269,7 @@ export default {
       send: "发送",
       membersTitle: "房间成员",
       membersSub: "头像边框区分角色，右下角状态点表示当前播放状态。",
+      membersSearchPlaceholder: "搜索成员",
       roles: {
         owner: "房主",
         manager: "管理员",
@@ -278,6 +279,8 @@ export default {
       requestsSub: "不离开房间也能顺手处理加入请求。",
       requestApply: "申请加入当前房间",
       requestInvite: "被邀请加入当前房间",
+      invite: "邀请",
+      leaveRoom: "退出房间",
       approve: "同意",
       reject: "拒绝",
       settingsTitle: "房间设置",

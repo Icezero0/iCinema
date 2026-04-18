@@ -269,6 +269,7 @@ export default {
       send: "Send",
       membersTitle: "Room members",
       membersSub: "Avatar rings show role, and the status dot shows playback state.",
+      membersSearchPlaceholder: "Search members",
       roles: {
         owner: "Owner",
         manager: "Manager",
@@ -278,6 +279,8 @@ export default {
       requestsSub: "Handle join requests without leaving the room.",
       requestApply: "Requested to join this room",
       requestInvite: "Invited into this room",
+      invite: "Invite",
+      leaveRoom: "Leave room",
       approve: "Approve",
       reject: "Reject",
       settingsTitle: "Room settings",
