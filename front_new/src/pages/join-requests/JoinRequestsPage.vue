@@ -194,30 +194,35 @@ watch([scope, status], fetchItems);
 <template>
   <AppPageShell
     :title="t('joinRequests.title')"
+    :subtitle="t('joinRequests.pageHint')"
     :back-text="t('common.backHome')"
     :max-width="980"
   >
+    <template #toolbar>
+      <BaseCard class="toolbarCard">
+        <div class="filters">
+          <BaseSelect
+            v-model="scope"
+            :options="scopeOptions"
+            :label="t('joinRequests.filters.scope')"
+            label-position="start"
+            :width="176"
+            max-width="32vw"
+          />
+
+          <BaseSelect
+            v-model="status"
+            :options="statusOptions"
+            :label="t('joinRequests.filters.statusLabel')"
+            label-position="start"
+            :width="176"
+            max-width="32vw"
+          />
+        </div>
+      </BaseCard>
+    </template>
+
     <BaseCard class="card">
-      <div class="filters">
-        <BaseSelect
-          v-model="scope"
-          :options="scopeOptions"
-          :label="t('joinRequests.filters.scope')"
-          label-position="start"
-          :width="176"
-          max-width="32vw"
-        />
-
-        <BaseSelect
-          v-model="status"
-          :options="statusOptions"
-          :label="t('joinRequests.filters.statusLabel')"
-          label-position="start"
-          :width="176"
-          max-width="32vw"
-        />
-      </div>
-
       <div v-if="isLoading" class="state">{{ t("common.loading") }}</div>
       <div v-else-if="error" class="state error">{{ error }}</div>
       <div v-else-if="items.length === 0" class="empty">
@@ -330,6 +335,10 @@ watch([scope, status], fetchItems);
 </template>
 
 <style scoped>
+.toolbarCard {
+  padding: 14px 18px;
+}
+
 .card {
   padding: 22px;
 }
@@ -338,7 +347,6 @@ watch([scope, status], fetchItems);
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 18px;
 }
 
 

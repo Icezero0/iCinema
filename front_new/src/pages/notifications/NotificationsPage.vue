@@ -153,29 +153,33 @@ onBeforeUnmount(() => {
     :back-text="t('common.backHome')"
     :max-width="980"
   >
+    <template #toolbar>
+      <BaseCard class="toolbarCard">
+        <div class="toolbar">
+          <BaseSelect
+            v-model="filter"
+            :options="filterOptions"
+            :label="t('notifications.filters.label')"
+            label-position="start"
+            :width="160"
+            max-width="28vw"
+          />
+
+          <button
+            class="markAllBtn"
+            type="button"
+            :aria-label="t('notifications.markAllRead')"
+            :disabled="notifications.unreadCount === 0"
+            @click="handleMarkAllRead"
+          >
+            <AppIcon :icon="EnvelopeOpenIcon" :size="16" />
+            {{ t("notifications.markAllRead") }}
+          </button>
+        </div>
+      </BaseCard>
+    </template>
+
     <BaseCard class="card">
-      <div class="toolbar">
-        <BaseSelect
-          v-model="filter"
-          :options="filterOptions"
-          :label="t('notifications.filters.label')"
-          label-position="start"
-          :width="160"
-          max-width="28vw"
-        />
-
-        <button
-          class="markAllBtn"
-          type="button"
-          :aria-label="t('notifications.markAllRead')"
-          :disabled="notifications.unreadCount === 0"
-          @click="handleMarkAllRead"
-        >
-          <AppIcon :icon="EnvelopeOpenIcon" :size="16" />
-          {{ t("notifications.markAllRead") }}
-        </button>
-      </div>
-
       <div v-if="isLoading" class="state">{{ t("common.loading") }}</div>
       <div v-else-if="error" class="state error">{{ error }}</div>
       <div v-else-if="items.length === 0" class="empty">
@@ -230,6 +234,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.toolbarCard {
+  padding: 14px 18px;
+}
+
 .card {
   padding: 18px;
 }
@@ -239,7 +247,6 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
   flex-wrap: wrap;
 }
 

@@ -18,6 +18,9 @@ export default {
     profile: "个人资料",
     joinRequests: "请求",
   },
+  appShell: {
+    toggleNavigation: "切换导航",
+  },
   auth: {
     login: {
       title: "欢迎回来",

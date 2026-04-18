@@ -17,6 +17,9 @@ export default {
     profile: "Profile",
     joinRequests: "Approvals",
   },
+  appShell: {
+    toggleNavigation: "Toggle navigation",
+  },
   auth: {
     login: {
       title: "Welcome back",

@@ -169,32 +169,37 @@ onMounted(() => {
 <template>
   <AppPageShell
     :title="t('publicRooms.title')"
+    :subtitle="t('publicRooms.hint')"
     :back-text="t('common.backHome')"
     :max-width="980"
   >
+    <template #toolbar>
+      <BaseCard class="toolbarCard">
+        <form class="searchBar" @submit.prevent="handleSearch">
+          <label class="searchField">
+            <span class="searchLabel">{{ t("publicRooms.filters.nameLabel") }}</span>
+            <BaseInput v-model="filters.name" />
+          </label>
+
+          <label class="searchField">
+            <span class="searchLabel">{{
+              t("publicRooms.filters.ownerUsernameLabel")
+            }}</span>
+            <BaseInput v-model="filters.ownerUsername" />
+          </label>
+
+          <BaseIconButton
+            class="searchButton"
+            type="submit"
+            :aria-label="t('publicRooms.filters.search')"
+          >
+            <AppIcon :icon="MagnifyingGlassIcon" :size="18" />
+          </BaseIconButton>
+        </form>
+      </BaseCard>
+    </template>
+
     <BaseCard class="card">
-      <form class="searchBar" @submit.prevent="handleSearch">
-        <label class="searchField">
-          <span class="searchLabel">{{ t("publicRooms.filters.nameLabel") }}</span>
-          <BaseInput v-model="filters.name" />
-        </label>
-
-        <label class="searchField">
-          <span class="searchLabel">{{
-            t("publicRooms.filters.ownerUsernameLabel")
-          }}</span>
-          <BaseInput v-model="filters.ownerUsername" />
-        </label>
-
-        <BaseIconButton
-          class="searchButton"
-          type="submit"
-          :aria-label="t('publicRooms.filters.search')"
-        >
-          <AppIcon :icon="MagnifyingGlassIcon" :size="18" />
-        </BaseIconButton>
-      </form>
-
       <div v-if="isLoading" class="state">{{ t("common.loading") }}</div>
       <div v-else-if="error" class="state error">{{ error }}</div>
       <div v-else-if="displayRooms.length === 0" class="state">
@@ -238,6 +243,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.toolbarCard {
+  padding: 14px 18px;
+}
+
 .card {
   padding: 18px;
 }
@@ -247,7 +256,6 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 12px;
-  margin-bottom: 18px;
 }
 
 .searchField {
