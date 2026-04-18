@@ -171,6 +171,7 @@ watch(panelOptions, (nextPanels) => {
                     class="chatPanelFill"
                     :messages="mockChatMessages"
                     :send-label="t('room.mock.send')"
+                    self-author="Icezero"
                   />
                 </div>
 

@@ -2,7 +2,21 @@ import type { MemberStatus, RoomRole } from "@/features/room/types";
 
 export type ChatSection =
   | { id: number | string; type: "text"; content: string }
-  | { id: number | string; type: "image"; alt: string };
+  | {
+    id: number | string;
+    type: "emoji";
+    emojiId: string;
+    animated?: boolean;
+  }
+  | {
+    id: number | string;
+    type: "image";
+    alt: string;
+    src?: string;
+    kind?: "sticker" | "image";
+    assetId?: string;
+    animated?: boolean;
+  };
 
 export type ChatMessage = {
   id: number | string;

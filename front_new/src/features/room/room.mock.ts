@@ -138,11 +138,27 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
     },
     {
       id: 9,
+      author: "Mika",
+      avatarVariant: "room" as const,
+      role: "manager" as const,
+      status: "paused" as const,
+      sections: [
+        { id: "9-1", type: "text" as const, content: "我先丢一个平台 emoji 进来，看看 APNG 在消息区能不能直接播放。" },
+        {
+          id: "9-2",
+          type: "emoji" as const,
+          emojiId: "0",
+          animated: true,
+        },
+      ],
+    },
+    {
+      id: 10,
       author: "Tao",
       avatarVariant: "room" as const,
       role: "member" as const,
       status: "error" as const,
-      sections: [{ id: "9-1", type: "text" as const, content: "我加载报错了，可能得重新进房间。" }],
+      sections: [{ id: "10-1", type: "text" as const, content: "我加载报错了，可能得重新进房间。" }],
     },
   ];
 }

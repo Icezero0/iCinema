@@ -7,7 +7,17 @@ export default {
   chat: {
     toolbar: {
       emoji: "Insert emoji",
-      screenshot: "Send screenshot",
+      screenshot: "Screenshot",
+    },
+    emojiPanel: {
+      label: "Emoji panel",
+      tabs: {
+        qface: "QFace",
+        emoji: "Emoji",
+        stickers: "Stickers",
+      },
+      emptyEmoji: "Platform emoji will be added here later.",
+      emptyStickers: "Saved stickers will be added here later.",
     },
   },
   sidebar: {

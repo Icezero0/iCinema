@@ -8,7 +8,17 @@ export default {
   chat: {
     toolbar: {
       emoji: "插入表情",
-      screenshot: "发送截图",
+      screenshot: "截图",
+    },
+    emojiPanel: {
+      label: "表情面板",
+      tabs: {
+        qface: "QFace",
+        emoji: "Emoji",
+        stickers: "Stickers",
+      },
+      emptyEmoji: "这里后续接入平台 emoji。",
+      emptyStickers: "这里后续接入收藏贴纸。",
     },
   },
   sidebar: {

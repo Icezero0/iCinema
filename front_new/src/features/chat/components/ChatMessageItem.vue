@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import RoomMemberAvatar from "@/features/room/components/RoomMemberAvatar.vue";
+import { getChatEmojiLabel, getChatEmojiUrl } from "@/features/chat/emoji";
 import type { ChatSection } from "@/features/chat/types";
 
 defineProps<{
@@ -33,21 +34,40 @@ defineProps<{
       <div class="author">{{ author }}</div>
 
       <div class="bubble">
-        <div
+        <span
           v-for="section in sections"
           :key="section.id"
           class="section"
-          :class="`section-${section.type}`"
+          :class="[
+            `section-${section.type}`,
+            section.type === 'image' ? `section-image-${section.kind ?? 'image'}` : null,
+          ]"
         >
           <template v-if="section.type === 'text'">
             {{ section.content }}
           </template>
+          <template v-else-if="section.type === 'emoji'">
+            <img
+              v-if="getChatEmojiUrl(section.emojiId)"
+              class="inlineImage inlineImage-emoji"
+              :src="getChatEmojiUrl(section.emojiId) || undefined"
+              :alt="getChatEmojiLabel(section.emojiId)"
+            >
+            <span v-else>{{ getChatEmojiLabel(section.emojiId) }}</span>
+          </template>
           <template v-else>
-            <div class="imagePlaceholder">
+            <img
+              v-if="section.src"
+              class="inlineImage"
+              :class="`inlineImage-${section.kind ?? 'image'}`"
+              :src="section.src"
+              :alt="section.alt"
+            >
+            <div v-else class="imagePlaceholder">
               <span class="imageLabel">{{ section.alt }}</span>
             </div>
           </template>
-        </div>
+        </span>
       </div>
     </div>
   </div>
@@ -105,8 +125,7 @@ defineProps<{
   border-radius: 16px;
   border: 1px solid var(--c-border);
   background: color-mix(in srgb, var(--c-surface) 74%, var(--c-bg));
-  display: grid;
-  gap: 8px;
+  line-height: 1.6;
 }
 
 .section {
@@ -115,6 +134,22 @@ defineProps<{
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.section-image-image,
+.section-image-sticker {
+  display: block;
+  margin-top: 8px;
+}
+
+.section-image-emoji {
+  display: inline;
+  white-space: normal;
+}
+
+.section-emoji {
+  display: inline;
+  white-space: normal;
 }
 
 .imagePlaceholder {
@@ -126,6 +161,36 @@ defineProps<{
     linear-gradient(160deg, color-mix(in srgb, var(--c-surface) 82%, white), color-mix(in srgb, var(--c-surface) 72%, var(--c-bg)));
   display: grid;
   place-items: center;
+}
+
+.inlineImage {
+  display: block;
+  width: min(100%, 280px);
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 18%, var(--c-border));
+}
+
+.inlineImage-emoji {
+  display: inline-block;
+  width: 1.35em;
+  height: 1.35em;
+  margin: 0 0.12em 0 0.08em;
+  aspect-ratio: auto;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  vertical-align: -0.24em;
+}
+
+.inlineImage-sticker {
+  width: min(100%, 160px);
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: color-mix(in srgb, var(--c-surface) 88%, white);
 }
 
 .imageLabel {
