@@ -17,6 +17,37 @@ type ComposerNode = {
 };
 
 const TRAILING_CURSOR_TEXT = "\u200B";
+const INLINE_TAIL_POLICIES = {
+  inlineMedia: { selectable: true },
+  inlineEmoji: { selectable: false },
+} as const;
+
+type InlineTailNodeName = keyof typeof INLINE_TAIL_POLICIES;
+
+function isInlineTailNodeName(name: string): name is InlineTailNodeName {
+  return name in INLINE_TAIL_POLICIES;
+}
+
+function getInlineTailPolicy(name: string) {
+  return isInlineTailNodeName(name) ? INLINE_TAIL_POLICIES[name] : null;
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Failed to read clipboard image"));
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Failed to read clipboard image"));
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function moveAcrossTrailingCursor(
   editor: any,
@@ -42,10 +73,19 @@ function moveAcrossTrailingCursor(
 
   const hiddenStartPos = selection.from - before.nodeSize;
   const beforeHidden = state.doc.resolve(hiddenStartPos).nodeBefore;
+  const policy = beforeHidden ? getInlineTailPolicy(beforeHidden.type.name) : null;
 
-  if (beforeHidden?.type.name === "inlineMedia") {
+  if (beforeHidden && policy?.selectable) {
     const mediaStartPos = hiddenStartPos - beforeHidden.nodeSize;
     view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, mediaStartPos)));
+    return true;
+  }
+
+  if (policy) {
+    const targetPos = beforeHidden
+      ? hiddenStartPos - beforeHidden.nodeSize
+      : hiddenStartPos;
+    view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, targetPos)));
     return true;
   }
 
@@ -68,13 +108,12 @@ function deleteAcrossTrailingCursor(
     if (!before?.isText || !before.text?.endsWith(TRAILING_CURSOR_TEXT)) return false;
 
     const cursorPos = selection.from;
-    const mediaPos = cursorPos - before.nodeSize - 1;
-    if (mediaPos < 0) return false;
+    const anchorStartPos = cursorPos - before.nodeSize;
+    const beforeAnchor = state.doc.resolve(anchorStartPos).nodeBefore;
+    if (!beforeAnchor || !getInlineTailPolicy(beforeAnchor.type.name)) return false;
 
-    const mediaNode = state.doc.nodeAt(mediaPos);
-    if (!mediaNode || mediaNode.type.name !== "inlineMedia") return false;
-
-    view.dispatch(state.tr.delete(mediaPos, cursorPos));
+    const targetStartPos = anchorStartPos - beforeAnchor.nodeSize;
+    view.dispatch(state.tr.delete(targetStartPos, cursorPos));
     return true;
   }
 
@@ -82,15 +121,16 @@ function deleteAcrossTrailingCursor(
   if (!after?.isText || !after.text?.startsWith(TRAILING_CURSOR_TEXT)) return false;
 
   const cursorPos = selection.from;
-  const mediaNode = state.doc.nodeAt(cursorPos + after.nodeSize);
-  if (!mediaNode || mediaNode.type.name !== "inlineMedia") return false;
+  const beforeAnchor = state.doc.resolve(cursorPos).nodeBefore;
+  if (!beforeAnchor || !getInlineTailPolicy(beforeAnchor.type.name)) return false;
 
-  view.dispatch(state.tr.delete(cursorPos, cursorPos + after.nodeSize + mediaNode.nodeSize));
+  const targetStartPos = cursorPos - beforeAnchor.nodeSize;
+  view.dispatch(state.tr.delete(targetStartPos, cursorPos + after.nodeSize));
   return true;
 }
 
-const TrailingMediaCursor = Extension.create({
-  name: "trailingMediaCursor",
+const TrailingInlineTailAnchor = Extension.create({
+  name: "trailingInlineTailAnchor",
 
   addProseMirrorPlugins() {
     return [
@@ -102,7 +142,7 @@ const TrailingMediaCursor = Extension.create({
           doc.descendants((node, pos, parent, index) => {
             if (!parent || typeof index !== "number" || parent.type.name !== "paragraph") return;
 
-            if (node.type.name === "inlineMedia") {
+            if (getInlineTailPolicy(node.type.name)) {
               if (index !== parent.childCount - 1) {
                 return;
               }
@@ -122,7 +162,7 @@ const TrailingMediaCursor = Extension.create({
 
             const previousSibling = index > 0 ? parent.child(index - 1) : null;
             const isAfterTerminalMedia =
-              previousSibling?.type.name === "inlineMedia" &&
+              Boolean(previousSibling && getInlineTailPolicy(previousSibling.type.name)) &&
               index - 1 === parent.childCount - 2 &&
               node.text === TRAILING_CURSOR_TEXT;
 
@@ -276,9 +316,37 @@ function clearAndFocus() {
   syncEditorState();
 }
 
+async function insertClipboardImages(files: File[]) {
+  if (!editor.value || files.length === 0) return;
+
+  const resolvedImages = await Promise.all(
+    files.map(async (file, index) => ({
+      src: await readFileAsDataUrl(file),
+      alt: file.name || `Pasted image ${index + 1}`,
+    })),
+  );
+
+  const content = resolvedImages.map((image) => ({
+    type: "inlineMedia",
+    attrs: {
+      src: image.src,
+      alt: image.alt,
+      kind: "image",
+    },
+  }));
+
+  editor.value
+    .chain()
+    .focus()
+    .insertContent(content)
+    .run();
+
+  syncEditorState();
+}
+
 const editor = useEditor({
   extensions: [
-    TrailingMediaCursor,
+    TrailingInlineTailAnchor,
     StarterKit.configure({
       heading: false,
       bulletList: false,
@@ -304,6 +372,20 @@ const editor = useEditor({
       class: "tiptapEditor",
       role: "textbox",
       "aria-multiline": "true",
+    },
+    handlePaste: (_view, event) => {
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) return false;
+
+      const imageFiles = Array.from(clipboardData.items)
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file));
+
+      if (imageFiles.length === 0) return false;
+
+      void insertClipboardImages(imageFiles);
+      return true;
     },
     handleKeyDown: (_view, event) => {
       if (!editor.value) return false;
@@ -411,18 +493,16 @@ onBeforeUnmount(() => {
   background: rgb(59 130 246 / 0.28);
 }
 
-.field :deep(.tiptapEditor .inlineMediaNode) {
+.field :deep(.tiptapEditor .chatInlineMedia--editor) {
   margin: 4px;
-  vertical-align: text-bottom;
 }
 
-.field :deep(.tiptapEditor .inlineMediaNode-emoji) {
+.field :deep(.tiptapEditor .chatInlineMedia--editor.chatInlineMedia--emoji) {
   margin: 0;
-  vertical-align: -0.24em;
 }
 
-.field :deep(.tiptapEditor .inlineMediaNode.selectedRange),
-.field :deep(.tiptapEditor .inlineMediaNode.selectedNode) {
+.field :deep(.tiptapEditor .chatInlineMedia--selected-range),
+.field :deep(.tiptapEditor .chatInlineMedia--selected-node) {
   isolation: isolate;
 }
 </style>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import RoomMemberAvatar from "@/features/room/components/RoomMemberAvatar.vue";
 import { getChatEmojiLabel, getChatEmojiUrl } from "@/features/chat/emoji";
+import ChatInlineMedia from "./ChatInlineMedia.vue";
 import type { ChatSection } from "@/features/chat/types";
 
-defineProps<{
+const props = defineProps<{
   author: string;
   sections: ChatSection[];
   self?: boolean;
@@ -11,6 +13,22 @@ defineProps<{
   role?: "owner" | "manager" | "member";
   status?: "playing" | "paused" | "buffering" | "offline" | "error" | "idle";
 }>();
+
+const isStandaloneMediaMessage = computed(() => (
+  props.sections.length === 1 &&
+  props.sections[0].type === "image" &&
+  (props.sections[0].kind === "image" || props.sections[0].kind === "sticker")
+));
+
+function getSectionDisplayMode(section: ChatSection) {
+  if (section.type !== "image") return "inline" as const;
+  return isStandaloneMediaMessage.value ? "block" as const : "inline" as const;
+}
+
+function getSectionLayoutClass(section: ChatSection) {
+  if (section.type !== "image") return null;
+  return isStandaloneMediaMessage.value ? "section-image-block" : "section-image-inline";
+}
 </script>
 
 <template>
@@ -33,7 +51,10 @@ defineProps<{
     <div class="content">
       <div class="author">{{ author }}</div>
 
-      <div class="bubble">
+      <div
+        class="bubble"
+        :class="{ bubbleless: isStandaloneMediaMessage }"
+      >
         <span
           v-for="section in sections"
           :key="section.id"
@@ -41,31 +62,39 @@ defineProps<{
           :class="[
             `section-${section.type}`,
             section.type === 'image' ? `section-image-${section.kind ?? 'image'}` : null,
+            getSectionLayoutClass(section),
           ]"
         >
           <template v-if="section.type === 'text'">
             {{ section.content }}
           </template>
           <template v-else-if="section.type === 'emoji'">
-            <img
+            <ChatInlineMedia
               v-if="getChatEmojiUrl(section.emojiId)"
-              class="inlineImage inlineImage-emoji"
+              kind="emoji"
+              context="message"
+              display-mode="inline"
               :src="getChatEmojiUrl(section.emojiId) || undefined"
               :alt="getChatEmojiLabel(section.emojiId)"
-            >
+            />
             <span v-else>{{ getChatEmojiLabel(section.emojiId) }}</span>
           </template>
           <template v-else>
-            <img
+            <ChatInlineMedia
               v-if="section.src"
-              class="inlineImage"
-              :class="`inlineImage-${section.kind ?? 'image'}`"
+              :kind="(section.kind ?? 'image') as 'image' | 'sticker'"
+              context="message"
+              :display-mode="getSectionDisplayMode(section)"
               :src="section.src"
               :alt="section.alt"
-            >
-            <div v-else class="imagePlaceholder">
-              <span class="imageLabel">{{ section.alt }}</span>
-            </div>
+            />
+            <ChatInlineMedia
+              v-else
+              :kind="(section.kind ?? 'image') as 'image' | 'sticker'"
+              context="message"
+              :display-mode="getSectionDisplayMode(section)"
+              :alt="section.alt"
+            />
           </template>
         </span>
       </div>
@@ -116,6 +145,7 @@ defineProps<{
   line-height: 1.2;
   color: var(--c-text-muted);
   padding: 0 2px;
+  user-select: none;
 }
 
 .bubble {
@@ -128,6 +158,20 @@ defineProps<{
   line-height: 1.6;
 }
 
+.bubble.bubbleless {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.bubble::selection {
+  background: rgb(59 130 246 / 0.28);
+}
+
+.bubble *::selection {
+  background: rgb(59 130 246 / 0.28);
+}
+
 .section {
   font-size: 13px;
   color: var(--c-text);
@@ -138,8 +182,15 @@ defineProps<{
 
 .section-image-image,
 .section-image-sticker {
+  white-space: normal;
+}
+
+.section-image-block {
   display: block;
-  margin-top: 8px;
+}
+
+.section-image-inline {
+  display: inline;
 }
 
 .section-image-emoji {
@@ -150,51 +201,5 @@ defineProps<{
 .section-emoji {
   display: inline;
   white-space: normal;
-}
-
-.imagePlaceholder {
-  width: min(100%, 280px);
-  aspect-ratio: 4 / 3;
-  border-radius: 12px;
-  border: 1px dashed color-mix(in srgb, var(--c-primary) 22%, var(--c-border));
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--c-surface) 82%, white), color-mix(in srgb, var(--c-surface) 72%, var(--c-bg)));
-  display: grid;
-  place-items: center;
-}
-
-.inlineImage {
-  display: block;
-  width: min(100%, 280px);
-  max-width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--c-primary) 18%, var(--c-border));
-}
-
-.inlineImage-emoji {
-  display: inline-block;
-  width: 1.35em;
-  height: 1.35em;
-  margin: 0 0.12em 0 0.08em;
-  aspect-ratio: auto;
-  object-fit: contain;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  vertical-align: -0.24em;
-}
-
-.inlineImage-sticker {
-  width: min(100%, 160px);
-  aspect-ratio: 1;
-  object-fit: contain;
-  background: color-mix(in srgb, var(--c-surface) 88%, white);
-}
-
-.imageLabel {
-  font-size: 12px;
-  color: var(--c-text-muted);
 }
 </style>
