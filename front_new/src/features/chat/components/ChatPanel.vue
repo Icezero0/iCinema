@@ -2,7 +2,7 @@
 import { ref, watch } from "vue";
 import ChatMessageItem from "./ChatMessageItem.vue";
 import ChatComposer from "./ChatComposer.vue";
-import type { ChatMessage, ChatSection } from "@/features/chat/types";
+import type { ChatMessage, ChatSegment } from "@/features/chat/types";
 
 const props = defineProps<{
   messages: ChatMessage[];
@@ -14,7 +14,7 @@ const localMessages = ref<ChatMessage[]>([]);
 function cloneMessages(messages: ChatMessage[]) {
   return messages.map((message) => ({
     ...message,
-    sections: message.sections.map((section) => ({ ...section })),
+    segments: message.segments.map((segment) => ({ ...segment })),
   }));
 }
 
@@ -26,8 +26,8 @@ watch(
   { immediate: true },
 );
 
-function handleSend(sections: ChatSection[]) {
-  if (sections.length === 0) return;
+function handleSend(segments: ChatSegment[]) {
+  if (segments.length === 0) return;
 
   const nextMessage: ChatMessage = {
     id: `draft-${Date.now()}`,
@@ -36,7 +36,7 @@ function handleSend(sections: ChatSection[]) {
     avatarVariant: "room",
     role: "owner",
     status: "playing",
-    sections,
+    segments,
   };
 
   localMessages.value = [...localMessages.value, nextMessage];
@@ -50,7 +50,7 @@ function handleSend(sections: ChatSection[]) {
         v-for="message in localMessages"
         :key="message.id"
         :author="message.author"
-        :sections="message.sections"
+        :segments="message.segments"
         :self="message.self"
         :avatar-variant="message.avatarVariant"
         :role="message.role"

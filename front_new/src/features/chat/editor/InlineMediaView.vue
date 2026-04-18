@@ -11,10 +11,6 @@ const isCoveredBySelection = ref(false);
 const kind = computed(() => String(props.node.attrs.kind || "image"));
 const src = computed(() => String(props.node.attrs.src || ""));
 const alt = computed(() => String(props.node.attrs.alt || ""));
-const emojiId = computed(() => {
-  const value = props.node.attrs.emojiId;
-  return value == null ? "" : String(value);
-});
 
 function syncSelectionState() {
   const position = typeof props.getPos === "function" ? props.getPos() : null;

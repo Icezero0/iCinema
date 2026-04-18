@@ -7,7 +7,7 @@ import { NodeSelection, Plugin, TextSelection } from "@tiptap/pm/state";
 import InlineMedia from "@/features/chat/editor/InlineMedia";
 import InlineEmoji from "@/features/chat/editor/InlineEmoji";
 import { getChatEmojiLabel, getChatEmojiUrl } from "@/features/chat/emoji";
-import type { ChatSection } from "@/features/chat/types";
+import type { ChatSegment } from "@/features/chat/types";
 
 type ComposerNode = {
   type?: string;
@@ -213,12 +213,12 @@ function insertEmojiById(emojiId: string) {
   syncEditorState();
 }
 
-function appendTextBuffer(target: ChatSection[], textBuffer: string[]) {
+function appendTextBuffer(target: ChatSegment[], textBuffer: string[]) {
   const content = textBuffer.join("")
     .replace(/\u200B/g, "")
-    .replace(/\u00a0/g, " ")
-    .trim();
-  if (!content) {
+    .replace(/\u00a0/g, " ");
+
+  if (!content.trim()) {
     textBuffer.length = 0;
     return;
   }
@@ -231,9 +231,9 @@ function appendTextBuffer(target: ChatSection[], textBuffer: string[]) {
   textBuffer.length = 0;
 }
 
-function collectSectionsFromNode(
+function collectSegmentsFromNode(
   node: ComposerNode,
-  target: ChatSection[],
+  target: ChatSegment[],
   textBuffer: string[],
 ) {
   if (node.type === "text" && typeof node.text === "string") {
@@ -280,33 +280,28 @@ function collectSectionsFromNode(
     return;
   }
 
-  const isParagraph = node.type === "paragraph";
-  if (isParagraph && textBuffer.length > 0) {
-    textBuffer.push("\n");
-  }
-
   node.content?.forEach((child) => {
-    collectSectionsFromNode(child, target, textBuffer);
+    collectSegmentsFromNode(child, target, textBuffer);
   });
-
-  if (isParagraph) {
-    textBuffer.push("\n");
-  }
 }
 
-function collectSections() {
+function collectSegments() {
   if (!editor.value) return [];
 
   const json = editor.value.getJSON() as ComposerNode;
-  const sections: ChatSection[] = [];
+  const segments: ChatSegment[] = [];
   const textBuffer: string[] = [];
 
-  json.content?.forEach((node) => {
-    collectSectionsFromNode(node, sections, textBuffer);
+  json.content?.forEach((node, index) => {
+    collectSegmentsFromNode(node, segments, textBuffer);
+
+    if (node.type === "paragraph" && index < (json.content?.length ?? 0) - 1) {
+      textBuffer.push("\n");
+    }
   });
 
-  appendTextBuffer(sections, textBuffer);
-  return sections;
+  appendTextBuffer(segments, textBuffer);
+  return segments;
 }
 
 function clearAndFocus() {
@@ -420,7 +415,7 @@ const editor = useEditor({
 
 const canSend = computed(() => {
   editorVersion.value;
-  return collectSections().length > 0;
+  return collectSegments().length > 0;
 });
 
 watch(
@@ -433,7 +428,7 @@ watch(
 
 defineExpose({
   insertEmojiById,
-  collectSections,
+  collectSegments,
   clearAndFocus,
 });
 

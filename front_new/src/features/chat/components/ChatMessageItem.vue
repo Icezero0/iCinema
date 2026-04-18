@@ -3,11 +3,11 @@ import { computed } from "vue";
 import RoomMemberAvatar from "@/features/room/components/RoomMemberAvatar.vue";
 import { getChatEmojiLabel, getChatEmojiUrl } from "@/features/chat/emoji";
 import ChatInlineMedia from "./ChatInlineMedia.vue";
-import type { ChatSection } from "@/features/chat/types";
+import type { ChatSegment } from "@/features/chat/types";
 
 const props = defineProps<{
   author: string;
-  sections: ChatSection[];
+  segments: ChatSegment[];
   self?: boolean;
   avatarVariant?: "default" | "room";
   role?: "owner" | "manager" | "member";
@@ -15,19 +15,19 @@ const props = defineProps<{
 }>();
 
 const isStandaloneMediaMessage = computed(() => (
-  props.sections.length === 1 &&
-  props.sections[0].type === "image" &&
-  (props.sections[0].kind === "image" || props.sections[0].kind === "sticker")
+  props.segments.length === 1 &&
+  props.segments[0].type === "image" &&
+  (props.segments[0].kind === "image" || props.segments[0].kind === "sticker")
 ));
 
-function getSectionDisplayMode(section: ChatSection) {
-  if (section.type !== "image") return "inline" as const;
+function getSegmentDisplayMode(segment: ChatSegment) {
+  if (segment.type !== "image") return "inline" as const;
   return isStandaloneMediaMessage.value ? "block" as const : "inline" as const;
 }
 
-function getSectionLayoutClass(section: ChatSection) {
-  if (section.type !== "image") return null;
-  return isStandaloneMediaMessage.value ? "section-image-block" : "section-image-inline";
+function getSegmentLayoutClass(segment: ChatSegment) {
+  if (segment.type !== "image") return null;
+  return isStandaloneMediaMessage.value ? "segment-image-block" : "segment-image-inline";
 }
 </script>
 
@@ -56,44 +56,44 @@ function getSectionLayoutClass(section: ChatSection) {
         :class="{ bubbleless: isStandaloneMediaMessage }"
       >
         <span
-          v-for="section in sections"
-          :key="section.id"
-          class="section"
+          v-for="segment in segments"
+          :key="segment.id"
+          class="segment"
           :class="[
-            `section-${section.type}`,
-            section.type === 'image' ? `section-image-${section.kind ?? 'image'}` : null,
-            getSectionLayoutClass(section),
+            `segment-${segment.type}`,
+            segment.type === 'image' ? `segment-image-${segment.kind ?? 'image'}` : null,
+            getSegmentLayoutClass(segment),
           ]"
         >
-          <template v-if="section.type === 'text'">
-            {{ section.content }}
+          <template v-if="segment.type === 'text'">
+            {{ segment.content }}
           </template>
-          <template v-else-if="section.type === 'emoji'">
+          <template v-else-if="segment.type === 'emoji'">
             <ChatInlineMedia
-              v-if="getChatEmojiUrl(section.emojiId)"
+              v-if="getChatEmojiUrl(segment.emojiId)"
               kind="emoji"
               context="message"
               display-mode="inline"
-              :src="getChatEmojiUrl(section.emojiId) || undefined"
-              :alt="getChatEmojiLabel(section.emojiId)"
+              :src="getChatEmojiUrl(segment.emojiId) || undefined"
+              :alt="getChatEmojiLabel(segment.emojiId)"
             />
-            <span v-else>{{ getChatEmojiLabel(section.emojiId) }}</span>
+            <span v-else>{{ getChatEmojiLabel(segment.emojiId) }}</span>
           </template>
           <template v-else>
             <ChatInlineMedia
-              v-if="section.src"
-              :kind="(section.kind ?? 'image') as 'image' | 'sticker'"
+              v-if="segment.src"
+              :kind="(segment.kind ?? 'image') as 'image' | 'sticker'"
               context="message"
-              :display-mode="getSectionDisplayMode(section)"
-              :src="section.src"
-              :alt="section.alt"
+              :display-mode="getSegmentDisplayMode(segment)"
+              :src="segment.src"
+              :alt="segment.alt"
             />
             <ChatInlineMedia
               v-else
-              :kind="(section.kind ?? 'image') as 'image' | 'sticker'"
+              :kind="(segment.kind ?? 'image') as 'image' | 'sticker'"
               context="message"
-              :display-mode="getSectionDisplayMode(section)"
-              :alt="section.alt"
+              :display-mode="getSegmentDisplayMode(segment)"
+              :alt="segment.alt"
             />
           </template>
         </span>
@@ -172,7 +172,7 @@ function getSectionLayoutClass(section: ChatSection) {
   background: rgb(59 130 246 / 0.28);
 }
 
-.section {
+.segment {
   font-size: 13px;
   color: var(--c-text);
   line-height: 1.5;
@@ -180,25 +180,25 @@ function getSectionLayoutClass(section: ChatSection) {
   word-break: break-word;
 }
 
-.section-image-image,
-.section-image-sticker {
+.segment-image-image,
+.segment-image-sticker {
   white-space: normal;
 }
 
-.section-image-block {
+.segment-image-block {
   display: block;
 }
 
-.section-image-inline {
+.segment-image-inline {
   display: inline;
 }
 
-.section-image-emoji {
+.segment-image-emoji {
   display: inline;
   white-space: normal;
 }
 
-.section-emoji {
+.segment-emoji {
   display: inline;
   white-space: normal;
 }

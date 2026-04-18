@@ -70,7 +70,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "owner" as const,
       status: "playing" as const,
-      sections: [{ id: "1-1", type: "text" as const, content: t("room.mock.chatLineOne") }],
+      segments: [{ id: "1-1", type: "text" as const, content: t("room.mock.chatLineOne") }],
     },
     {
       id: 2,
@@ -78,7 +78,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "manager" as const,
       status: "paused" as const,
-      sections: [
+      segments: [
         { id: "2-1", type: "text" as const, content: t("room.mock.chatLineTwo") },
         { id: "2-2", type: "image" as const, alt: t("room.mock.chatImageAlt") },
       ],
@@ -89,7 +89,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "member" as const,
       status: "buffering" as const,
-      sections: [{ id: "3-1", type: "text" as const, content: t("room.mock.chatLineThree") }],
+      segments: [{ id: "3-1", type: "text" as const, content: t("room.mock.chatLineThree") }],
     },
     {
       id: 4,
@@ -97,7 +97,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "member" as const,
       status: "playing" as const,
-      sections: [{ id: "4-1", type: "text" as const, content: "我这边已经对上时间轴了，可以继续。" }],
+      segments: [{ id: "4-1", type: "text" as const, content: "我这边已经对上时间轴了，可以继续。" }],
     },
     {
       id: 5,
@@ -106,7 +106,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "owner" as const,
       status: "playing" as const,
-      sections: [{ id: "5-1", type: "text" as const, content: "好，那我继续往后拖 10 秒。" }],
+      segments: [{ id: "5-1", type: "text" as const, content: "好，那我继续往后拖 10 秒。" }],
     },
     {
       id: 6,
@@ -114,7 +114,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "manager" as const,
       status: "buffering" as const,
-      sections: [{ id: "6-1", type: "text" as const, content: "我这里刚刚卡了一下，现在恢复了。" }],
+      segments: [{ id: "6-1", type: "text" as const, content: "我这里刚刚卡了一下，现在恢复了。" }],
     },
     {
       id: 7,
@@ -122,7 +122,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "manager" as const,
       status: "paused" as const,
-      sections: [
+      segments: [
         { id: "7-1", type: "text" as const, content: "这张截图是刚刚那一帧，你们看看是不是这里开始不同步。" },
         { id: "7-2", type: "image" as const, alt: t("room.mock.chatImageAlt") },
       ],
@@ -134,7 +134,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "owner" as const,
       status: "playing" as const,
-      sections: [{ id: "8-1", type: "text" as const, content: "看到了，我这边先手动同步一次。" }],
+      segments: [{ id: "8-1", type: "text" as const, content: "看到了，我这边先手动同步一次。" }],
     },
     {
       id: 9,
@@ -142,7 +142,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "manager" as const,
       status: "paused" as const,
-      sections: [
+      segments: [
         { id: "9-1", type: "text" as const, content: "我先丢一个平台 emoji 进来，看看 APNG 在消息区能不能直接播放。" },
         {
           id: "9-2",
@@ -158,7 +158,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       avatarVariant: "room" as const,
       role: "member" as const,
       status: "error" as const,
-      sections: [{ id: "10-1", type: "text" as const, content: "我加载报错了，可能得重新进房间。" }],
+      segments: [{ id: "10-1", type: "text" as const, content: "我加载报错了，可能得重新进房间。" }],
     },
   ];
 }

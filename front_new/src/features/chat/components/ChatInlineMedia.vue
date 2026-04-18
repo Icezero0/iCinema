@@ -87,12 +87,36 @@ function selectMessageNode() {
   syncDomSelectionState();
 }
 
+function handleDocumentCopy(event: ClipboardEvent) {
+  if (
+    props.context !== "message" ||
+    !supportsNodeSelection.value ||
+    !mergedSelectedNode.value ||
+    !props.src ||
+    !event.clipboardData
+  ) {
+    return;
+  }
+
+  const escapedAlt = props.alt.replace(/"/g, "&quot;");
+  const escapedSrc = props.src.replace(/"/g, "&quot;");
+  const html = `<img src="${escapedSrc}" alt="${escapedAlt}" data-kind="${props.kind}">`;
+
+  event.clipboardData.setData("text/html", html);
+  event.clipboardData.setData("text/plain", props.alt);
+  event.preventDefault();
+}
+
 onMounted(() => {
+  if (props.context !== "message") return;
   document.addEventListener("selectionchange", syncDomSelectionState);
+  document.addEventListener("copy", handleDocumentCopy);
 });
 
 onBeforeUnmount(() => {
+  if (props.context !== "message") return;
   document.removeEventListener("selectionchange", syncDomSelectionState);
+  document.removeEventListener("copy", handleDocumentCopy);
 });
 </script>
 
@@ -121,6 +145,7 @@ onBeforeUnmount(() => {
       ]"
       :src="props.src"
       :alt="props.alt"
+      :data-kind="props.kind"
       draggable="false"
     >
     <span
