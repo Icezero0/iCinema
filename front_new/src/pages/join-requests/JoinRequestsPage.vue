@@ -22,13 +22,12 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useRoomsStore } from "@/stores/rooms.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { formatLocalDateTime } from "@/utils/datetime";
+import { resolveMediaUrl } from "@/infra/media";
 
 const { t } = useI18n();
 const auth = useAuthStore();
 const rooms = useRoomsStore();
 const entities = useEntitiesStore();
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
-
 const items = ref<RoomJoinRequest[]>([]);
 const isLoading = ref(false);
 const error = ref("");
@@ -124,9 +123,7 @@ function userName(user: RoomJoinRequest["initiator"]) {
 }
 
 function userAvatarUrl(user: RoomJoinRequest["initiator"]) {
-  const avatarPath = user?.avatar_url;
-  if (!avatarPath) return "";
-  return avatarPath.startsWith("http") ? avatarPath : `${apiOrigin}${avatarPath}`;
+  return resolveMediaUrl(user?.avatar_url);
 }
 
 function joiningUser(item: RoomJoinRequest) {
@@ -163,9 +160,7 @@ function actionTone(action: RoomJoinRequestAction) {
 }
 
 function actionAvatarUrl(user: RoomJoinRequest["room_action_by"]) {
-  const avatarPath = user?.avatar_url;
-  if (!avatarPath) return "";
-  return avatarPath.startsWith("http") ? avatarPath : `${apiOrigin}${avatarPath}`;
+  return resolveMediaUrl(user?.avatar_url);
 }
 
 function overallTone(status: RoomJoinRequestStatus) {

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
 import ChatMessageItem from "./ChatMessageItem.vue";
 import ChatComposer from "./ChatComposer.vue";
 import type { ChatMessage, ChatSegment } from "@/features/chat/types";
@@ -8,48 +7,39 @@ const props = defineProps<{
   messages: ChatMessage[];
   sendLabel?: string;
   selfAuthor?: string;
+  loading?: boolean;
+  sending?: boolean;
+  error?: string | null;
+  loadingLabel?: string;
+  emptyLabel?: string;
 }>();
-const localMessages = ref<ChatMessage[]>([]);
-
-function cloneMessages(messages: ChatMessage[]) {
-  return messages.map((message) => ({
-    ...message,
-    segments: message.segments.map((segment) => ({ ...segment })),
-  }));
-}
-
-watch(
-  () => props.messages,
-  (messages) => {
-    localMessages.value = cloneMessages(messages);
-  },
-  { immediate: true },
-);
+const emit = defineEmits<{
+  send: [segments: ChatSegment[]];
+}>();
 
 function handleSend(segments: ChatSegment[]) {
   if (segments.length === 0) return;
-
-  const nextMessage: ChatMessage = {
-    id: `draft-${Date.now()}`,
-    author: props.selfAuthor || "You",
-    self: true,
-    avatarVariant: "room",
-    role: "owner",
-    status: "playing",
-    segments,
-  };
-
-  localMessages.value = [...localMessages.value, nextMessage];
+  emit("send", segments);
 }
 </script>
 
 <template>
   <div class="panel">
     <div class="timeline">
+      <div v-if="loading" class="feedback">
+        <span class="feedbackText">{{ loadingLabel || "Loading…" }}</span>
+      </div>
+      <div v-else-if="error" class="feedback error">
+        <span class="feedbackText">{{ error }}</span>
+      </div>
+      <div v-else-if="messages.length === 0" class="feedback">
+        <span class="feedbackText">{{ emptyLabel || "No messages yet." }}</span>
+      </div>
       <ChatMessageItem
-        v-for="message in localMessages"
+        v-for="message in messages"
         :key="message.id"
         :author="message.author"
+        :avatar-url="message.avatarUrl"
         :segments="message.segments"
         :self="message.self"
         :avatar-variant="message.avatarVariant"
@@ -73,6 +63,7 @@ function handleSend(segments: ChatSegment[]) {
 .timeline {
   display: grid;
   gap: 10px;
+  align-content: start;
   padding-bottom: 6px;
   padding-left: 6px;
   padding-right: 6px;
@@ -80,6 +71,25 @@ function handleSend(segments: ChatSegment[]) {
   margin-right: -14px;
   border-bottom: 1px solid var(--c-border);
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.feedback {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--c-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.feedback.error {
+  color: var(--c-danger);
+}
+
+.feedbackText {
+  padding: 14px;
 }
 </style>

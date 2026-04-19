@@ -6,8 +6,9 @@ import type { MemberStatus, RoomRole } from "@/features/room/types";
 type RoomMemberPanelItem = {
   id: number;
   name: string;
+  avatarUrl?: string | null;
   role: RoomRole;
-  status: MemberStatus;
+  status: MemberStatus | "idle";
 };
 
 const props = defineProps<{
@@ -15,6 +16,9 @@ const props = defineProps<{
   searchPlaceholder: string;
   inviteLabel: string;
   leaveRoomLabel: string;
+  loading?: boolean;
+  loadingLabel?: string;
+  emptyLabel?: string;
 }>();
 
 const memberKeyword = ref("");
@@ -37,7 +41,13 @@ const filteredMembers = computed(() => {
     />
 
     <div class="membersScrollArea">
-      <div class="memberList">
+      <div v-if="loading" class="membersFeedback">
+        {{ loadingLabel || "Loading…" }}
+      </div>
+      <div v-else-if="filteredMembers.length === 0" class="membersFeedback">
+        {{ emptyLabel || "No members yet." }}
+      </div>
+      <div v-else class="memberList">
         <div
           v-for="member in filteredMembers"
           :key="member.id"
@@ -45,6 +55,7 @@ const filteredMembers = computed(() => {
         >
           <RoomMemberAvatar
             :name="member.name"
+            :src="member.avatarUrl"
             :role="member.role"
             :status="member.status"
           />
@@ -94,6 +105,16 @@ const filteredMembers = computed(() => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
+}
+
+.membersFeedback {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--c-text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 18px;
 }
 
 .memberItem {

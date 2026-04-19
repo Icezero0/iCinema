@@ -3,8 +3,7 @@ import { useI18n } from "vue-i18n";
 import type { Room } from "@/infra/api/rooms.api";
 import { computed } from "vue";
 import BasePill from "@/ui/base/BasePill.vue";
-
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
+import { resolveMediaUrl } from "@/infra/media";
 
 const { t } = useI18n();
 
@@ -24,11 +23,7 @@ const props = withDefaults(
   },
 );
 
-const ownerAvatarUrl = computed(() => {
-  const avatarPath = props.room.owner_avatar_url;
-  if (!avatarPath) return "";
-  return avatarPath.startsWith("http") ? avatarPath : `${apiOrigin}${avatarPath}`;
-});
+const ownerAvatarUrl = computed(() => resolveMediaUrl(props.room.owner_avatar_url));
 
 defineEmits<{
   (e: "action"): void;

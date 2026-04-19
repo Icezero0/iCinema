@@ -240,6 +240,9 @@ export default {
       "房间页骨架已经建立。下一阶段将在这里接入成员、设置、消息和实时能力。",
     invalidId: "房间 ID 无效。",
     loadFailed: "加载房间失败。",
+    chatEmpty: "房间里还没有消息。",
+    membersEmpty: "房间里还没有成员。",
+    membersLoadFailed: "加载房间成员失败。",
     mock: {
       tabs: {
         chat: "聊天",

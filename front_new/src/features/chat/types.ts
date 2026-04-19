@@ -21,6 +21,8 @@ export type ChatSegment =
 export type ChatMessage = {
   id: number | string;
   author: string;
+  authorUserId?: number | null;
+  avatarUrl?: string | null;
   segments: ChatSegment[];
   self?: boolean;
   avatarVariant?: "default" | "room";

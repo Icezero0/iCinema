@@ -29,9 +29,17 @@ type EntityRoom = {
   join_audit_mode?: Room["join_audit_mode"];
 };
 
+type EntityRoomMember = {
+  room_id: number;
+  user_id: number;
+  joined_at?: string | null;
+  role: RoomMember["role"];
+};
+
 type State = {
   usersById: Record<number, EntityUser>;
   roomsById: Record<number, EntityRoom>;
+  roomMembersByRoomId: Record<number, EntityRoomMember[]>;
   loadingUsers: Record<number, boolean>;
   loadingRooms: Record<number, boolean>;
 };
@@ -88,6 +96,7 @@ export const useEntitiesStore = defineStore("entities", {
   state: (): State => ({
     usersById: {},
     roomsById: {},
+    roomMembersByRoomId: {},
     loadingUsers: {},
     loadingRooms: {},
   }),
@@ -100,6 +109,16 @@ export const useEntitiesStore = defineStore("entities", {
     getRoom: (state) => {
       return (roomId: number | null | undefined) =>
         roomId ? state.roomsById[roomId] ?? null : null;
+    },
+    getRoomMembers: (state) => {
+      return (roomId: number | null | undefined) =>
+        roomId ? state.roomMembersByRoomId[roomId] ?? [] : [];
+    },
+    getRoomMember: (state) => {
+      return (roomId: number | null | undefined, userId: number | null | undefined) => {
+        if (!roomId || !userId) return null;
+        return state.roomMembersByRoomId[roomId]?.find((member) => member.user_id === userId) ?? null;
+      };
     },
   },
 
@@ -127,9 +146,23 @@ export const useEntitiesStore = defineStore("entities", {
     },
 
     upsertRoomMembers(members: Array<RoomMember | null | undefined>) {
+      const groupedMembers: Record<number, EntityRoomMember[]> = {};
+
       members.forEach((member) => {
         if (!member) return;
         this.upsertUser(member.user);
+        groupedMembers[member.room_id] = groupedMembers[member.room_id] ?? [];
+        groupedMembers[member.room_id].push({
+          room_id: member.room_id,
+          user_id: member.user_id,
+          joined_at: member.joined_at,
+          role: member.role,
+        });
+      });
+
+      Object.entries(groupedMembers).forEach(([roomId, roomMembers]) => {
+        const numericRoomId = Number(roomId);
+        this.roomMembersByRoomId[numericRoomId] = roomMembers;
       });
     },
 
@@ -202,6 +235,7 @@ export const useEntitiesStore = defineStore("entities", {
     clear() {
       this.usersById = {};
       this.roomsById = {};
+      this.roomMembersByRoomId = {};
       this.loadingUsers = {};
       this.loadingRooms = {};
     },

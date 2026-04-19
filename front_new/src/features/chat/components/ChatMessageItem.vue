@@ -7,6 +7,7 @@ import type { ChatSegment } from "@/features/chat/types";
 
 const props = defineProps<{
   author: string;
+  avatarUrl?: string | null;
   segments: ChatSegment[];
   self?: boolean;
   avatarVariant?: "default" | "room";
@@ -39,6 +40,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
       v-if="avatarVariant === 'room'"
       class="avatar"
       :name="author"
+      :src="avatarUrl"
       :role="role ?? 'member'"
       :status="status ?? 'idle'"
       :size="32"
@@ -47,6 +49,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
       v-else
       class="avatar"
       size="sm"
+      :src="avatarUrl || undefined"
       :name="author"
     />
 

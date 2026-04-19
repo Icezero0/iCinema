@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { patchMe, patchMyAvatar } from "@/infra/api/users.api";
+import { resolveMediaUrl } from "@/infra/media";
 
 import BaseCard from "@/ui/base/BaseCard.vue";
 import BaseButton from "@/ui/base/BaseButton.vue";
@@ -14,17 +15,10 @@ const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
-
 const me = computed(() => auth.me);
 
 const avatarPath = computed(() => me.value?.avatar_url ?? "");
-const avatarUrl = computed(() => {
-  if (!avatarPath.value) return "";
-  return avatarPath.value.startsWith("http")
-    ? avatarPath.value
-    : `${apiOrigin}${avatarPath.value}`;
-});
+const avatarUrl = computed(() => resolveMediaUrl(avatarPath.value));
 
 // 初始值（用来判断 dirty）
 const initial = ref({

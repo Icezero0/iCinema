@@ -10,6 +10,7 @@ import type { ChatMessage, ChatSegment } from "@/features/chat/types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useAssetsStore } from "@/stores/assets.store";
+import { resolveMediaUrl } from "@/infra/media";
 
 type RoomMessagesState = {
   items: MessageResponse[];
@@ -126,6 +127,8 @@ function mapChatSegmentsToMessageSegments(segments: ChatSegment[]) {
 function mapMessageToChatMessage(
   message: MessageResponse,
   currentUserId: number | null | undefined,
+  roomMemberRole: ChatMessage["role"],
+  avatarUrl: string | null,
 ): ChatMessage {
   const author =
     message.sender?.username ||
@@ -135,11 +138,15 @@ function mapMessageToChatMessage(
   return {
     id: message.id,
     author,
+    authorUserId: message.sender_user_id,
+    avatarUrl,
     self:
       typeof currentUserId === "number" &&
       currentUserId > 0 &&
       message.sender_user_id === currentUserId,
     avatarVariant: "room",
+    role: roomMemberRole,
+    status: "idle",
     segments: message.content.segments.map((segment, index) => {
       if (segment.type === "text") {
         return {
@@ -161,7 +168,7 @@ function mapMessageToChatMessage(
         id: `${message.id}-${index}`,
         type: "image",
         alt: segment.type === "sticker" ? "Sticker" : "Image",
-        src: segment.url ?? undefined,
+        src: resolveMediaUrl(segment.url) || undefined,
         kind: segment.type === "sticker" ? "sticker" : "image",
         assetId: String(segment.id),
       } satisfies ChatSegment;
@@ -192,9 +199,20 @@ export const useMessagesStore = defineStore("messages", {
         if (typeof roomId !== "number" || roomId <= 0) return [];
 
         const auth = useAuthStore();
+        const entities = useEntitiesStore();
         const items = state.rooms[roomId]?.items ?? [];
 
-        return items.map((message) => mapMessageToChatMessage(message, auth.me?.id));
+        return items.map((message) => {
+          const roomMember = entities.getRoomMember(roomId, message.sender_user_id);
+          const senderUser = entities.getUser(message.sender_user_id);
+          const avatarUrl = resolveMediaUrl(message.sender?.avatar_url ?? senderUser?.avatar_url);
+          return mapMessageToChatMessage(
+            message,
+            auth.me?.id,
+            roomMember?.role ?? "member",
+            avatarUrl,
+          );
+        });
       };
     },
   },
@@ -216,7 +234,7 @@ export const useMessagesStore = defineStore("messages", {
           if (segment.type === "image") {
             assets.upsertMessageImageAsset({
               id: segment.id,
-              url: segment.url,
+              url: resolveMediaUrl(segment.url),
             });
             return;
           }
@@ -224,7 +242,7 @@ export const useMessagesStore = defineStore("messages", {
           if (segment.type === "sticker") {
             assets.upsertMessageStickerAsset({
               id: segment.id,
-              url: segment.url,
+              url: resolveMediaUrl(segment.url),
             });
           }
         });

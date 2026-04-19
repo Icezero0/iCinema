@@ -240,6 +240,9 @@ export default {
       "The room page skeleton is now in place. Members, settings, messages, and realtime features will be added next.",
     invalidId: "Invalid room id.",
     loadFailed: "Failed to load the room.",
+    chatEmpty: "No messages in this room yet.",
+    membersEmpty: "No members in this room yet.",
+    membersLoadFailed: "Failed to load room members.",
     mock: {
       tabs: {
         chat: "Chat",

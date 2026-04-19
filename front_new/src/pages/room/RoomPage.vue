@@ -8,7 +8,7 @@ import {
   UserGroupIcon,
   ClipboardDocumentCheckIcon,
 } from "@heroicons/vue/24/outline";
-import { getRoomById, type Room } from "@/infra/api/rooms.api";
+import { getRoomById, getRoomMembers, type Room } from "@/infra/api/rooms.api";
 import BasePill from "@/ui/base/BasePill.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
 import ChatPanel from "@/features/chat/components/ChatPanel.vue";
@@ -17,15 +17,25 @@ import RoomRequestItem from "@/features/room/components/RoomRequestItem.vue";
 import RoomSettingsPanel from "@/features/room/components/RoomSettingsPanel.vue";
 import RoomMembersPanel from "@/features/room/components/RoomMembersPanel.vue";
 import type { RoomPanelKey, RoomRequestMockItem, RoomRole } from "@/features/room/types";
-import { createMockChatMessages, createMockMembers, createMockRequests } from "@/features/room/room.mock";
+import type { ChatSegment } from "@/features/chat/types";
+import { createMockRequests } from "@/features/room/room.mock";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
+import { useMessagesStore } from "@/stores/messages.store";
+import { useEntitiesStore } from "@/stores/entities.store";
+import { useAuthStore } from "@/stores/auth.store";
+import { resolveMediaUrl } from "@/infra/media";
 
 const { t } = useI18n();
 const route = useRoute();
+const auth = useAuthStore();
+const entitiesStore = useEntitiesStore();
+const messagesStore = useMessagesStore();
 
 const room = ref<Room | null>(null);
 const isLoading = ref(false);
 const error = ref("");
+const membersLoading = ref(false);
+const membersError = ref("");
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -60,9 +70,24 @@ const localSyncOptions = computed(() => [
   { value: "manual-first", label: t("room.mock.localSyncModes.manualFirst") },
 ]);
 
-const mockMembers = computed(() => createMockMembers());
 const mockRequests = computed<RoomRequestMockItem[]>(() => createMockRequests(t));
-const mockChatMessages = computed(() => createMockChatMessages(t));
+const roomMessagesState = computed(() => messagesStore.getRoomState(roomId.value));
+const roomChatMessages = computed(() => messagesStore.getRoomChatMessages(roomId.value));
+const entityRoomMembers = computed(() => entitiesStore.getRoomMembers(roomId.value));
+const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
+  const user = entitiesStore.getUser(member.user_id);
+
+  return {
+    id: member.user_id,
+    name:
+      user?.username ||
+      user?.email ||
+      `User #${member.user_id}`,
+    avatarUrl: resolveMediaUrl(user?.avatar_url),
+    role: member.role,
+    status: "idle" as const,
+  };
+}));
 const layout = useRoomWorkspaceLayout({
   activePanel,
   roomId: computed(() => room.value?.id),
@@ -73,6 +98,21 @@ const workspaceCardStyle = computed(() => layout.workspaceCardStyle.value);
 
 function togglePlayback() {
   isPlaying.value = !isPlaying.value;
+}
+
+function syncCurrentUserRole() {
+  const meId = auth.me?.id;
+  if (!meId) return;
+
+  if (room.value?.owner_id === meId) {
+    currentUserRole.value = "owner";
+    return;
+  }
+
+  const selfMember = entityRoomMembers.value.find((member) => member.user_id === meId);
+  if (selfMember) {
+    currentUserRole.value = selfMember.role;
+  }
 }
 
 async function fetchRoom() {
@@ -86,6 +126,8 @@ async function fetchRoom() {
 
   try {
     room.value = await getRoomById(roomId.value);
+    entitiesStore.upsertRoom(room.value);
+    syncCurrentUserRole();
   } catch (e: any) {
     room.value = null;
     error.value =
@@ -97,12 +139,66 @@ async function fetchRoom() {
   }
 }
 
-onMounted(fetchRoom);
-watch(roomId, fetchRoom);
+async function fetchRoomMembers() {
+  if (!roomId.value) {
+    membersError.value = t("room.invalidId");
+    return;
+  }
+
+  membersLoading.value = true;
+  membersError.value = "";
+
+  try {
+    const response = await getRoomMembers(roomId.value);
+    entitiesStore.upsertRoomMembers(response.items);
+    syncCurrentUserRole();
+  } catch (e: any) {
+    membersError.value =
+      e?.response?.data?.detail ||
+      e?.message ||
+      t("room.membersLoadFailed");
+  } finally {
+    membersLoading.value = false;
+  }
+}
+
+async function fetchRoomMessages() {
+  if (!roomId.value) return;
+
+  try {
+    await messagesStore.refreshRoomMessages(roomId.value);
+  } catch {
+    // messages.store already keeps the error state for the panel
+  }
+}
+
+async function handleSend(segments: ChatSegment[]) {
+  if (!roomId.value) return;
+
+  try {
+    await messagesStore.sendSegments(roomId.value, segments);
+  } catch {
+    // messages.store already keeps the error state for the panel
+  }
+}
+
+onMounted(() => {
+  void fetchRoom();
+  void fetchRoomMessages();
+  void fetchRoomMembers();
+});
+watch(roomId, () => {
+  void fetchRoom();
+  void fetchRoomMessages();
+  void fetchRoomMembers();
+});
 watch(panelOptions, (nextPanels) => {
   if (!nextPanels.some((panel) => panel.key === activePanel.value)) {
     activePanel.value = nextPanels[0]?.key ?? "chat";
   }
+});
+watch(() => auth.me?.id, () => {
+  syncCurrentUserRole();
 });
 </script>
 
@@ -165,74 +261,80 @@ watch(panelOptions, (nextPanels) => {
             >
               <AppTabs v-model="activePanel" :items="panelOptions" />
 
-              <Transition name="workspacePanel" mode="out-in">
-                <div v-if="activePanel === 'chat'" key="chat" class="panelBody chatPanelBody">
-                  <ChatPanel
-                    class="chatPanelFill"
-                    :messages="mockChatMessages"
-                    :send-label="t('room.mock.send')"
-                    self-author="Icezero"
+              <div
+                v-show="activePanel === 'chat'"
+                class="panelBody chatPanelBody"
+              >
+                <ChatPanel
+                  class="chatPanelFill"
+                  :messages="roomChatMessages"
+                  :send-label="t('room.mock.send')"
+                  :loading="roomMessagesState.isLoading"
+                  :error="roomMessagesState.error"
+                  :loading-label="t('common.loading')"
+                  :empty-label="t('room.chatEmpty')"
+                  self-author="Icezero"
+                  @send="handleSend"
+                />
+              </div>
+
+              <div
+                v-show="activePanel === 'members'"
+                class="panelBody membersPanelBody"
+              >
+                <RoomMembersPanel
+                  :members="roomMemberItems"
+                  :search-placeholder="t('room.mock.membersSearchPlaceholder')"
+                  :invite-label="t('room.mock.invite')"
+                  :leave-room-label="t('room.mock.leaveRoom')"
+                  :loading="membersLoading"
+                  :loading-label="t('common.loading')"
+                  :empty-label="membersError || t('room.membersEmpty')"
+                />
+              </div>
+
+              <div
+                v-show="activePanel === 'requests'"
+                class="panelBody"
+              >
+                <div class="requestList">
+                  <RoomRequestItem
+                    v-for="request in mockRequests"
+                    :key="request.id"
+                    :user="request.user"
+                    :time="request.time"
+                    :note="request.note"
+                    :approve-label="t('room.mock.approve')"
+                    :reject-label="t('room.mock.reject')"
                   />
                 </div>
+              </div>
 
-                <div
-                  v-else-if="activePanel === 'members'"
-                  key="members"
-                  class="panelBody membersPanelBody"
-                >
-                  <RoomMembersPanel
-                    :members="mockMembers"
-                    :search-placeholder="t('room.mock.membersSearchPlaceholder')"
-                    :invite-label="t('room.mock.invite')"
-                    :leave-room-label="t('room.mock.leaveRoom')"
-                  />
-                </div>
-
-                <div
-                  v-else-if="activePanel === 'requests'"
-                  key="requests"
-                  class="panelBody"
-                >
-                  <div class="requestList">
-                    <RoomRequestItem
-                      v-for="request in mockRequests"
-                      :key="request.id"
-                      :user="request.user"
-                      :time="request.time"
-                      :note="request.note"
-                      :approve-label="t('room.mock.approve')"
-                      :reject-label="t('room.mock.reject')"
-                    />
-                  </div>
-                </div>
-
-                <div
-                  v-else
-                  key="settings"
-                  class="panelBody"
-                >
-                  <RoomSettingsPanel
-                    :room="room"
-                    :room-name-label="t('room.mock.settingLabels.roomName')"
-                    :visibility-label="t('room.mock.settingLabels.visibility')"
-                    :sync-policy-label="t('room.mock.settingLabels.policy')"
-                    :sync-policy-value="t('room.mock.syncPolicy')"
-                    :sync-permission-label="t('room.mock.settingLabels.permission')"
-                    :sync-permission-value="t('room.mock.syncPermission')"
-                    :local-sync-title="t('room.mock.localSyncTitle')"
-                    :local-sync-hint="t('room.mock.localSyncHint')"
-                    :info-title="t('room.mock.settingGroups.info')"
-                    :sync-title="t('room.mock.settingGroups.sync')"
-                    :advanced-title="t('room.mock.settingGroups.advanced')"
-                    :advanced-hint="t('room.mock.advancedHint')"
-                    :public-label="t('room.fields.public')"
-                    :private-label="t('room.fields.private')"
-                    :local-sync-strategy="localSyncStrategy"
-                    :local-sync-options="localSyncOptions"
-                    @update:local-sync-strategy="localSyncStrategy = $event"
-                  />
-                </div>
-              </Transition>
+              <div
+                v-show="activePanel === 'settings'"
+                class="panelBody"
+              >
+                <RoomSettingsPanel
+                  :room="room"
+                  :room-name-label="t('room.mock.settingLabels.roomName')"
+                  :visibility-label="t('room.mock.settingLabels.visibility')"
+                  :sync-policy-label="t('room.mock.settingLabels.policy')"
+                  :sync-policy-value="t('room.mock.syncPolicy')"
+                  :sync-permission-label="t('room.mock.settingLabels.permission')"
+                  :sync-permission-value="t('room.mock.syncPermission')"
+                  :local-sync-title="t('room.mock.localSyncTitle')"
+                  :local-sync-hint="t('room.mock.localSyncHint')"
+                  :info-title="t('room.mock.settingGroups.info')"
+                  :sync-title="t('room.mock.settingGroups.sync')"
+                  :advanced-title="t('room.mock.settingGroups.advanced')"
+                  :advanced-hint="t('room.mock.advancedHint')"
+                  :public-label="t('room.fields.public')"
+                  :private-label="t('room.fields.private')"
+                  :local-sync-strategy="localSyncStrategy"
+                  :local-sync-options="localSyncOptions"
+                  @update:local-sync-strategy="localSyncStrategy = $event"
+                />
+              </div>
             </BaseCard>
           </aside>
         </div>

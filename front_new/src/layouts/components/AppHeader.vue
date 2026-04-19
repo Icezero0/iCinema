@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useNotificationsStore } from "@/stores/notifications.store";
+import { resolveMediaUrl } from "@/infra/media";
 
 import AppIcon from "@/ui/base/AppIcon.vue";
 import BaseIconButton from "@/ui/base/BaseIconButton.vue";
@@ -23,18 +24,10 @@ const router = useRouter();
 const auth = useAuthStore();
 const notifications = useNotificationsStore();
 
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
-
 const userEmail = computed(() => auth.me?.email || "null@example.com");
 const userName = computed(() => auth.me?.username || "User");
 const avatarPath = computed(() => auth.me?.avatar_url || "");
-
-const avatarUrl = computed(() => {
-  if (!avatarPath.value) return "";
-  return avatarPath.value.startsWith("http")
-    ? avatarPath.value
-    : `${apiOrigin}${avatarPath.value}`;
-});
+const avatarUrl = computed(() => resolveMediaUrl(avatarPath.value));
 
 function toggleSidebar() {
   emit("update:sidebarOpen", !props.sidebarOpen);
