@@ -10,6 +10,8 @@ const props = defineProps<{
   avatarUrl?: string | null;
   segments: ChatSegment[];
   self?: boolean;
+  showAvatar?: boolean;
+  showAuthor?: boolean;
   avatarVariant?: "default" | "room";
   role?: "owner" | "manager" | "member";
   status?: "playing" | "paused" | "buffering" | "offline" | "error" | "idle";
@@ -35,9 +37,9 @@ function getSegmentLayoutClass(segment: ChatSegment) {
 </script>
 
 <template>
-  <div class="messageRow" :class="{ self }">
+  <div class="messageRow" :class="{ self, compact: showAvatar === false }">
     <RoomMemberAvatar
-      v-if="avatarVariant === 'room'"
+      v-if="showAvatar !== false && avatarVariant === 'room'"
       class="avatar"
       :name="author"
       :src="avatarUrl"
@@ -46,15 +48,16 @@ function getSegmentLayoutClass(segment: ChatSegment) {
       :size="32"
     />
     <BaseAvatar
-      v-else
+      v-else-if="showAvatar !== false"
       class="avatar"
       size="sm"
       :src="avatarUrl || undefined"
       :name="author"
     />
+    <div v-else class="avatarSpacer" aria-hidden="true" />
 
-    <div class="content">
-      <div class="author">{{ author }}</div>
+    <div class="content" :class="{ compact: showAuthor === false }">
+      <div v-if="showAuthor !== false" class="author">{{ author }}</div>
 
       <div
         class="bubble"
@@ -92,6 +95,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
               :kind="(segment.kind ?? 'image') as 'image' | 'sticker'"
               context="message"
               :display-mode="getSegmentDisplayMode(segment)"
+              :asset-id="segment.assetId"
               :src="segment.src"
               :alt="segment.alt"
             />
@@ -100,6 +104,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
               :kind="(segment.kind ?? 'image') as 'image' | 'sticker'"
               context="message"
               :display-mode="getSegmentDisplayMode(segment)"
+              :asset-id="segment.assetId"
               :alt="segment.alt"
             />
           </template>
@@ -124,7 +129,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
 }
 
 .messageRow.self .content {
-  align-items: flex-end;
+  align-items: end;
 }
 
 .messageRow.self .author {
@@ -140,11 +145,27 @@ function getSegmentLayoutClass(segment: ChatSegment) {
   flex: 0 0 auto;
 }
 
+.avatarSpacer {
+  flex: 0 0 auto;
+  width: var(--avatar-size);
+  height: 1px;
+}
+
 .content {
   flex: 0 1 auto;
   display: grid;
   gap: 6px;
   max-width: min(calc(100% - ((var(--avatar-size) * 2) + var(--avatar-gap))), 420px);
+  align-items: start;
+  justify-items: start;
+}
+
+.content.compact {
+  gap: 0;
+}
+
+.messageRow.self .content {
+  justify-items: end;
 }
 
 .author {
@@ -158,17 +179,23 @@ function getSegmentLayoutClass(segment: ChatSegment) {
 .bubble {
   width: fit-content;
   max-width: 100%;
-  padding: 12px;
+  padding: 9px 11px;
   border-radius: 16px;
   border: 1px solid var(--c-border);
   background: color-mix(in srgb, var(--c-surface) 74%, var(--c-bg));
   line-height: 1.6;
+  justify-self: start;
+}
+
+.messageRow.self .bubble {
+  justify-self: end;
 }
 
 .bubble.bubbleless {
   padding: 0;
   border: 0;
   background: transparent;
+  line-height: 0;
 }
 
 .bubble::selection {
@@ -194,6 +221,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
 
 .segment-image-block {
   display: block;
+  line-height: 0;
 }
 
 .segment-image-inline {

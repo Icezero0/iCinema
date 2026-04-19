@@ -16,6 +16,30 @@ type ComposerNode = {
   content?: ComposerNode[];
 };
 
+type EditorInsertNode =
+  | { type: "text"; text: string }
+  | { type: "hardBreak" }
+  | {
+    type: "inlineEmoji";
+    attrs: {
+      src: string;
+      alt: string;
+      kind: "emoji";
+      emojiId: string;
+      animated: boolean;
+    };
+  }
+  | {
+    type: "inlineMedia";
+    attrs: {
+      src: string;
+      alt: string;
+      kind: "image" | "sticker";
+      assetId: string | null;
+      animated: boolean;
+    };
+  };
+
 const TRAILING_CURSOR_TEXT = "\u200B";
 const INLINE_TAIL_POLICIES = {
   inlineMedia: { selectable: true },
@@ -47,6 +71,139 @@ function readFileAsDataUrl(file: File) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function appendEditorInsertText(target: EditorInsertNode[], text: string) {
+  if (!text) return;
+
+  const previous = target[target.length - 1];
+  if (previous?.type === "text") {
+    previous.text += text;
+    return;
+  }
+
+  target.push({
+    type: "text",
+    text,
+  });
+}
+
+function appendEditorHardBreak(target: EditorInsertNode[]) {
+  const previous = target[target.length - 1];
+  if (previous?.type === "hardBreak") return;
+
+  target.push({ type: "hardBreak" });
+}
+
+function normalizeEditorInsertNodes(nodes: EditorInsertNode[]) {
+  const normalized: EditorInsertNode[] = [];
+
+  nodes.forEach((node) => {
+    if (node.type === "text") {
+      appendEditorInsertText(normalized, node.text);
+      return;
+    }
+
+    if (node.type === "hardBreak") {
+      appendEditorHardBreak(normalized);
+      return;
+    }
+
+    normalized.push(node);
+  });
+
+  while (normalized[0]?.type === "hardBreak") {
+    normalized.shift();
+  }
+
+  while (normalized[normalized.length - 1]?.type === "hardBreak") {
+    normalized.pop();
+  }
+
+  return normalized;
+}
+
+function parseClipboardMediaImage(image: HTMLImageElement): EditorInsertNode[] {
+  const kind = image.getAttribute("data-kind");
+  const src = image.getAttribute("src") ?? undefined;
+  const alt = image.getAttribute("alt") ?? undefined;
+  const animated = image.getAttribute("data-animated") === "true";
+
+  if (kind === "emoji") {
+    const emojiId = image.getAttribute("data-emoji-id");
+    if (!emojiId || !src) return [];
+
+    return [{
+      type: "inlineEmoji",
+      attrs: {
+        src,
+        alt: alt || "",
+        kind: "emoji",
+        emojiId,
+        animated,
+      },
+    }];
+  }
+
+  if (kind !== "image" && kind !== "sticker") return [];
+  if (!src) return [];
+
+  return [{
+    type: "inlineMedia",
+    attrs: {
+      src,
+      alt: alt || (kind === "sticker" ? "Sticker" : "Image"),
+      kind,
+      assetId: image.getAttribute("data-asset-id"),
+      animated,
+    },
+  }];
+}
+
+function walkClipboardNode(node: Node, target: EditorInsertNode[]) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    appendEditorInsertText(target, node.textContent ?? "");
+    return;
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return;
+  }
+
+  if (node.tagName === "BR") {
+    appendEditorHardBreak(target);
+    return;
+  }
+
+  if (node.tagName === "IMG" && node.hasAttribute("data-kind")) {
+    target.push(...parseClipboardMediaImage(node as HTMLImageElement));
+    return;
+  }
+
+  const isBlockLike = /^(P|DIV|LI|UL|OL|BLOCKQUOTE|PRE)$/.test(node.tagName);
+  const beforeLength = target.length;
+
+  Array.from(node.childNodes).forEach((child) => {
+    walkClipboardNode(child, target);
+  });
+
+  if (isBlockLike && target.length > beforeLength) {
+    appendEditorHardBreak(target);
+  }
+}
+
+function parseClipboardHtmlToContent(html: string) {
+  if (!html || typeof DOMParser === "undefined") return null;
+
+  const documentFragment = new DOMParser().parseFromString(html, "text/html");
+  const content: EditorInsertNode[] = [];
+
+  Array.from(documentFragment.body.childNodes).forEach((node) => {
+    walkClipboardNode(node, content);
+  });
+
+  const normalized = normalizeEditorInsertNodes(content);
+  return normalized.length > 0 ? normalized : null;
 }
 
 function moveCursorBeforeTrailingCursor(editor: any) {
@@ -211,6 +368,7 @@ const TrailingInlineTailAnchor = Extension.create({
 
 const emit = defineEmits<{
   "can-send-change": [value: boolean];
+  "submit-request": [];
 }>();
 
 const editorVersion = ref(0);
@@ -250,6 +408,32 @@ function insertText(text: string) {
     .chain()
     .focus()
     .insertContent(text)
+    .run();
+
+  syncEditorState();
+}
+
+function insertSticker(sticker: {
+  id: number;
+  url: string;
+  alt?: string;
+}) {
+  if (!editor.value || !sticker.url) return;
+
+  moveCursorBeforeTrailingCursor(editor.value);
+
+  editor.value
+    .chain()
+    .focus()
+    .insertContent({
+      type: "inlineMedia",
+      attrs: {
+        src: sticker.url,
+        alt: sticker.alt || `Sticker ${sticker.id}`,
+        kind: "sticker",
+        assetId: String(sticker.id),
+      },
+    })
     .run();
 
   syncEditorState();
@@ -343,6 +527,18 @@ function collectSegments() {
   });
 
   appendTextBuffer(segments, textBuffer);
+
+  const lastSegment = segments[segments.length - 1];
+  if (lastSegment?.type === "text") {
+    const trimmedContent = lastSegment.content.trimEnd();
+
+    if (trimmedContent) {
+      lastSegment.content = trimmedContent;
+    } else {
+      segments.pop();
+    }
+  }
+
   return segments;
 }
 
@@ -414,6 +610,20 @@ const editor = useEditor({
       const clipboardData = event.clipboardData;
       if (!clipboardData) return false;
 
+      const mediaContent = parseClipboardHtmlToContent(
+        clipboardData.getData("text/html"),
+      );
+
+      if (mediaContent && editor.value) {
+        editor.value
+          .chain()
+          .focus()
+          .insertContent(mediaContent)
+          .run();
+        syncEditorState();
+        return true;
+      }
+
       const imageFiles = Array.from(clipboardData.items)
         .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
         .map((item) => item.getAsFile())
@@ -426,6 +636,13 @@ const editor = useEditor({
     },
     handleKeyDown: (_view, event) => {
       if (!editor.value) return false;
+      if (event.isComposing) return false;
+
+      if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        emit("submit-request");
+        return true;
+      }
 
       if (event.key === "ArrowRight" && moveAcrossTrailingCursor(editor.value, "right", event.shiftKey)) {
         event.preventDefault();
@@ -470,6 +687,7 @@ watch(
 
 defineExpose({
   insertEmojiById,
+  insertSticker,
   insertText,
   collectSegments,
   clearAndFocus,

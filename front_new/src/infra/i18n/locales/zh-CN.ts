@@ -21,6 +21,12 @@ export default {
         recent: "最近使用",
         allQface: "全部表情",
         allUnicodeEmoji: "全部 Unicode Emoji",
+        stickers: "贴纸",
+        stickerActions: {
+          title: "功能",
+          upload: "上传贴纸",
+          edit: "编辑贴纸",
+        },
         unicodeEmojiCategories: {
           faces: "表情",
           gestures: "手势",
@@ -31,7 +37,21 @@ export default {
         },
       },
       emptyUnicodeEmoji: "这里后续接入更多 Unicode Emoji。",
-      emptyStickers: "这里后续接入收藏贴纸。",
+      emptyStickers: "你还没有收藏任何贴纸。",
+      stickerUpload: {
+        duplicate: "这张贴纸已经在你的贴纸库里了。",
+      },
+    },
+    mediaMenu: {
+      view: "查看",
+      copy: "复制",
+      collect: "收藏",
+      save: "保存",
+      collectSuccess: "已加入贴纸库。",
+      collectFailed: "收藏失败。",
+      collectImageUnsupported: "当前后端暂不支持把图片直接收藏为贴纸。",
+      copyFailed: "复制失败。",
+      saveFailed: "保存失败。",
     },
   },
   sidebar: {
@@ -243,6 +263,8 @@ export default {
     chatEmpty: "房间里还没有消息。",
     membersEmpty: "房间里还没有成员。",
     membersLoadFailed: "加载房间成员失败。",
+    requestsEmpty: "当前没有待处理的入房请求。",
+    requestsLoadFailed: "加载房间请求失败。",
     mock: {
       tabs: {
         chat: "聊天",
@@ -307,8 +329,6 @@ export default {
       requestInvite: "被邀请加入当前房间",
       invite: "邀请",
       leaveRoom: "退出房间",
-      approve: "同意",
-      reject: "拒绝",
       settingsTitle: "房间设置",
       settingsSub: "设置区分层展示，把高频项和高级项自然拆开。",
       settingGroups: {

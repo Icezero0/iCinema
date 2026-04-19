@@ -8,6 +8,7 @@ import {
 import { useI18n } from "vue-i18n";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import type { ChatSegment } from "@/features/chat/types";
+import type { ChatEmojiPickerSelection } from "./emoji-picker/types";
 import ChatEmojiPicker from "./ChatEmojiPicker.vue";
 import ChatRichEditor from "./ChatRichEditor.vue";
 
@@ -18,10 +19,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   send: [segments: ChatSegment[]];
 }>();
-
-type PickerSelection =
-  | { kind: "qface"; emojiId: string }
-  | { kind: "unicode_emoji"; value: string };
 
 const { t } = useI18n();
 
@@ -35,6 +32,7 @@ const emojiPanelStyle = ref<Record<string, string>>({
 });
 const editorRef = ref<{
   insertEmojiById: (emojiId: string) => void;
+  insertSticker: (sticker: { id: number; url: string; alt?: string }) => void;
   insertText: (text: string) => void;
   collectSegments: () => ChatSegment[];
   clearAndFocus: () => void;
@@ -91,9 +89,15 @@ function handleCanSendChange(value: boolean) {
   canSend.value = value;
 }
 
-function handleSelectEmoji(selection: PickerSelection) {
+function handleSelectEmoji(selection: ChatEmojiPickerSelection) {
   if (selection.kind === "qface") {
     editorRef.value?.insertEmojiById(selection.emojiId);
+  } else if (selection.kind === "sticker") {
+    editorRef.value?.insertSticker({
+      id: selection.stickerId,
+      url: selection.url,
+      alt: selection.alt,
+    });
   } else {
     editorRef.value?.insertText(selection.value);
   }
@@ -190,6 +194,7 @@ onBeforeUnmount(() => {
     <ChatRichEditor
       ref="editorRef"
       @can-send-change="handleCanSendChange"
+      @submit-request="sendMockMessage"
     />
   </div>
 </template>

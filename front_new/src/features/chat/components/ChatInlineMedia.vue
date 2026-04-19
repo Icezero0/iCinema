@@ -1,10 +1,68 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  ArrowDownTrayIcon,
+  ClipboardDocumentIcon,
+  EyeIcon,
+  HeartIcon,
+} from "@heroicons/vue/24/outline";
+import { useI18n } from "vue-i18n";
+import { useMediaViewerStore } from "@/stores/media-viewer.store";
+import { useStickersStore } from "@/stores/stickers.store";
+import { useToastsStore } from "@/stores/toasts.store";
+import BaseMenuItem from "@/ui/base/BaseMenuItem.vue";
+
+type SelectionSubscriber = () => void;
+type CopySubscriber = (event: ClipboardEvent) => void;
+
+const selectionSubscribers = new Set<SelectionSubscriber>();
+const copySubscribers = new Set<CopySubscriber>();
+
+function notifySelectionSubscribers() {
+  selectionSubscribers.forEach((callback) => callback());
+}
+
+function notifyCopySubscribers(event: ClipboardEvent) {
+  copySubscribers.forEach((callback) => callback(event));
+}
+
+function subscribeSelectionChange(callback: SelectionSubscriber) {
+  if (selectionSubscribers.size === 0 && typeof document !== "undefined") {
+    document.addEventListener("selectionchange", notifySelectionSubscribers);
+  }
+
+  selectionSubscribers.add(callback);
+
+  return () => {
+    selectionSubscribers.delete(callback);
+
+    if (selectionSubscribers.size === 0 && typeof document !== "undefined") {
+      document.removeEventListener("selectionchange", notifySelectionSubscribers);
+    }
+  };
+}
+
+function subscribeCopy(callback: CopySubscriber) {
+  if (copySubscribers.size === 0 && typeof document !== "undefined") {
+    document.addEventListener("copy", notifyCopySubscribers);
+  }
+
+  copySubscribers.add(callback);
+
+  return () => {
+    copySubscribers.delete(callback);
+
+    if (copySubscribers.size === 0 && typeof document !== "undefined") {
+      document.removeEventListener("copy", notifyCopySubscribers);
+    }
+  };
+}
 
 const props = withDefaults(defineProps<{
   kind: "emoji" | "image" | "sticker";
   src?: string;
   alt: string;
+  assetId?: string | null;
   emojiId?: string;
   animated?: boolean;
   context?: "editor" | "message";
@@ -15,16 +73,34 @@ const props = withDefaults(defineProps<{
   context: "message",
   displayMode: "inline",
   src: undefined,
+  assetId: undefined,
   emojiId: undefined,
   animated: false,
   selectedRange: false,
   selectedNode: false,
 });
 
+const { t } = useI18n();
+const mediaViewer = useMediaViewerStore();
+const stickersStore = useStickersStore();
+const toasts = useToastsStore();
 const rootRef = ref<HTMLElement | null>(null);
+const imageRef = ref<HTMLImageElement | null>(null);
+const contextMenuRef = ref<HTMLElement | null>(null);
+const mediaNaturalWidth = ref(0);
+const mediaNaturalHeight = ref(0);
+const mediaAvailableWidth = ref<number | null>(null);
 const domSelectedRange = ref(false);
 const domSelectedNode = ref(false);
 const domExactlySelected = ref(false);
+const measuredBlockWidth = ref<number | null>(null);
+const contextMenuOpen = ref(false);
+const contextMenuX = ref(0);
+const contextMenuY = ref(0);
+let imageResizeObserver: ResizeObserver | null = null;
+let contentResizeObserver: ResizeObserver | null = null;
+let removeSelectionSubscription: (() => void) | null = null;
+let removeCopySubscription: (() => void) | null = null;
 
 const supportsNodeSelection = computed(
   () => props.context === "message" && props.kind !== "emoji",
@@ -37,6 +113,83 @@ const mergedSelectedRange = computed(
 const mergedSelectedNode = computed(
   () => props.selectedNode || domSelectedNode.value,
 );
+
+const shouldMeasureBlockWidth = computed(() => (
+  props.context === "message" &&
+  props.displayMode === "block" &&
+  props.kind === "sticker"
+));
+
+const rootInlineStyle = computed(() => {
+  if (shouldMeasureBlockWidth.value && measuredBlockWidth.value) {
+    return {
+      width: `${measuredBlockWidth.value}px`,
+    };
+  }
+
+  return undefined;
+});
+
+const isMessageMedia = computed(() => (
+  props.context === "message" &&
+  !!props.src &&
+  (props.kind === "image" || props.kind === "sticker")
+));
+
+const messageMediaImageStyle = computed(() => {
+  if (
+    props.context !== "message" ||
+    (props.kind !== "image" && props.kind !== "sticker")
+  ) {
+    return undefined;
+  }
+
+  const image = imageRef.value;
+  const naturalWidth = mediaNaturalWidth.value || image?.naturalWidth || 0;
+  const naturalHeight = mediaNaturalHeight.value || image?.naturalHeight || 0;
+
+  if (!naturalWidth || !naturalHeight) {
+    return undefined;
+  }
+
+  const aspectRatio = naturalWidth / naturalHeight;
+  const longSide = Math.max(naturalWidth, naturalHeight);
+  const availableWidth = mediaAvailableWidth.value;
+
+  if (longSide <= 128) {
+    const smallImageScale =
+      availableWidth && availableWidth > 0
+        ? Math.min(1, availableWidth / naturalWidth)
+        : 1;
+
+    return {
+      width: `${Math.round(naturalWidth * smallImageScale)}px`,
+      height: `${Math.round(naturalHeight * smallImageScale)}px`,
+    };
+  }
+
+  let targetLongSide = 112;
+  if (aspectRatio > 1.45) {
+    targetLongSide = 280;
+  } else if (aspectRatio < 0.7) {
+    targetLongSide = 128;
+  }
+
+  const preferredScale = targetLongSide / longSide;
+  const constrainedScale =
+    availableWidth && availableWidth > 0
+      ? Math.min(preferredScale, availableWidth / naturalWidth)
+      : preferredScale;
+
+  const scale = constrainedScale;
+  const width = naturalWidth * scale;
+  const height = naturalHeight * scale;
+
+  return {
+    width: `${Math.round(width)}px`,
+    height: `${Math.round(height)}px`,
+  };
+});
 
 function getNodeIndex(node: Node) {
   const parent = node.parentNode;
@@ -106,6 +259,234 @@ function selectMessageNode() {
   syncDomSelectionState();
 }
 
+function openMediaViewer() {
+  if (
+    props.context !== "message" ||
+    !props.src ||
+    (props.kind !== "image" && props.kind !== "sticker")
+  ) {
+    return;
+  }
+
+  mediaViewer.openViewer({
+    src: props.src,
+    alt: props.alt,
+  });
+}
+
+function closeContextMenu() {
+  contextMenuOpen.value = false;
+}
+
+function positionContextMenu() {
+  const menu = contextMenuRef.value;
+  if (!menu) return;
+
+  const viewportPadding = 8;
+  const rect = menu.getBoundingClientRect();
+  contextMenuX.value = Math.min(
+    contextMenuX.value,
+    window.innerWidth - rect.width - viewportPadding,
+  );
+  contextMenuY.value = Math.min(
+    contextMenuY.value,
+    window.innerHeight - rect.height - viewportPadding,
+  );
+  contextMenuX.value = Math.max(viewportPadding, contextMenuX.value);
+  contextMenuY.value = Math.max(viewportPadding, contextMenuY.value);
+}
+
+async function openContextMenuAt(x: number, y: number) {
+  contextMenuX.value = x;
+  contextMenuY.value = y;
+  contextMenuOpen.value = true;
+  await nextTick();
+  positionContextMenu();
+}
+
+function syncMeasuredBlockWidth() {
+  if (!shouldMeasureBlockWidth.value) {
+    measuredBlockWidth.value = null;
+    return;
+  }
+
+  const image = imageRef.value;
+  if (!image) return;
+  if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+
+  const nextWidth = Math.round(image.getBoundingClientRect().width);
+  measuredBlockWidth.value = nextWidth > 24 ? nextWidth : null;
+}
+
+function syncMediaAvailableWidth() {
+  const root = rootRef.value;
+  const content = root?.closest(".content");
+  const nextWidth =
+    content instanceof HTMLElement
+      ? Math.round(content.getBoundingClientRect().width)
+      : null;
+
+  mediaAvailableWidth.value =
+    nextWidth && nextWidth > 24 ? nextWidth : null;
+}
+
+function syncMediaNaturalSize() {
+  const image = imageRef.value;
+  mediaNaturalWidth.value = image?.naturalWidth ?? 0;
+  mediaNaturalHeight.value = image?.naturalHeight ?? 0;
+}
+
+function handleImageLoad() {
+  syncMediaNaturalSize();
+  syncMediaAvailableWidth();
+  syncMeasuredBlockWidth();
+}
+
+function handleContextMenu(event: MouseEvent) {
+  if (!isMessageMedia.value) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  selectMessageNode();
+  void openContextMenuAt(event.clientX, event.clientY);
+}
+
+async function copyMedia() {
+  selectMessageNode();
+
+  try {
+    const copied = document.execCommand("copy");
+    if (!copied) {
+      throw new Error("copy-failed");
+    }
+  } catch {
+    toasts.push({
+      message: t("chat.mediaMenu.copyFailed"),
+      tone: "danger",
+    });
+  } finally {
+    closeContextMenu();
+  }
+}
+
+async function saveMedia() {
+  if (!props.src) return;
+
+  try {
+    const response = await fetch(getDownloadUrl());
+    if (!response.ok) {
+      throw new Error(`save-failed:${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = getDownloadFilename();
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+    }, 1000);
+  } catch {
+    toasts.push({
+      message: t("chat.mediaMenu.saveFailed"),
+      tone: "danger",
+    });
+  } finally {
+    closeContextMenu();
+  }
+}
+
+async function collectMedia() {
+  if (props.kind !== "sticker" || !props.assetId) {
+    toasts.push({
+      message: t("chat.mediaMenu.collectImageUnsupported"),
+      tone: "warning",
+    });
+    closeContextMenu();
+    return;
+  }
+
+  const stickerId = Number(props.assetId);
+  if (!Number.isFinite(stickerId) || stickerId <= 0) {
+    toasts.push({
+      message: t("chat.mediaMenu.collectImageUnsupported"),
+      tone: "warning",
+    });
+    closeContextMenu();
+    return;
+  }
+
+  if (stickersStore.libraryIds.includes(stickerId)) {
+    toasts.push({
+      message: t("chat.emojiPanel.stickerUpload.duplicate"),
+      tone: "warning",
+    });
+    closeContextMenu();
+    return;
+  }
+
+  try {
+    await stickersStore.collectSticker(stickerId);
+    toasts.push({
+      message: t("chat.mediaMenu.collectSuccess"),
+      tone: "success",
+    });
+  } catch {
+    toasts.push({
+      message: stickersStore.error || t("chat.mediaMenu.collectFailed"),
+      tone: "danger",
+    });
+  } finally {
+    closeContextMenu();
+  }
+}
+
+function getDownloadFilename() {
+  const fallbackBase = props.kind === "sticker"
+    ? `sticker-${props.assetId || "media"}`
+    : `image-${props.assetId || "media"}`;
+
+  if (!props.src) {
+    return `${fallbackBase}.png`;
+  }
+
+  try {
+    const url = new URL(props.src, window.location.href);
+    const pathname = url.pathname;
+    const extension = pathname.match(/\.([a-zA-Z0-9]+)$/)?.[1] ?? "png";
+    return `${fallbackBase}.${extension}`;
+  } catch {
+    return `${fallbackBase}.png`;
+  }
+}
+
+function getDownloadUrl() {
+  if (!props.src) return "";
+
+  try {
+    const url = new URL(props.src, window.location.href);
+    const isCrossOrigin = url.origin !== window.location.origin;
+    const isPublicMediaPath = /^\/(avatar|image|sticker)\//.test(url.pathname);
+
+    if (isCrossOrigin && isPublicMediaPath) {
+      return `${window.location.origin}${url.pathname}${url.search}`;
+    }
+
+    return url.toString();
+  } catch {
+    return props.src;
+  }
+}
+
+function viewMedia() {
+  openMediaViewer();
+  closeContextMenu();
+}
+
 function handleDocumentCopy(event: ClipboardEvent) {
   if (
     props.context !== "message" ||
@@ -125,9 +506,10 @@ function handleDocumentCopy(event: ClipboardEvent) {
 
   const escapedAlt = props.alt.replace(/"/g, "&quot;");
   const escapedSrc = props.src.replace(/"/g, "&quot;");
+  const assetIdAttr = props.assetId ? ` data-asset-id="${props.assetId}"` : "";
   const emojiIdAttr = props.emojiId ? ` data-emoji-id="${props.emojiId}"` : "";
   const animatedAttr = props.animated ? ` data-animated="true"` : "";
-  const html = `<img src="${escapedSrc}" alt="${escapedAlt}" data-kind="${props.kind}"${emojiIdAttr}${animatedAttr}>`;
+  const html = `<img src="${escapedSrc}" alt="${escapedAlt}" data-kind="${props.kind}"${assetIdAttr}${emojiIdAttr}${animatedAttr}>`;
 
   event.clipboardData.setData("text/html", html);
   event.clipboardData.setData("text/plain", props.alt);
@@ -136,14 +518,94 @@ function handleDocumentCopy(event: ClipboardEvent) {
 
 onMounted(() => {
   if (props.context !== "message") return;
-  document.addEventListener("selectionchange", syncDomSelectionState);
-  document.addEventListener("copy", handleDocumentCopy);
+
+  syncMediaNaturalSize();
+  syncMediaAvailableWidth();
+
+  if (shouldMeasureBlockWidth.value && typeof ResizeObserver !== "undefined" && imageRef.value) {
+    imageResizeObserver = new ResizeObserver(() => {
+      syncMeasuredBlockWidth();
+    });
+    imageResizeObserver.observe(imageRef.value);
+  }
+
+  if (typeof ResizeObserver !== "undefined") {
+    const content = rootRef.value?.closest(".content");
+    if (content instanceof HTMLElement) {
+      contentResizeObserver = new ResizeObserver(() => {
+        syncMediaAvailableWidth();
+      });
+      contentResizeObserver.observe(content);
+    }
+  }
+
+  removeSelectionSubscription = subscribeSelectionChange(syncDomSelectionState);
+  removeCopySubscription = subscribeCopy(handleDocumentCopy);
 });
 
 onBeforeUnmount(() => {
   if (props.context !== "message") return;
-  document.removeEventListener("selectionchange", syncDomSelectionState);
-  document.removeEventListener("copy", handleDocumentCopy);
+  imageResizeObserver?.disconnect();
+  imageResizeObserver = null;
+  contentResizeObserver?.disconnect();
+  contentResizeObserver = null;
+  removeSelectionSubscription?.();
+  removeSelectionSubscription = null;
+  removeCopySubscription?.();
+  removeCopySubscription = null;
+});
+
+watch(
+  () => props.src,
+  () => {
+    mediaNaturalWidth.value = 0;
+    mediaNaturalHeight.value = 0;
+    mediaAvailableWidth.value = null;
+    measuredBlockWidth.value = null;
+  },
+);
+
+watch(contextMenuOpen, (isOpen) => {
+  if (!isOpen) return;
+
+  const onPointerDown = (event: PointerEvent) => {
+    const target = event.target as Node | null;
+    const menu = contextMenuRef.value;
+    const root = rootRef.value;
+
+    if (
+      (menu && target && menu.contains(target)) ||
+      (root && target && root.contains(target))
+    ) {
+      return;
+    }
+
+    closeContextMenu();
+  };
+
+  const onKeydown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      closeContextMenu();
+    }
+  };
+
+  const onWindowChange = () => {
+    closeContextMenu();
+  };
+
+  document.addEventListener("pointerdown", onPointerDown, true);
+  document.addEventListener("keydown", onKeydown);
+  window.addEventListener("resize", onWindowChange);
+  window.addEventListener("scroll", onWindowChange, true);
+
+  const stop = watch(contextMenuOpen, (nextOpen) => {
+    if (nextOpen) return;
+    document.removeEventListener("pointerdown", onPointerDown, true);
+    document.removeEventListener("keydown", onKeydown);
+    window.removeEventListener("resize", onWindowChange);
+    window.removeEventListener("scroll", onWindowChange, true);
+    stop();
+  });
 });
 </script>
 
@@ -151,6 +613,7 @@ onBeforeUnmount(() => {
   <span
     ref="rootRef"
     class="chatInlineMedia"
+    :style="rootInlineStyle"
     :class="[
       `chatInlineMedia--${props.kind}`,
       `chatInlineMedia--${props.context}`,
@@ -162,9 +625,12 @@ onBeforeUnmount(() => {
     ]"
     draggable="false"
     @click="selectMessageNode"
+    @dblclick.stop="openMediaViewer"
+    @contextmenu="handleContextMenu"
   >
     <img
       v-if="props.src"
+      ref="imageRef"
       class="chatInlineMedia__image"
       :class="[
         `chatInlineMedia__image--${props.kind}`,
@@ -173,9 +639,12 @@ onBeforeUnmount(() => {
       :src="props.src"
       :alt="props.alt"
       :data-kind="props.kind"
+      :data-asset-id="props.assetId || null"
       :data-emoji-id="props.emojiId || null"
       :data-animated="props.animated ? 'true' : null"
+      :style="messageMediaImageStyle"
       draggable="false"
+      @load="handleImageLoad"
     >
     <span
       v-else
@@ -185,6 +654,34 @@ onBeforeUnmount(() => {
       <span class="chatInlineMedia__label">{{ props.alt }}</span>
     </span>
   </span>
+
+  <Teleport to="body">
+    <Transition name="contextMenuFade">
+      <div
+        v-if="contextMenuOpen"
+        ref="contextMenuRef"
+        class="contextMenu"
+        :style="{
+          left: `${contextMenuX}px`,
+          top: `${contextMenuY}px`,
+        }"
+        role="menu"
+      >
+        <BaseMenuItem :icon="EyeIcon" @click="viewMedia">
+          {{ t("chat.mediaMenu.view") }}
+        </BaseMenuItem>
+        <BaseMenuItem :icon="ClipboardDocumentIcon" @click="copyMedia">
+          {{ t("chat.mediaMenu.copy") }}
+        </BaseMenuItem>
+        <BaseMenuItem :icon="HeartIcon" @click="collectMedia">
+          {{ t("chat.mediaMenu.collect") }}
+        </BaseMenuItem>
+        <BaseMenuItem :icon="ArrowDownTrayIcon" @click="saveMedia">
+          {{ t("chat.mediaMenu.save") }}
+        </BaseMenuItem>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -202,7 +699,10 @@ onBeforeUnmount(() => {
 
 .chatInlineMedia--message.chatInlineMedia--block.chatInlineMedia--image,
 .chatInlineMedia--message.chatInlineMedia--block.chatInlineMedia--sticker {
-  display: block;
+  display: inline-block;
+  width: auto;
+  max-width: 100%;
+  line-height: 0;
 }
 
 .chatInlineMedia--message.chatInlineMedia--image,
@@ -270,17 +770,17 @@ onBeforeUnmount(() => {
 
 .chatInlineMedia__image--message.chatInlineMedia__image--image {
   width: auto;
-  max-width: min(100%, 280px);
   height: auto;
   object-fit: contain;
 }
 
 .chatInlineMedia__image--message.chatInlineMedia__image--sticker {
   width: auto;
-  max-width: min(100%, 160px);
   height: auto;
   object-fit: contain;
-  background: color-mix(in srgb, var(--c-surface) 88%, white);
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
 }
 
 .chatInlineMedia__placeholder {
@@ -304,5 +804,27 @@ onBeforeUnmount(() => {
 .chatInlineMedia__label {
   font-size: 12px;
   color: var(--c-text-muted);
+}
+
+.contextMenu {
+  position: fixed;
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--c-surface) 94%, var(--c-bg));
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.14);
+  z-index: 130;
+}
+
+.contextMenuFade-enter-active,
+.contextMenuFade-leave-active {
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.contextMenuFade-enter-from,
+.contextMenuFade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 </style>

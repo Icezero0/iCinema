@@ -6,6 +6,8 @@ import { useNotificationsStore } from "@/stores/notifications.store";
 import wsClient from "@/infra/realtime/wsClient";
 import AppHeader from "./components/AppHeader.vue";
 import AppSidebar from "./components/AppSidebar.vue";
+import BaseMediaViewer from "@/ui/base/BaseMediaViewer.vue";
+import BaseToastViewport from "@/ui/base/BaseToastViewport.vue";
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -77,6 +79,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="app">
     <AppHeader v-model:sidebarOpen="sidebarOpen" />
+    <BaseMediaViewer />
+    <BaseToastViewport />
 
     <Transition name="backdrop">
       <button

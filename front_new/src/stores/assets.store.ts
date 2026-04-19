@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import {
   uploadImage,
+  uploadSticker,
   type MediaAssetUploadResponse,
   type StickerResponse,
 } from "@/infra/api/media.api";
@@ -37,6 +38,7 @@ type PersistedState = {
 
 type State = PersistedState & {
   isUploadingImage: boolean;
+  isUploadingSticker: boolean;
   error: string | null;
 };
 
@@ -85,6 +87,7 @@ export const useAssetsStore = defineStore("assets", {
     return {
       ...persisted,
       isUploadingImage: false,
+      isUploadingSticker: false,
       error: null,
     };
   },
@@ -242,6 +245,30 @@ export const useAssetsStore = defineStore("assets", {
       }
     },
 
+    async uploadSticker(file: File) {
+      this.isUploadingSticker = true;
+      this.error = null;
+
+      try {
+        const uploaded = await uploadSticker(file);
+        this.upsertAsset({
+          kind: "sticker",
+          id: uploaded.id,
+          url: uploaded.url,
+          mime_type: uploaded.mime_type,
+          file_size: uploaded.file_size,
+          status: uploaded.status,
+        });
+        return uploaded;
+      } catch (error: any) {
+        const message = extractErrorMessage(error, "Failed to upload sticker");
+        this.error = message;
+        throw new Error(message);
+      } finally {
+        this.isUploadingSticker = false;
+      }
+    },
+
     clearError() {
       this.error = null;
     },
@@ -249,6 +276,7 @@ export const useAssetsStore = defineStore("assets", {
     clear() {
       this.assetsByKey = {};
       this.isUploadingImage = false;
+      this.isUploadingSticker = false;
       this.error = null;
       this.persist();
     },

@@ -1,34 +1,69 @@
 <script setup lang="ts">
-import { FaceSmileIcon, HeartIcon } from "@heroicons/vue/24/outline";
-import { computed, onBeforeUnmount, onMounted, ref, type Component, type CSSProperties } from "vue";
+import {
+  FaceSmileIcon,
+  HeartIcon,
+  PencilSquareIcon,
+  PlusIcon,
+} from "@heroicons/vue/24/outline";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
 import { useI18n } from "vue-i18n";
+import type { UnicodeEmojiDefinition } from "@/features/chat/emoji";
+import { resolveMediaUrl } from "@/infra/media";
 import { useEmojiStore } from "@/stores/emoji.store";
 import { useUnicodeEmojiStore } from "@/stores/unicode_emoji.store";
-import { getChatEmojiUrl, type UnicodeEmojiDefinition } from "@/features/chat/emoji";
+import { useStickersStore } from "@/stores/stickers.store";
 import QfacePenguinIcon from "@/ui/icons/QfacePenguinIcon.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
+import ChatQfaceTab from "./emoji-picker/ChatQfaceTab.vue";
+import ChatStickerTab from "./emoji-picker/ChatStickerTab.vue";
+import ChatUnicodeEmojiTab from "./emoji-picker/ChatUnicodeEmojiTab.vue";
+import type {
+  ChatEmojiPickerSelection,
+  EmojiPickerTabItem,
+  EmojiPickerTabKey,
+  StickerActionItem,
+  UnicodeEmojiSection,
+} from "./emoji-picker/types";
 
 const emit = defineEmits<{
-  selectEmoji: [selection: { kind: "qface"; emojiId: string } | { kind: "unicode_emoji"; value: string }];
+  selectEmoji: [selection: ChatEmojiPickerSelection];
 }>();
 defineProps<{
   floatingStyle?: CSSProperties;
 }>();
 
-const { locale, t } = useI18n();
+const { t } = useI18n();
 const emojiStore = useEmojiStore();
 const unicodeEmojiStore = useUnicodeEmojiStore();
-const activeEmojiTab = ref<"qface" | "unicode_emoji" | "stickers">("qface");
+const stickersStore = useStickersStore();
+const activeEmojiTab = ref<EmojiPickerTabKey>("qface");
 const isCompactViewport = ref(false);
+const hasRequestedStickerLibrary = ref(false);
+const stickerUploadInputRef = ref<HTMLInputElement | null>(null);
 let viewportMediaQuery: MediaQueryList | null = null;
 let removeViewportListener: (() => void) | null = null;
 const qfaceCatalog = computed(() => emojiStore.allEmojis);
 const unicodeEmojiCatalog = computed(() => unicodeEmojiStore.allUnicodeEmojis);
+const stickerLibrary = computed(() => stickersStore.library);
 const recentDisplayLimit = computed(() => (isCompactViewport.value ? 8 : 10));
 const recentQface = computed(() => emojiStore.recentEmojis.slice(0, recentDisplayLimit.value));
 const recentUnicodeEmoji = computed(() => (
   unicodeEmojiStore.recentUnicodeEmojis.slice(0, recentDisplayLimit.value)
 ));
+const stickerActionItems = computed<StickerActionItem[]>(() => [
+  {
+    key: "upload",
+    label: t("chat.emojiPanel.sections.stickerActions.upload"),
+    icon: PlusIcon,
+    disabled: stickersStore.isUploading,
+  },
+  {
+    key: "edit",
+    label: t("chat.emojiPanel.sections.stickerActions.edit"),
+    icon: PencilSquareIcon,
+    disabled: true,
+  },
+]);
 const unicodeEmojiCategoryOrder = [
   "faces",
   "gestures",
@@ -37,7 +72,7 @@ const unicodeEmojiCategoryOrder = [
   "objects",
   "nature",
 ] as const;
-const unicodeEmojiSections = computed(() => {
+const unicodeEmojiSections = computed<UnicodeEmojiSection[]>(() => {
   const groups = new Map<typeof unicodeEmojiCategoryOrder[number], UnicodeEmojiDefinition[]>();
 
   for (const emoji of unicodeEmojiCatalog.value) {
@@ -54,9 +89,7 @@ const unicodeEmojiSections = computed(() => {
     }))
     .filter((section) => section.items.length > 0);
 });
-const tabItems = computed<
-  Array<{ key: "qface" | "unicode_emoji" | "stickers"; label: string; icon: Component }>
->(() => [
+const tabItems = computed<EmojiPickerTabItem[]>(() => [
   {
     key: "qface",
     label: t("chat.emojiPanel.tabs.qface"),
@@ -97,6 +130,18 @@ onBeforeUnmount(() => {
   removeViewportListener?.();
 });
 
+watch(activeEmojiTab, async (tab) => {
+  if (tab !== "stickers" || hasRequestedStickerLibrary.value) return;
+
+  hasRequestedStickerLibrary.value = true;
+
+  try {
+    await stickersStore.refreshLibrary({ all: true });
+  } catch {
+    // stickers.store keeps the latest error state for the panel
+  }
+});
+
 function selectEmoji(emojiId: string) {
   emojiStore.markEmojiUsed(emojiId);
   emit("selectEmoji", { kind: "qface", emojiId });
@@ -110,13 +155,63 @@ function selectUnicodeEmoji(emojiId: string) {
   emit("selectEmoji", { kind: "unicode_emoji", value: emoji.char });
 }
 
-function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
-  return locale.value.toLowerCase().startsWith("zh") ? emoji.labelZh : emoji.labelEn;
+function selectSticker(stickerId: number) {
+  const sticker = stickersStore.getSticker(stickerId);
+  if (!sticker?.url) return;
+
+  stickersStore.rememberRecentSticker(stickerId);
+  emit("selectEmoji", {
+    kind: "sticker",
+    stickerId,
+    url: resolveMediaUrl(sticker.url),
+    alt: `Sticker ${stickerId}`,
+  });
+}
+
+function triggerStickerUpload() {
+  if (stickersStore.isUploading) return;
+  stickerUploadInputRef.value?.click();
+}
+
+async function handleStickerUploadChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const [file] = Array.from(input?.files ?? []);
+
+  if (!file) {
+    if (input) {
+      input.value = "";
+    }
+    return;
+  }
+
+  try {
+    await stickersStore.uploadSticker(file);
+  } catch {
+    // stickers.store keeps the latest error state for the panel
+  } finally {
+    if (input) {
+      input.value = "";
+    }
+  }
+}
+
+function handleStickerAction(actionKey: string) {
+  if (actionKey === "upload") {
+    triggerStickerUpload();
+  }
 }
 </script>
 
 <template>
   <div class="emojiPanel" :style="floatingStyle" data-emoji-panel-root="true">
+    <input
+      ref="stickerUploadInputRef"
+      class="srOnlyInput"
+      type="file"
+      accept="image/*"
+      @change="handleStickerUploadChange"
+    >
+
     <AppTabs
       v-model="activeEmojiTab"
       class="emojiTabs"
@@ -125,109 +220,31 @@ function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
     />
 
     <div class="emojiPanelBody">
-      <div v-if="activeEmojiTab === 'qface'" class="emojiSections">
-        <section v-if="recentQface.length > 0" class="emojiSection">
-          <p class="emojiSectionLabel">
-            {{ t("chat.emojiPanel.sections.recent") }}
-          </p>
-          <div class="emojiGrid emojiGridRecent">
-            <button
-              v-for="emoji in recentQface"
-              :key="`recent-${emoji.id}`"
-              class="emojiOption"
-              type="button"
-              :aria-label="emoji.label"
-              @mousedown.prevent
-              @click="selectEmoji(emoji.id)"
-            >
-              <img
-                v-if="getChatEmojiUrl(emoji.id)"
-                class="emojiOptionImage"
-                :src="getChatEmojiUrl(emoji.id) || undefined"
-                :alt="emoji.label"
-              >
-              <span class="emojiOptionTooltip" role="tooltip">{{ emoji.label }}</span>
-            </button>
-          </div>
-        </section>
+      <ChatQfaceTab
+        v-if="activeEmojiTab === 'qface'"
+        :recent-emojis="recentQface"
+        :all-emojis="qfaceCatalog"
+        @select="selectEmoji"
+      />
 
-        <section class="emojiSection">
-          <p class="emojiSectionLabel">
-            {{ t("chat.emojiPanel.sections.allQface") }}
-          </p>
-          <div class="emojiGrid">
-            <button
-              v-for="emoji in qfaceCatalog"
-              :key="emoji.id"
-              class="emojiOption"
-              type="button"
-              :aria-label="emoji.label"
-              @mousedown.prevent
-              @click="selectEmoji(emoji.id)"
-            >
-              <img
-                v-if="getChatEmojiUrl(emoji.id)"
-                class="emojiOptionImage"
-                :src="getChatEmojiUrl(emoji.id) || undefined"
-                :alt="emoji.label"
-              >
-              <span class="emojiOptionTooltip" role="tooltip">{{ emoji.label }}</span>
-            </button>
-          </div>
-        </section>
-      </div>
+      <ChatUnicodeEmojiTab
+        v-else-if="activeEmojiTab === 'unicode_emoji'"
+        :recent-emojis="recentUnicodeEmoji"
+        :sections="unicodeEmojiSections"
+        @select="selectUnicodeEmoji"
+      />
 
-      <div v-else-if="activeEmojiTab === 'unicode_emoji'" class="emojiSections">
-        <section v-if="recentUnicodeEmoji.length > 0" class="emojiSection">
-          <p class="emojiSectionLabel">
-            {{ t("chat.emojiPanel.sections.recent") }}
-          </p>
-          <div class="emojiGrid emojiGridUnicode">
-            <button
-              v-for="emoji in recentUnicodeEmoji"
-              :key="`unicode-emoji-recent-${emoji.id}`"
-              class="emojiOption unicodeEmojiOption"
-              type="button"
-              :aria-label="getUnicodeEmojiLabel(emoji)"
-              @mousedown.prevent
-              @click="selectUnicodeEmoji(emoji.id)"
-            >
-              <span class="unicodeEmojiGlyph">{{ emoji.char }}</span>
-              <span class="emojiOptionTooltip" role="tooltip">{{ getUnicodeEmojiLabel(emoji) }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section
-          v-for="section in unicodeEmojiSections"
-          :key="section.key"
-          class="emojiSection"
-        >
-          <p class="emojiSectionLabel">
-            {{ section.label }}
-          </p>
-          <div class="emojiGrid emojiGridUnicode">
-            <button
-              v-for="emoji in section.items"
-              :key="`unicode-emoji-${emoji.id}`"
-              class="emojiOption unicodeEmojiOption"
-              type="button"
-              :aria-label="getUnicodeEmojiLabel(emoji)"
-              @mousedown.prevent
-              @click="selectUnicodeEmoji(emoji.id)"
-            >
-              <span class="unicodeEmojiGlyph">{{ emoji.char }}</span>
-              <span class="emojiOptionTooltip" role="tooltip">{{ getUnicodeEmojiLabel(emoji) }}</span>
-            </button>
-          </div>
-        </section>
-      </div>
-
-      <div v-else class="emojiEmpty">
-        {{ activeEmojiTab === "unicode_emoji"
-          ? t("chat.emojiPanel.emptyUnicodeEmoji")
-          : t("chat.emojiPanel.emptyStickers") }}
-      </div>
+      <ChatStickerTab
+        v-else
+        :sticker-library="stickerLibrary"
+        :action-items="stickerActionItems"
+        :is-loading="stickersStore.isLoading"
+        :error="stickersStore.error"
+        :loading-label="t('common.loading')"
+        :empty-label="t('chat.emojiPanel.emptyStickers')"
+        @action="handleStickerAction"
+        @select="selectSticker"
+      />
     </div>
   </div>
 </template>
@@ -260,12 +277,25 @@ function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
   padding-inline: 8px;
 }
 
+.srOnlyInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .emojiPanelBody {
   margin-top: 0;
   max-height: 244px;
   min-height: 172px;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
   padding: 10px 12px 12px;
 }
 
@@ -278,23 +308,23 @@ function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
   border-radius: 999px;
 }
 
-.emojiGrid {
+:deep(.emojiGrid) {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
-.emojiSections {
+:deep(.emojiSections) {
   display: grid;
   gap: 12px;
 }
 
-.emojiSection {
+:deep(.emojiSection) {
   display: grid;
   gap: 8px;
 }
 
-.emojiSectionLabel {
+:deep(.emojiSectionLabel) {
   margin: 0;
   padding-inline: 2px;
   color: var(--c-text-muted);
@@ -304,11 +334,11 @@ function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
   text-transform: uppercase;
 }
 
-.emojiGridRecent {
+:deep(.emojiGridRecent) {
   min-height: 44px;
 }
 
-.emojiOption {
+:deep(.emojiOption) {
   min-height: 42px;
   padding: 6px;
   border: 1px solid color-mix(in srgb, var(--c-border) 88%, white);
@@ -326,32 +356,44 @@ function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
     box-shadow 180ms ease;
 }
 
-.emojiOption:hover {
+:deep(.emojiOption:hover) {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--c-primary) 20%, var(--c-border));
   background: color-mix(in srgb, var(--c-primary) 6%, var(--c-surface));
   box-shadow: 0 8px 16px rgb(0 0 0 / 0.05);
 }
 
-.emojiOptionImage {
+:deep(.emojiOption:disabled) {
+  opacity: 0.56;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+:deep(.emojiOption:disabled:hover) {
+  border-color: color-mix(in srgb, var(--c-border) 88%, white);
+  background: color-mix(in srgb, var(--c-surface) 88%, white);
+}
+
+:deep(.emojiOptionImage) {
   width: 24px;
   height: 24px;
   object-fit: contain;
 }
 
-.unicodeEmojiOption {
+:deep(.unicodeEmojiOption) {
   font-size: 21px;
   line-height: 1;
 }
 
-.unicodeEmojiGlyph {
+:deep(.unicodeEmojiGlyph) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transform: translateY(1px);
 }
 
-.emojiOptionTooltip {
+:deep(.emojiOptionTooltip) {
   position: absolute;
   left: 50%;
   bottom: calc(100% + 6px);
@@ -372,24 +414,24 @@ function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
   box-shadow: 0 10px 24px rgb(0 0 0 / 0.28);
 }
 
-.emojiOption:hover .emojiOptionTooltip,
-.emojiOption:focus-visible .emojiOptionTooltip {
+:deep(.emojiOption:hover .emojiOptionTooltip),
+:deep(.emojiOption:focus-visible .emojiOptionTooltip) {
   display: block;
 }
 
-.emojiGrid > .emojiOption:nth-child(5n) .emojiOptionTooltip {
+:deep(.emojiGrid > .emojiOption:nth-child(5n) .emojiOptionTooltip) {
   left: auto;
   right: 0;
   transform: none;
 }
 
-.emojiGrid > .emojiOption:nth-child(5n - 4) .emojiOptionTooltip {
+:deep(.emojiGrid > .emojiOption:nth-child(5n - 4) .emojiOptionTooltip) {
   left: 0;
   right: auto;
   transform: none;
 }
 
-.emojiEmpty {
+:deep(.emojiEmpty) {
   min-height: 172px;
   display: grid;
   place-items: center;
@@ -401,32 +443,87 @@ function getUnicodeEmojiLabel(emoji: UnicodeEmojiDefinition) {
   padding: 18px;
 }
 
+:deep(.stickerSections) {
+  gap: 10px;
+}
+
+:deep(.stickerActionGrid) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+:deep(.stickerActionOption) {
+  min-height: 38px;
+  padding: 4px;
+  border-radius: 9px;
+  color: var(--c-text-muted);
+}
+
+:deep(.stickerActionOption:hover:not(:disabled)) {
+  color: var(--c-text);
+}
+
+:deep(.stickerActionOption:disabled) {
+  color: color-mix(in srgb, var(--c-text-muted) 62%, transparent);
+}
+
+:deep(.stickerActionIcon) {
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+:deep(.stickerGrid) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+:deep(.stickerOption) {
+  min-height: 58px;
+  padding: 6px;
+}
+
+:deep(.stickerOptionImage) {
+  width: 100%;
+  max-width: 46px;
+  height: auto;
+  max-height: 46px;
+  object-fit: contain;
+}
+
+:deep(.stickerEmpty) {
+  min-height: 96px;
+}
+
 @media (max-width: 520px) {
   .emojiPanel {
     width: min(320px, calc(100vw - 28px));
   }
 
-  .emojiGrid {
+  :deep(.emojiGrid) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .emojiGrid > .emojiOption:nth-child(5n) .emojiOptionTooltip,
-  .emojiGrid > .emojiOption:nth-child(5n - 4) .emojiOptionTooltip {
+  :deep(.emojiGrid > .emojiOption:nth-child(5n) .emojiOptionTooltip),
+  :deep(.emojiGrid > .emojiOption:nth-child(5n - 4) .emojiOptionTooltip) {
     left: 50%;
     right: auto;
     transform: translate(-50%, 0);
   }
 
-  .emojiGrid > .emojiOption:nth-child(4n) .emojiOptionTooltip {
+  :deep(.emojiGrid > .emojiOption:nth-child(4n) .emojiOptionTooltip) {
     left: auto;
     right: 0;
     transform: none;
   }
 
-  .emojiGrid > .emojiOption:nth-child(4n - 3) .emojiOptionTooltip {
+  :deep(.emojiGrid > .emojiOption:nth-child(4n - 3) .emojiOptionTooltip) {
     left: 0;
     right: auto;
     transform: none;
+  }
+
+  :deep(.stickerGrid) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 </style>

@@ -20,6 +20,12 @@ export default {
         recent: "Recent",
         allQface: "All QFace",
         allUnicodeEmoji: "All Unicode Emoji",
+        stickers: "Stickers",
+        stickerActions: {
+          title: "Actions",
+          upload: "Upload",
+          edit: "Edit",
+        },
         unicodeEmojiCategories: {
           faces: "Faces",
           gestures: "Gestures",
@@ -30,7 +36,21 @@ export default {
         },
       },
       emptyUnicodeEmoji: "More Unicode emoji will be added here later.",
-      emptyStickers: "Saved stickers will be added here later.",
+      emptyStickers: "You haven't saved any stickers yet.",
+      stickerUpload: {
+        duplicate: "This sticker is already in your library.",
+      },
+    },
+    mediaMenu: {
+      view: "View",
+      copy: "Copy",
+      collect: "Collect",
+      save: "Save",
+      collectSuccess: "Added to your sticker library.",
+      collectFailed: "Failed to collect.",
+      collectImageUnsupported: "The backend does not support collecting images into stickers yet.",
+      copyFailed: "Failed to copy.",
+      saveFailed: "Failed to save.",
     },
   },
   sidebar: {
@@ -243,6 +263,8 @@ export default {
     chatEmpty: "No messages in this room yet.",
     membersEmpty: "No members in this room yet.",
     membersLoadFailed: "Failed to load room members.",
+    requestsEmpty: "No pending join requests for this room.",
+    requestsLoadFailed: "Failed to load room requests.",
     mock: {
       tabs: {
         chat: "Chat",
@@ -307,8 +329,6 @@ export default {
       requestInvite: "Invited into this room",
       invite: "Invite",
       leaveRoom: "Leave room",
-      approve: "Approve",
-      reject: "Reject",
       settingsTitle: "Room settings",
       settingsSub: "Settings are layered so frequent controls stay easy to reach.",
       settingGroups: {

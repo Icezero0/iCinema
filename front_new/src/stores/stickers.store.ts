@@ -9,6 +9,8 @@ import {
 } from "@/infra/api/media.api";
 import { useAssetsStore } from "@/stores/assets.store";
 import { readPersistedState, writePersistedState } from "@/stores/persistence";
+import { useToastsStore } from "@/stores/toasts.store";
+import { i18n } from "@/infra/i18n";
 
 const STORAGE_KEY = "icinema:stickers-store";
 const MAX_RECENT_STICKERS = 30;
@@ -236,16 +238,24 @@ export const useStickersStore = defineStore("stickers", {
     },
 
     async uploadSticker(file: File) {
+      const toasts = useToastsStore();
       this.isUploading = true;
       this.error = null;
 
       try {
         const uploaded = await uploadSticker(file);
+        const existedInLibrary = this.libraryIds.includes(uploaded.id);
         const sticker = mapUploadedAssetToSticker(uploaded);
         this.upsertSticker(sticker);
         this.libraryIds = [sticker.id, ...this.libraryIds.filter((id) => id !== sticker.id)];
         this.recentStickerIds = withRecentStickerId(this.recentStickerIds, sticker.id);
         this.total = Math.max(this.total, this.libraryIds.length);
+        if (existedInLibrary) {
+          toasts.push({
+            message: i18n.global.t("chat.emojiPanel.stickerUpload.duplicate"),
+            tone: "warning",
+          });
+        }
         this.persist();
         return sticker;
       } catch (error: any) {

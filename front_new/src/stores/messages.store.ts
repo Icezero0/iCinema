@@ -81,6 +81,131 @@ function parseAssetId(assetId: string | undefined) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function slugifyFilenamePart(value: string | undefined, fallback: string) {
+  const normalized = (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || fallback;
+}
+
+function inferFileExtension(mimeType: string | undefined, fallback: string) {
+  if (!mimeType) return fallback;
+
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/gif") return "gif";
+  if (mimeType === "image/webp") return "webp";
+  if (mimeType === "image/svg+xml") return "svg";
+
+  const [, subtype] = mimeType.split("/");
+  return subtype || fallback;
+}
+
+function sniffImageMimeType(bytes: Uint8Array) {
+  if (bytes.length >= 6) {
+    const header = String.fromCharCode(...bytes.slice(0, 6));
+    if (header === "GIF87a" || header === "GIF89a") {
+      return "image/gif";
+    }
+  }
+
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
+    return "image/jpeg";
+  }
+
+  if (
+    bytes.length >= 12 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
+async function createUploadFileFromSegment(
+  segment: Extract<ChatSegment, { type: "image" }>,
+) {
+  if (!segment.src) {
+    throw new Error("Media segment is missing source data");
+  }
+
+  const response = await fetch(segment.src);
+  if (!response.ok) {
+    throw new Error("Failed to read media content before upload");
+  }
+
+  const blob = await response.blob();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const actualMimeType = sniffImageMimeType(bytes) ?? blob.type;
+  const extension = inferFileExtension(
+    actualMimeType,
+    segment.kind === "sticker" ? "webp" : "png",
+  );
+  const basename = slugifyFilenamePart(
+    segment.alt,
+    segment.kind === "sticker" ? "sticker" : "image",
+  );
+
+  return new File([bytes], `${basename}.${extension}`, {
+    type: actualMimeType || undefined,
+  });
+}
+
+async function prepareSegmentsForSend(
+  segments: ChatSegment[],
+  assets: ReturnType<typeof useAssetsStore>,
+) {
+  const resolvedSegments = await Promise.all(segments.map(async (segment) => {
+    if (segment.type !== "image") {
+      return segment;
+    }
+
+    if (parseAssetId(segment.assetId)) {
+      return segment;
+    }
+
+    const uploadFile = await createUploadFileFromSegment(segment);
+    const uploaded = segment.kind === "sticker"
+      ? await assets.uploadSticker(uploadFile)
+      : await assets.uploadImage(uploadFile);
+
+    const resolvedSegment = {
+      ...segment,
+      assetId: String(uploaded.id),
+      src: resolveMediaUrl(uploaded.url) || segment.src,
+    } satisfies ChatSegment;
+
+    Object.assign(segment, resolvedSegment);
+    return resolvedSegment;
+  }));
+
+  return resolvedSegments;
+}
+
 function mapChatSegmentsToMessageSegments(segments: ChatSegment[]) {
   const result: MessageSegmentIn[] = [];
 
@@ -320,16 +445,18 @@ export const useMessagesStore = defineStore("messages", {
 
     async sendSegments(roomId: number, segments: ChatSegment[]) {
       const roomState = this.ensureRoomState(roomId);
-      const messageSegments = mapChatSegmentsToMessageSegments(segments);
-
-      if (messageSegments.length === 0) {
-        throw new Error("No valid message segments to send");
-      }
-
+      const assets = useAssetsStore();
       roomState.isSending = true;
       roomState.error = null;
 
       try {
+        const preparedSegments = await prepareSegmentsForSend(segments, assets);
+        const messageSegments = mapChatSegmentsToMessageSegments(preparedSegments);
+
+        if (messageSegments.length === 0) {
+          throw new Error("No valid message segments to send");
+        }
+
         const payload: MessageContentIn = {
           segments: messageSegments,
         };

@@ -1,10 +1,16 @@
 <script setup lang="ts">
+import { CheckIcon, XMarkIcon } from "@heroicons/vue/24/outline";
+
 defineProps<{
   user: string;
   note: string;
   time: string;
-  approveLabel: string;
-  rejectLabel: string;
+  loading?: boolean;
+}>();
+
+const emit = defineEmits<{
+  approve: [];
+  reject: [];
 }>();
 </script>
 
@@ -16,8 +22,22 @@ defineProps<{
     </div>
     <div class="requestActions">
       <span class="requestTime">{{ time }}</span>
-      <button class="miniAction primary" type="button">{{ approveLabel }}</button>
-      <button class="miniAction" type="button">{{ rejectLabel }}</button>
+      <BaseIconButton
+        class="miniAction approveAction"
+        aria-label="Approve request"
+        :disabled="loading"
+        @click="emit('approve')"
+      >
+        <AppIcon :icon="CheckIcon" :size="18" />
+      </BaseIconButton>
+      <BaseIconButton
+        class="miniAction rejectAction"
+        aria-label="Reject request"
+        :disabled="loading"
+        @click="emit('reject')"
+      >
+        <AppIcon :icon="XMarkIcon" :size="18" />
+      </BaseIconButton>
     </div>
   </div>
 </template>
@@ -60,19 +80,29 @@ defineProps<{
 }
 
 .miniAction {
+  width: 32px;
   height: 32px;
-  padding: 0 10px;
   border-radius: 10px;
   border: 1px solid var(--c-border);
-  background: var(--c-surface);
-  color: var(--c-text);
-  cursor: pointer;
+  background: color-mix(in srgb, var(--c-surface) 82%, var(--c-bg));
 }
 
-.miniAction.primary {
-  border-color: transparent;
-  background: var(--c-primary);
-  color: var(--c-primary-text);
+.miniAction.approveAction {
+  color: #2fb46e;
+  border-color: color-mix(in srgb, #2fb46e 30%, var(--c-border));
+}
+
+.miniAction.approveAction:hover:not(:disabled) {
+  background: color-mix(in srgb, #2fb46e 14%, var(--c-surface));
+}
+
+.miniAction.rejectAction {
+  color: var(--c-danger);
+  border-color: color-mix(in srgb, var(--c-danger) 30%, var(--c-border));
+}
+
+.miniAction.rejectAction:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--c-danger) 14%, var(--c-surface));
 }
 
 @media (max-width: 640px) {
@@ -102,7 +132,6 @@ defineProps<{
 
   .miniAction {
     width: 100%;
-    justify-content: center;
   }
 }
 </style>

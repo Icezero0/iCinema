@@ -8,22 +8,32 @@ import {
   UserGroupIcon,
   ClipboardDocumentCheckIcon,
 } from "@heroicons/vue/24/outline";
-import { getRoomById, getRoomMembers, type Room } from "@/infra/api/rooms.api";
+import {
+  getRoomById,
+  getRoomMembers,
+  getRoomJoinRequests,
+  type Room,
+  type RoomJoinRequest,
+} from "@/infra/api/rooms.api";
+import {
+  approveJoinRequestById,
+  rejectJoinRequestById,
+} from "@/infra/api/join-requests.api";
 import BasePill from "@/ui/base/BasePill.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
-import ChatPanel from "@/features/chat/components/ChatPanel.vue";
 import RoomPlaybackControls from "@/features/room/components/RoomPlaybackControls.vue";
-import RoomRequestItem from "@/features/room/components/RoomRequestItem.vue";
-import RoomSettingsPanel from "@/features/room/components/RoomSettingsPanel.vue";
-import RoomMembersPanel from "@/features/room/components/RoomMembersPanel.vue";
-import type { RoomPanelKey, RoomRequestMockItem, RoomRole } from "@/features/room/types";
+import RoomChatTab from "@/features/room/components/workspace/RoomChatTab.vue";
+import RoomMembersTab from "@/features/room/components/workspace/RoomMembersTab.vue";
+import RoomRequestsTab from "@/features/room/components/workspace/RoomRequestsTab.vue";
+import RoomSettingsTab from "@/features/room/components/workspace/RoomSettingsTab.vue";
+import type { RoomPanelKey, RoomRole } from "@/features/room/types";
 import type { ChatSegment } from "@/features/chat/types";
-import { createMockRequests } from "@/features/room/room.mock";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
 import { useMessagesStore } from "@/stores/messages.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { resolveMediaUrl } from "@/infra/media";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -36,6 +46,11 @@ const isLoading = ref(false);
 const error = ref("");
 const membersLoading = ref(false);
 const membersError = ref("");
+const requestsLoading = ref(false);
+const requestsError = ref("");
+const requestsLoaded = ref(false);
+const roomJoinRequests = ref<RoomJoinRequest[]>([]);
+const requestActionIds = ref<number[]>([]);
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -52,13 +67,19 @@ const localSyncStrategy = ref("soft-lock");
 const allPanelOptions = computed<{ key: RoomPanelKey; label: string; badge?: string; icon?: Component }[]>(() => [
   { key: "chat", label: t("room.mock.tabs.chat"), icon: ChatBubbleLeftRightIcon },
   { key: "members", label: t("room.mock.tabs.members"), icon: UserGroupIcon },
-  { key: "requests", label: t("room.mock.tabs.requests"), badge: "3", icon: ClipboardDocumentCheckIcon },
+  {
+    key: "requests",
+    label: t("room.mock.tabs.requests"),
+    badge: roomJoinRequests.value.length > 0 ? String(roomJoinRequests.value.length) : undefined,
+    icon: ClipboardDocumentCheckIcon,
+  },
   { key: "settings", label: t("room.mock.tabs.settings"), icon: Cog6ToothIcon },
 ]);
 
 const panelOptions = computed(() => {
   if (currentUserRole.value === "member") {
-    return allPanelOptions.value.filter((panel) => panel.key === "chat");
+    return allPanelOptions.value.filter((panel) =>
+      panel.key === "chat" || panel.key === "members" || panel.key === "settings");
   }
 
   return allPanelOptions.value;
@@ -70,10 +91,25 @@ const localSyncOptions = computed(() => [
   { value: "manual-first", label: t("room.mock.localSyncModes.manualFirst") },
 ]);
 
-const mockRequests = computed<RoomRequestMockItem[]>(() => createMockRequests(t));
 const roomMessagesState = computed(() => messagesStore.getRoomState(roomId.value));
 const roomChatMessages = computed(() => messagesStore.getRoomChatMessages(roomId.value));
 const entityRoomMembers = computed(() => entitiesStore.getRoomMembers(roomId.value));
+const roomRequestItems = computed(() => roomJoinRequests.value.map((request) => {
+  const isApply = request.source === "apply";
+  const user = isApply ? request.initiator : request.target;
+
+  return {
+    id: request.id,
+    user:
+      user?.username ||
+      user?.email ||
+      `User #${isApply ? request.initiator_user_id : request.target_user_id}`,
+    note: isApply
+      ? t("room.mock.requestApply")
+      : t("room.mock.requestInvite"),
+    time: formatLocalDateTime(request.updated_at || request.created_at),
+  };
+}));
 const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
 
@@ -95,6 +131,7 @@ const layout = useRoomWorkspaceLayout({
 });
 const mainGridStyle = computed(() => layout.mainGridStyle.value);
 const workspaceCardStyle = computed(() => layout.workspaceCardStyle.value);
+const hasOlderMessages = computed(() => roomMessagesState.value.nextBeforeId != null);
 
 function togglePlayback() {
   isPlaying.value = !isPlaying.value;
@@ -152,6 +189,7 @@ async function fetchRoomMembers() {
     const response = await getRoomMembers(roomId.value);
     entitiesStore.upsertRoomMembers(response.items);
     syncCurrentUserRole();
+    await fetchRoomRequests({ force: true });
   } catch (e: any) {
     membersError.value =
       e?.response?.data?.detail ||
@@ -166,9 +204,96 @@ async function fetchRoomMessages() {
   if (!roomId.value) return;
 
   try {
-    await messagesStore.refreshRoomMessages(roomId.value);
+    await messagesStore.refreshRoomMessages(roomId.value, 20);
   } catch {
     // messages.store already keeps the error state for the panel
+  }
+}
+
+async function loadOlderRoomMessages() {
+  if (!roomId.value) return;
+
+  try {
+    await messagesStore.loadOlderMessages(roomId.value, 20);
+  } catch {
+    // messages.store already keeps the error state for the panel
+  }
+}
+
+async function fetchRoomRequests(options?: { force?: boolean }) {
+  if (!roomId.value || currentUserRole.value === "member") {
+    roomJoinRequests.value = [];
+    requestsLoaded.value = false;
+    requestsError.value = "";
+    return;
+  }
+
+  if (requestsLoading.value) return;
+  if (!options?.force && requestsLoaded.value) return;
+
+  requestsLoading.value = true;
+  requestsError.value = "";
+
+  try {
+    const response = await getRoomJoinRequests(roomId.value, {
+      page: 1,
+      page_size: 30,
+      status: "pending",
+    });
+    roomJoinRequests.value = response.items;
+    entitiesStore.upsertJoinRequests(response.items);
+    requestsLoaded.value = true;
+  } catch (e: any) {
+    requestsError.value =
+      e?.response?.data?.detail ||
+      e?.message ||
+      t("room.requestsLoadFailed");
+  } finally {
+    requestsLoading.value = false;
+  }
+}
+
+function isRequestActionLoading(requestId: number) {
+  return requestActionIds.value.includes(requestId);
+}
+
+function setRequestActionLoading(requestId: number, loading: boolean) {
+  requestActionIds.value = loading
+    ? [...new Set([...requestActionIds.value, requestId])]
+    : requestActionIds.value.filter((id) => id !== requestId);
+}
+
+async function approveRequest(requestId: number) {
+  setRequestActionLoading(requestId, true);
+  requestsError.value = "";
+
+  try {
+    await approveJoinRequestById(requestId);
+    await fetchRoomRequests({ force: true });
+  } catch (e: any) {
+    requestsError.value =
+      e?.response?.data?.detail ||
+      e?.message ||
+      t("room.requestsLoadFailed");
+  } finally {
+    setRequestActionLoading(requestId, false);
+  }
+}
+
+async function rejectRequest(requestId: number) {
+  setRequestActionLoading(requestId, true);
+  requestsError.value = "";
+
+  try {
+    await rejectJoinRequestById(requestId);
+    await fetchRoomRequests({ force: true });
+  } catch (e: any) {
+    requestsError.value =
+      e?.response?.data?.detail ||
+      e?.message ||
+      t("room.requestsLoadFailed");
+  } finally {
+    setRequestActionLoading(requestId, false);
   }
 }
 
@@ -188,6 +313,10 @@ onMounted(() => {
   void fetchRoomMembers();
 });
 watch(roomId, () => {
+  roomJoinRequests.value = [];
+  requestsLoaded.value = false;
+  requestsError.value = "";
+  requestActionIds.value = [];
   void fetchRoom();
   void fetchRoomMessages();
   void fetchRoomMembers();
@@ -199,6 +328,14 @@ watch(panelOptions, (nextPanels) => {
 });
 watch(() => auth.me?.id, () => {
   syncCurrentUserRole();
+});
+watch([roomId, currentUserRole], () => {
+  void fetchRoomRequests();
+});
+watch(activePanel, (panel) => {
+  if (panel === "requests") {
+    void fetchRoomRequests();
+  }
 });
 </script>
 
@@ -261,80 +398,65 @@ watch(() => auth.me?.id, () => {
             >
               <AppTabs v-model="activePanel" :items="panelOptions" />
 
-              <div
+              <RoomChatTab
                 v-show="activePanel === 'chat'"
-                class="panelBody chatPanelBody"
-              >
-                <ChatPanel
-                  class="chatPanelFill"
-                  :messages="roomChatMessages"
-                  :send-label="t('room.mock.send')"
-                  :loading="roomMessagesState.isLoading"
-                  :error="roomMessagesState.error"
-                  :loading-label="t('common.loading')"
-                  :empty-label="t('room.chatEmpty')"
-                  self-author="Icezero"
-                  @send="handleSend"
-                />
-              </div>
+                :room-key="roomId"
+                :messages="roomChatMessages"
+                :send-label="t('room.mock.send')"
+                :loading="roomMessagesState.isLoading"
+                :sending="roomMessagesState.isSending"
+                :loading-history="roomMessagesState.isLoadingHistory"
+                :has-older="hasOlderMessages"
+                :error="roomMessagesState.error"
+                :loading-label="t('common.loading')"
+                :empty-label="t('room.chatEmpty')"
+                @send="handleSend"
+                @load-older="loadOlderRoomMessages"
+              />
 
-              <div
+              <RoomMembersTab
                 v-show="activePanel === 'members'"
-                class="panelBody membersPanelBody"
-              >
-                <RoomMembersPanel
-                  :members="roomMemberItems"
-                  :search-placeholder="t('room.mock.membersSearchPlaceholder')"
-                  :invite-label="t('room.mock.invite')"
-                  :leave-room-label="t('room.mock.leaveRoom')"
-                  :loading="membersLoading"
-                  :loading-label="t('common.loading')"
-                  :empty-label="membersError || t('room.membersEmpty')"
-                />
-              </div>
+                :members="roomMemberItems"
+                :search-placeholder="t('room.mock.membersSearchPlaceholder')"
+                :invite-label="t('room.mock.invite')"
+                :leave-room-label="t('room.mock.leaveRoom')"
+                :loading="membersLoading"
+                :loading-label="t('common.loading')"
+                :empty-label="membersError || t('room.membersEmpty')"
+              />
 
-              <div
+              <RoomRequestsTab
                 v-show="activePanel === 'requests'"
-                class="panelBody"
-              >
-                <div class="requestList">
-                  <RoomRequestItem
-                    v-for="request in mockRequests"
-                    :key="request.id"
-                    :user="request.user"
-                    :time="request.time"
-                    :note="request.note"
-                    :approve-label="t('room.mock.approve')"
-                    :reject-label="t('room.mock.reject')"
-                  />
-                </div>
-              </div>
+                :loading="requestsLoading"
+                :error="requestsError"
+                :empty-label="t('room.requestsEmpty')"
+                :items="roomRequestItems"
+                :is-request-action-loading="isRequestActionLoading"
+                @approve="approveRequest"
+                @reject="rejectRequest"
+              />
 
-              <div
+              <RoomSettingsTab
                 v-show="activePanel === 'settings'"
-                class="panelBody"
-              >
-                <RoomSettingsPanel
-                  :room="room"
-                  :room-name-label="t('room.mock.settingLabels.roomName')"
-                  :visibility-label="t('room.mock.settingLabels.visibility')"
-                  :sync-policy-label="t('room.mock.settingLabels.policy')"
-                  :sync-policy-value="t('room.mock.syncPolicy')"
-                  :sync-permission-label="t('room.mock.settingLabels.permission')"
-                  :sync-permission-value="t('room.mock.syncPermission')"
-                  :local-sync-title="t('room.mock.localSyncTitle')"
-                  :local-sync-hint="t('room.mock.localSyncHint')"
-                  :info-title="t('room.mock.settingGroups.info')"
-                  :sync-title="t('room.mock.settingGroups.sync')"
-                  :advanced-title="t('room.mock.settingGroups.advanced')"
-                  :advanced-hint="t('room.mock.advancedHint')"
-                  :public-label="t('room.fields.public')"
-                  :private-label="t('room.fields.private')"
-                  :local-sync-strategy="localSyncStrategy"
-                  :local-sync-options="localSyncOptions"
-                  @update:local-sync-strategy="localSyncStrategy = $event"
-                />
-              </div>
+                :room="room"
+                :room-name-label="t('room.mock.settingLabels.roomName')"
+                :visibility-label="t('room.mock.settingLabels.visibility')"
+                :sync-policy-label="t('room.mock.settingLabels.policy')"
+                :sync-policy-value="t('room.mock.syncPolicy')"
+                :sync-permission-label="t('room.mock.settingLabels.permission')"
+                :sync-permission-value="t('room.mock.syncPermission')"
+                :local-sync-title="t('room.mock.localSyncTitle')"
+                :local-sync-hint="t('room.mock.localSyncHint')"
+                :info-title="t('room.mock.settingGroups.info')"
+                :sync-title="t('room.mock.settingGroups.sync')"
+                :advanced-title="t('room.mock.settingGroups.advanced')"
+                :advanced-hint="t('room.mock.advancedHint')"
+                :public-label="t('room.fields.public')"
+                :private-label="t('room.fields.private')"
+                :local-sync-strategy="localSyncStrategy"
+                :local-sync-options="localSyncOptions"
+                @update:local-sync-strategy="localSyncStrategy = $event"
+              />
             </BaseCard>
           </aside>
         </div>
@@ -463,58 +585,6 @@ watch(() => auth.me?.id, () => {
   padding: 0;
 }
 
-.panelBody {
-  display: grid;
-  gap: 14px;
-  padding: 14px;
-  min-height: 0;
-  align-content: start;
-  overflow: auto;
-}
-
-.panelBody > * {
-  align-self: start;
-}
-
-.chatPanelBody {
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.membersPanelBody {
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.membersPanelBody > * {
-  align-self: stretch;
-  min-height: 0;
-}
-
-:deep(.chatPanelFill) {
-  height: 100%;
-  min-height: 0;
-}
-
-.memberList,
-.requestList {
-  display: grid;
-  gap: 10px;
-}
-
-.workspacePanel-enter-active,
-.workspacePanel-leave-active {
-  transition:
-    opacity 180ms ease,
-    transform 220ms ease;
-}
-
-.workspacePanel-enter-from,
-.workspacePanel-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
 @media (max-width: 720px) {
   :deep(.page) {
     height: calc(100dvh - 56px);
@@ -546,15 +616,6 @@ watch(() => auth.me?.id, () => {
   .workspaceColumn {
     min-height: 0;
     overflow: hidden;
-  }
-
-  .chatPanelBody {
-    min-height: 0;
-    height: 100%;
-  }
-
-  :deep(.chatPanelFill) {
-    min-height: 100%;
   }
 }
 
