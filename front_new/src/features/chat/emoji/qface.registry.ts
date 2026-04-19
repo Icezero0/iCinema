@@ -17,11 +17,17 @@ function normalizeLabel(describe: string) {
   return describe.trim() || "";
 }
 
-const allowedIdSet = new Set<string>(qfaceEmojiAllowlist);
+const allowlistOrder = new Map(
+  qfaceEmojiAllowlist.map((id, index) => [id, index] as const),
+);
 const rawRecords = (qfaceIndex as QFaceEmojiRecord[]).filter((record) => {
   if (record.isHide) return false;
-  return allowedIdSet.has(record.emojiId);
-});
+  return allowlistOrder.has(record.emojiId);
+}).sort(
+  (a, b) =>
+    (allowlistOrder.get(a.emojiId) ?? Number.MAX_SAFE_INTEGER) -
+    (allowlistOrder.get(b.emojiId) ?? Number.MAX_SAFE_INTEGER),
+);
 
 export const chatEmojiCatalog: ChatEmojiDefinition[] = rawRecords.map((record) => ({
   id: record.emojiId,

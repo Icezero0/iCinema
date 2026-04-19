@@ -14,10 +14,12 @@ const props = defineProps<{
   status?: "playing" | "paused" | "buffering" | "offline" | "error" | "idle";
 }>();
 
+const firstSegment = computed(() => props.segments[0] ?? null);
+
 const isStandaloneMediaMessage = computed(() => (
   props.segments.length === 1 &&
-  props.segments[0].type === "image" &&
-  (props.segments[0].kind === "image" || props.segments[0].kind === "sticker")
+  firstSegment.value?.type === "image" &&
+  (firstSegment.value.kind === "image" || firstSegment.value.kind === "sticker")
 ));
 
 function getSegmentDisplayMode(segment: ChatSegment) {

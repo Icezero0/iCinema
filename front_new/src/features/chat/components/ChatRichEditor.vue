@@ -242,6 +242,19 @@ function insertEmojiById(emojiId: string) {
   syncEditorState();
 }
 
+function insertText(text: string) {
+  if (!text || !editor.value) return;
+
+  moveCursorBeforeTrailingCursor(editor.value);
+  editor.value
+    .chain()
+    .focus()
+    .insertContent(text)
+    .run();
+
+  syncEditorState();
+}
+
 function appendTextBuffer(target: ChatSegment[], textBuffer: string[]) {
   const content = textBuffer.join("")
     .replace(/\u200B/g, "")
@@ -293,7 +306,7 @@ function collectSegmentsFromNode(
   if (node.type === "inlineMedia" || node.type === "image") {
     const attrs = node.attrs ?? {};
     const src = typeof attrs.src === "string" ? attrs.src : undefined;
-    const kind = typeof attrs.kind === "string" ? attrs.kind : "image";
+    const kind = attrs.kind === "sticker" ? "sticker" : "image";
     if (!src) return;
 
     appendTextBuffer(target, textBuffer);
@@ -457,6 +470,7 @@ watch(
 
 defineExpose({
   insertEmojiById,
+  insertText,
   collectSegments,
   clearAndFocus,
 });

@@ -34,6 +34,7 @@ declare module 'vue' {
     BaseSelect: typeof import('./src/ui/base/BaseSelect.vue')['default']
     BaseToast: typeof import('./src/ui/base/BaseToast.vue')['default']
     PanelSectionHeader: typeof import('./src/ui/layout/PanelSectionHeader.vue')['default']
+    QfacePenguinIcon: typeof import('./src/ui/icons/QfacePenguinIcon.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     RowListItem: typeof import('./src/ui/base/RowListItem.vue')['default']
