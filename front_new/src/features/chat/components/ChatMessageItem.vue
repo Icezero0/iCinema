@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import RoomMemberAvatar from "@/features/room/components/RoomMemberAvatar.vue";
-import { getChatEmojiLabel, getChatEmojiUrl } from "@/features/chat/emoji";
+import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
 import ChatInlineMedia from "./ChatInlineMedia.vue";
 import type { ChatSegment } from "@/features/chat/types";
 
@@ -78,16 +78,16 @@ function getSegmentLayoutClass(segment: ChatSegment) {
           </template>
           <template v-else-if="segment.type === 'emoji'">
             <ChatInlineMedia
-              v-if="getChatEmojiUrl(segment.emojiId)"
+              v-if="getQfaceUrl(segment.emojiId)"
               kind="emoji"
               context="message"
               display-mode="inline"
-              :src="getChatEmojiUrl(segment.emojiId) || undefined"
-              :alt="getChatEmojiLabel(segment.emojiId)"
+              :src="getQfaceUrl(segment.emojiId) || undefined"
+              :alt="getQfaceLabel(segment.emojiId)"
               :emoji-id="segment.emojiId"
               :animated="segment.animated"
             />
-            <span v-else>{{ getChatEmojiLabel(segment.emojiId) }}</span>
+            <span v-else>{{ getQfaceLabel(segment.emojiId) }}</span>
           </template>
           <template v-else>
             <ChatInlineMedia

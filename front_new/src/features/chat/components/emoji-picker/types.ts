@@ -1,7 +1,7 @@
 import type { Component } from "vue";
 import type { StickerResponse } from "@/infra/api/media.api";
 import type {
-  ChatEmojiDefinition,
+  QfaceDefinition,
   UnicodeEmojiDefinition,
 } from "@/features/chat/emoji";
 
@@ -32,8 +32,8 @@ export type StickerActionItem = {
 };
 
 export type QfaceTabProps = {
-  recentEmojis: ChatEmojiDefinition[];
-  allEmojis: ChatEmojiDefinition[];
+  recentQfaces: QfaceDefinition[];
+  allQfaces: QfaceDefinition[];
 };
 
 export type UnicodeEmojiTabProps = {

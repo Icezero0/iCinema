@@ -6,7 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { NodeSelection, Plugin, TextSelection } from "@tiptap/pm/state";
 import InlineMedia from "@/features/chat/editor/InlineMedia";
 import InlineEmoji from "@/features/chat/editor/InlineEmoji";
-import { getChatEmojiLabel, getChatEmojiUrl } from "@/features/chat/emoji";
+import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
 import type { ChatSegment } from "@/features/chat/types";
 
 type ComposerNode = {
@@ -377,8 +377,8 @@ function syncEditorState() {
   editorVersion.value += 1;
 }
 
-function insertEmojiById(emojiId: string) {
-  const src = getChatEmojiUrl(emojiId);
+function insertQfaceById(qfaceId: string) {
+  const src = getQfaceUrl(qfaceId);
   if (!src || !editor.value) return;
 
   moveCursorBeforeTrailingCursor(editor.value);
@@ -390,9 +390,9 @@ function insertEmojiById(emojiId: string) {
       type: "inlineEmoji",
       attrs: {
         src,
-        alt: getChatEmojiLabel(emojiId),
+        alt: getQfaceLabel(qfaceId),
         kind: "emoji",
-        emojiId,
+        emojiId: qfaceId,
       },
     })
     .run();
@@ -686,7 +686,7 @@ watch(
 );
 
 defineExpose({
-  insertEmojiById,
+  insertQfaceById,
   insertSticker,
   insertText,
   collectSegments,

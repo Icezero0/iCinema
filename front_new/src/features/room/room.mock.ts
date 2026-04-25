@@ -143,7 +143,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       role: "manager" as const,
       status: "paused" as const,
       segments: [
-        { id: "9-1", type: "text" as const, content: "我先丢一个平台 emoji 进来，看看 APNG 在消息区能不能直接播放。" },
+        { id: "9-1", type: "text" as const, content: "我先丢一个 QFace 进来，看看 APNG 在消息区能不能直接播放。" },
         {
           id: "9-2",
           type: "emoji" as const,

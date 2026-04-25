@@ -177,4 +177,4 @@ export const qfaceEmojiAllowlist = [
   "201", // /点赞
 ] as const;
 
-export type AllowedQFaceEmojiId = typeof qfaceEmojiAllowlist[number];
+export type AllowedQfaceEmojiId = typeof qfaceEmojiAllowlist[number];

@@ -32,22 +32,22 @@ export type StickerLibraryResponse = {
   total_pages: number | null;
 };
 
-export type EmojiAssetResponse = {
+export type PlatformEmojiAssetResponse = {
   type: number;
   name: string;
   path: string;
   url: string;
 };
 
-export type EmojiResponse = {
+export type PlatformEmojiResponse = {
   provider: string;
   id: string;
   describe: string | null;
-  assets: EmojiAssetResponse[];
+  assets: PlatformEmojiAssetResponse[];
 };
 
-export type EmojiListResponse = {
-  items: EmojiResponse[];
+export type PlatformEmojiListResponse = {
+  items: PlatformEmojiResponse[];
 };
 
 export async function uploadImage(file: File) {
@@ -116,13 +116,13 @@ export async function collectSticker(stickerId: number) {
   return data;
 }
 
-export async function getEmojis() {
-  const { data } = await http.get<EmojiListResponse>("/media/emojis");
+export async function getPlatformEmojis() {
+  const { data } = await http.get<PlatformEmojiListResponse>("/media/emojis");
   return data;
 }
 
-export async function getRecentEmojis(limit = 20) {
-  const { data } = await http.get<EmojiListResponse>("/media/emojis/recent", {
+export async function getRecentPlatformEmojis(limit = 20) {
+  const { data } = await http.get<PlatformEmojiListResponse>("/media/emojis/recent", {
     params: { limit },
   });
 

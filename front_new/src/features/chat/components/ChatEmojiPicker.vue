@@ -9,7 +9,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } 
 import { useI18n } from "vue-i18n";
 import type { UnicodeEmojiDefinition } from "@/features/chat/emoji";
 import { resolveMediaUrl } from "@/infra/media";
-import { useEmojiStore } from "@/stores/emoji.store";
+import { useQfaceStore } from "@/stores/qface.store";
 import { useUnicodeEmojiStore } from "@/stores/unicode_emoji.store";
 import { useStickersStore } from "@/stores/stickers.store";
 import QfacePenguinIcon from "@/ui/icons/QfacePenguinIcon.vue";
@@ -33,7 +33,7 @@ defineProps<{
 }>();
 
 const { t } = useI18n();
-const emojiStore = useEmojiStore();
+const qfaceStore = useQfaceStore();
 const unicodeEmojiStore = useUnicodeEmojiStore();
 const stickersStore = useStickersStore();
 const activeEmojiTab = ref<EmojiPickerTabKey>("qface");
@@ -42,11 +42,11 @@ const hasRequestedStickerLibrary = ref(false);
 const stickerUploadInputRef = ref<HTMLInputElement | null>(null);
 let viewportMediaQuery: MediaQueryList | null = null;
 let removeViewportListener: (() => void) | null = null;
-const qfaceCatalog = computed(() => emojiStore.allEmojis);
+const qfaceCatalog = computed(() => qfaceStore.allQfaces);
 const unicodeEmojiCatalog = computed(() => unicodeEmojiStore.allUnicodeEmojis);
 const stickerLibrary = computed(() => stickersStore.library);
 const recentDisplayLimit = computed(() => (isCompactViewport.value ? 8 : 10));
-const recentQface = computed(() => emojiStore.recentEmojis.slice(0, recentDisplayLimit.value));
+const recentQfaces = computed(() => qfaceStore.recentQfaces.slice(0, recentDisplayLimit.value));
 const recentUnicodeEmoji = computed(() => (
   unicodeEmojiStore.recentUnicodeEmojis.slice(0, recentDisplayLimit.value)
 ));
@@ -108,7 +108,7 @@ const tabItems = computed<EmojiPickerTabItem[]>(() => [
 ]);
 
 onMounted(() => {
-  emojiStore.hydrateAssetCache();
+  qfaceStore.hydrateAssetCache();
 
   if (typeof window === "undefined") return;
 
@@ -142,9 +142,9 @@ watch(activeEmojiTab, async (tab) => {
   }
 });
 
-function selectEmoji(emojiId: string) {
-  emojiStore.markEmojiUsed(emojiId);
-  emit("selectEmoji", { kind: "qface", emojiId });
+function selectQface(qfaceId: string) {
+  qfaceStore.markQfaceUsed(qfaceId);
+  emit("selectEmoji", { kind: "qface", emojiId: qfaceId });
 }
 
 function selectUnicodeEmoji(emojiId: string) {
@@ -222,9 +222,9 @@ function handleStickerAction(actionKey: string) {
     <div class="emojiPanelBody">
       <ChatQfaceTab
         v-if="activeEmojiTab === 'qface'"
-        :recent-emojis="recentQface"
-        :all-emojis="qfaceCatalog"
-        @select="selectEmoji"
+        :recent-qfaces="recentQfaces"
+        :all-qfaces="qfaceCatalog"
+        @select="selectQface"
       />
 
       <ChatUnicodeEmojiTab

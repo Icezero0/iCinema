@@ -5,13 +5,13 @@ import {
   type MediaAssetUploadResponse,
   type StickerResponse,
 } from "@/infra/api/media.api";
-import type { ChatEmojiDefinition } from "@/features/chat/emoji";
+import type { QfaceDefinition } from "@/features/chat/emoji";
 import { readPersistedState, writePersistedState } from "@/stores/persistence";
 
 const STORAGE_KEY = "icinema:assets-store";
 const MAX_PERSISTED_ASSETS = 240;
 
-export type AssetKind = "image" | "sticker" | "emoji";
+export type AssetKind = "image" | "sticker" | "qface";
 
 export type CachedAssetRecord = {
   key: string;
@@ -105,9 +105,9 @@ export const useAssetsStore = defineStore("assets", {
       return (id: number | null | undefined) =>
         typeof id === "number" ? this.getAsset("sticker", id) : null;
     },
-    getEmojiAsset() {
+    getQfaceAsset() {
       return (id: string | null | undefined) =>
-        id ? this.getAsset("emoji", id) : null;
+        id ? this.getAsset("qface", id) : null;
     },
   },
 
@@ -194,36 +194,36 @@ export const useAssetsStore = defineStore("assets", {
       });
     },
 
-    upsertEmojiAsset(emoji: {
+    upsertQfaceAsset(qface: {
       id: string;
       label?: string | null;
       provider?: string | null;
       staticUrl?: string | null;
       animatedUrl?: string | null;
     } | null | undefined) {
-      if (!emoji?.id) return null;
+      if (!qface?.id) return null;
 
       return this.upsertAsset({
-        kind: "emoji",
-        id: emoji.id,
-        url: emoji.animatedUrl ?? emoji.staticUrl ?? null,
-        label: emoji.label ?? null,
-        provider: emoji.provider ?? null,
-        static_url: emoji.staticUrl ?? null,
-        animated_url: emoji.animatedUrl ?? null,
+        kind: "qface",
+        id: qface.id,
+        url: qface.animatedUrl ?? qface.staticUrl ?? null,
+        label: qface.label ?? null,
+        provider: qface.provider ?? "qface",
+        static_url: qface.staticUrl ?? null,
+        animated_url: qface.animatedUrl ?? null,
         status: "ready",
       });
     },
 
-    upsertEmojiCatalog(definitions: Array<ChatEmojiDefinition | null | undefined>) {
-      definitions.forEach((emoji) => {
-        if (!emoji?.id) return;
+    upsertQfaceCatalog(definitions: Array<QfaceDefinition | null | undefined>) {
+      definitions.forEach((qface) => {
+        if (!qface?.id) return;
 
-        this.upsertEmojiAsset({
-          id: emoji.id,
-          label: emoji.label,
-          staticUrl: emoji.staticUrl ?? null,
-          animatedUrl: emoji.animatedUrl ?? null,
+        this.upsertQfaceAsset({
+          id: qface.id,
+          label: qface.label,
+          staticUrl: qface.staticUrl ?? null,
+          animatedUrl: qface.animatedUrl ?? null,
         });
       });
     },

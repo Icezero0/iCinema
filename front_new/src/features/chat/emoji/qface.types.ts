@@ -1,10 +1,10 @@
-export type QFaceAsset = {
+export type QfaceAsset = {
   type: number;
   name: string;
   path: string;
 };
 
-export type QFaceEmojiRecord = {
+export type QfaceEmojiRecord = {
   emojiId: string;
   describe: string;
   qzoneCode: string;
@@ -18,10 +18,10 @@ export type QFaceEmojiRecord = {
   endTime: string;
   animationWidth: number;
   animationHeigh: number;
-  assets: QFaceAsset[];
+  assets: QfaceAsset[];
 };
 
-export type ChatEmojiDefinition = {
+export type QfaceDefinition = {
   id: string;
   label: string;
   staticUrl?: string;

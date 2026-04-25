@@ -31,7 +31,7 @@ const emojiPanelStyle = ref<Record<string, string>>({
   visibility: "hidden",
 });
 const editorRef = ref<{
-  insertEmojiById: (emojiId: string) => void;
+  insertQfaceById: (qfaceId: string) => void;
   insertSticker: (sticker: { id: number; url: string; alt?: string }) => void;
   insertText: (text: string) => void;
   collectSegments: () => ChatSegment[];
@@ -91,7 +91,7 @@ function handleCanSendChange(value: boolean) {
 
 function handleSelectEmoji(selection: ChatEmojiPickerSelection) {
   if (selection.kind === "qface") {
-    editorRef.value?.insertEmojiById(selection.emojiId);
+    editorRef.value?.insertQfaceById(selection.emojiId);
   } else if (selection.kind === "sticker") {
     editorRef.value?.insertSticker({
       id: selection.stickerId,

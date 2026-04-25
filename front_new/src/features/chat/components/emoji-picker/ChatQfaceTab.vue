@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { getChatEmojiUrl } from "@/features/chat/emoji";
+import { getQfaceUrl } from "@/features/chat/emoji";
 import type { QfaceTabProps } from "./types";
 
 defineProps<QfaceTabProps>();
@@ -14,13 +14,13 @@ const { t } = useI18n();
 
 <template>
   <div class="emojiSections">
-    <section v-if="recentEmojis.length > 0" class="emojiSection">
+    <section v-if="recentQfaces.length > 0" class="emojiSection">
       <p class="emojiSectionLabel">
         {{ t("chat.emojiPanel.sections.recent") }}
       </p>
       <div class="emojiGrid emojiGridRecent">
         <button
-          v-for="emoji in recentEmojis"
+          v-for="emoji in recentQfaces"
           :key="`recent-${emoji.id}`"
           class="emojiOption"
           type="button"
@@ -29,9 +29,9 @@ const { t } = useI18n();
           @click="emit('select', emoji.id)"
         >
           <img
-            v-if="getChatEmojiUrl(emoji.id)"
+            v-if="getQfaceUrl(emoji.id)"
             class="emojiOptionImage"
-            :src="getChatEmojiUrl(emoji.id) || undefined"
+            :src="getQfaceUrl(emoji.id) || undefined"
             :alt="emoji.label"
           >
           <span class="emojiOptionTooltip" role="tooltip">{{ emoji.label }}</span>
@@ -45,7 +45,7 @@ const { t } = useI18n();
       </p>
       <div class="emojiGrid">
         <button
-          v-for="emoji in allEmojis"
+          v-for="emoji in allQfaces"
           :key="emoji.id"
           class="emojiOption"
           type="button"
@@ -54,9 +54,9 @@ const { t } = useI18n();
           @click="emit('select', emoji.id)"
         >
           <img
-            v-if="getChatEmojiUrl(emoji.id)"
+            v-if="getQfaceUrl(emoji.id)"
             class="emojiOptionImage"
-            :src="getChatEmojiUrl(emoji.id) || undefined"
+            :src="getQfaceUrl(emoji.id) || undefined"
             :alt="emoji.label"
           >
           <span class="emojiOptionTooltip" role="tooltip">{{ emoji.label }}</span>
