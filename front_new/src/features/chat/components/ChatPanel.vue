@@ -31,10 +31,13 @@ const pendingHistoryAnchor = ref<{
   phase: "restoring" | "settling";
   stableFrames: number;
 } | null>(null);
+const isInitialScrollSettling = ref(false);
 let timelineResizeObserver: ResizeObserver | null = null;
 let removeTimelineLoadListener: (() => void) | null = null;
+let removeInitialScrollInteractionListeners: (() => void) | null = null;
 const shouldStickToBottom = ref(true);
 let historyAnchorFrame = 0;
+let initialScrollSettlingTimer = 0;
 
 function getDistanceToBottom() {
   const timeline = timelineRef.value;
@@ -47,6 +50,28 @@ function cancelHistoryAnchorFrame() {
   if (!historyAnchorFrame) return;
   window.cancelAnimationFrame(historyAnchorFrame);
   historyAnchorFrame = 0;
+}
+
+function clearInitialScrollSettlingTimer() {
+  if (!initialScrollSettlingTimer) return;
+  window.clearTimeout(initialScrollSettlingTimer);
+  initialScrollSettlingTimer = 0;
+}
+
+function scheduleInitialScrollSettling() {
+  isInitialScrollSettling.value = true;
+  clearInitialScrollSettlingTimer();
+  initialScrollSettlingTimer = window.setTimeout(() => {
+    initialScrollSettlingTimer = 0;
+    isInitialScrollSettling.value = false;
+  }, 800);
+}
+
+function cancelInitialScrollSettling() {
+  if (!isInitialScrollSettling.value) return;
+
+  clearInitialScrollSettlingTimer();
+  isInitialScrollSettling.value = false;
 }
 
 function getMessageElement(messageId: string) {
@@ -165,6 +190,11 @@ function handleTimelineScroll() {
   const timeline = timelineRef.value;
   if (!timeline) return;
 
+  if (isInitialScrollSettling.value) {
+    shouldStickToBottom.value = true;
+    return;
+  }
+
   shouldStickToBottom.value = getDistanceToBottom() <= 24;
 
   if (
@@ -213,7 +243,10 @@ onMounted(() => {
         return;
       }
 
-      if (shouldStickToBottom.value) {
+      if (shouldStickToBottom.value || isInitialScrollSettling.value) {
+        if (isInitialScrollSettling.value) {
+          scheduleInitialScrollSettling();
+        }
         void nextTick().then(() => {
           scrollToBottom();
         });
@@ -237,7 +270,11 @@ onMounted(() => {
         return;
       }
 
-      if (!shouldStickToBottom.value) return;
+      if (!shouldStickToBottom.value && !isInitialScrollSettling.value) return;
+
+      if (isInitialScrollSettling.value) {
+        scheduleInitialScrollSettling();
+      }
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -246,18 +283,33 @@ onMounted(() => {
       });
     };
 
+    const cancelInitialScrollSettlingOnWheel = () => cancelInitialScrollSettling();
+    const cancelInitialScrollSettlingOnTouchStart = () => cancelInitialScrollSettling();
+    const cancelInitialScrollSettlingOnPointerDown = () => cancelInitialScrollSettling();
+
     timeline.addEventListener("load", onTimelineMediaLoad, true);
+    timeline.addEventListener("wheel", cancelInitialScrollSettlingOnWheel, { passive: true });
+    timeline.addEventListener("touchstart", cancelInitialScrollSettlingOnTouchStart, { passive: true });
+    timeline.addEventListener("pointerdown", cancelInitialScrollSettlingOnPointerDown, { passive: true });
     removeTimelineLoadListener = () => {
       timeline.removeEventListener("load", onTimelineMediaLoad, true);
       removeTimelineLoadListener = null;
+    };
+    removeInitialScrollInteractionListeners = () => {
+      timeline.removeEventListener("wheel", cancelInitialScrollSettlingOnWheel);
+      timeline.removeEventListener("touchstart", cancelInitialScrollSettlingOnTouchStart);
+      timeline.removeEventListener("pointerdown", cancelInitialScrollSettlingOnPointerDown);
+      removeInitialScrollInteractionListeners = null;
     };
   }
 });
 
 onBeforeUnmount(() => {
+  clearInitialScrollSettlingTimer();
   timelineResizeObserver?.disconnect();
   timelineResizeObserver = null;
   removeTimelineLoadListener?.();
+  removeInitialScrollInteractionListeners?.();
   cancelHistoryAnchorFrame();
 });
 
@@ -267,6 +319,8 @@ watch(
     hasInitializedScroll.value = false;
     pendingScrollToBottomAtCount.value = null;
     pendingHistoryAnchor.value = null;
+    isInitialScrollSettling.value = false;
+    clearInitialScrollSettlingTimer();
     shouldStickToBottom.value = true;
     cancelHistoryAnchorFrame();
   },
@@ -280,6 +334,7 @@ watch(
     await nextTick();
     scrollToBottom();
     hasInitializedScroll.value = true;
+    scheduleInitialScrollSettling();
   },
   { immediate: true },
 );

@@ -7,6 +7,10 @@ import {
   type MessageSegmentIn,
 } from "@/infra/api/messages.api";
 import type { ChatMessage, ChatSegment } from "@/features/chat/types";
+import {
+  stripChatTextCursorAnchors,
+  trimTrailingInvisibleTextSegments,
+} from "@/features/chat/segments";
 import { useAuthStore } from "@/stores/auth.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useAssetsStore } from "@/stores/assets.store";
@@ -208,13 +212,15 @@ async function prepareSegmentsForSend(
 
 function mapChatSegmentsToMessageSegments(segments: ChatSegment[]) {
   const result: MessageSegmentIn[] = [];
+  const normalizedSegments = trimTrailingInvisibleTextSegments([...segments]);
 
-  segments.forEach((segment) => {
+  normalizedSegments.forEach((segment) => {
     if (segment.type === "text") {
-      if (!segment.content.trim()) return;
+      const text = stripChatTextCursorAnchors(segment.content);
+      if (!text) return;
       result.push({
         type: "text",
-        text: segment.content,
+        text,
       });
       return;
     }
