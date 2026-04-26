@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, ref, toRef } from "vue";
 import ChatMessageItem from "./ChatMessageItem.vue";
 import ChatComposer from "./ChatComposer.vue";
+import { useChatTimelineScroll } from "@/features/chat/composables/useChatTimelineScroll";
 import type { ChatMessage, ChatSegment } from "@/features/chat/types";
 
 const props = defineProps<{
@@ -23,191 +24,21 @@ const emit = defineEmits<{
 }>();
 
 const timelineRef = ref<HTMLElement | null>(null);
-const hasInitializedScroll = ref(false);
-const pendingScrollToBottomAtCount = ref<number | null>(null);
-const pendingHistoryAnchor = ref<{
-  messageId: string;
-  offsetTop: number;
-  phase: "restoring" | "settling";
-  stableFrames: number;
-} | null>(null);
-const isInitialScrollSettling = ref(false);
-let timelineResizeObserver: ResizeObserver | null = null;
-let removeTimelineLoadListener: (() => void) | null = null;
-let removeInitialScrollInteractionListeners: (() => void) | null = null;
-const shouldStickToBottom = ref(true);
-let historyAnchorFrame = 0;
-let initialScrollSettlingTimer = 0;
-
-function getDistanceToBottom() {
-  const timeline = timelineRef.value;
-  if (!timeline) return Number.POSITIVE_INFINITY;
-
-  return timeline.scrollHeight - timeline.clientHeight - timeline.scrollTop;
-}
-
-function cancelHistoryAnchorFrame() {
-  if (!historyAnchorFrame) return;
-  window.cancelAnimationFrame(historyAnchorFrame);
-  historyAnchorFrame = 0;
-}
-
-function clearInitialScrollSettlingTimer() {
-  if (!initialScrollSettlingTimer) return;
-  window.clearTimeout(initialScrollSettlingTimer);
-  initialScrollSettlingTimer = 0;
-}
-
-function scheduleInitialScrollSettling() {
-  isInitialScrollSettling.value = true;
-  clearInitialScrollSettlingTimer();
-  initialScrollSettlingTimer = window.setTimeout(() => {
-    initialScrollSettlingTimer = 0;
-    isInitialScrollSettling.value = false;
-  }, 800);
-}
-
-function cancelInitialScrollSettling() {
-  if (!isInitialScrollSettling.value) return;
-
-  clearInitialScrollSettlingTimer();
-  isInitialScrollSettling.value = false;
-}
-
-function getMessageElement(messageId: string) {
-  const timeline = timelineRef.value;
-  if (!timeline) return null;
-
-  return Array.from(
-    timeline.querySelectorAll<HTMLElement>("[data-chat-message-id]"),
-  ).find((element) => element.dataset.chatMessageId === messageId) ?? null;
-}
-
-function captureHistoryAnchor() {
-  const timeline = timelineRef.value;
-  if (!timeline) return null;
-
-  const timelineRect = timeline.getBoundingClientRect();
-  const messageElements = Array.from(
-    timeline.querySelectorAll<HTMLElement>("[data-chat-message-id]"),
-  );
-  const unstableBoundaryMessageId =
-    props.messages.length > 0 ? String(props.messages[0].id) : null;
-
-  const firstVisibleElement = messageElements.find((element) => {
-    const rect = element.getBoundingClientRect();
-    return rect.bottom > timelineRect.top + 4;
-  }) ?? messageElements[0];
-
-  const anchorElement =
-    unstableBoundaryMessageId &&
-    firstVisibleElement?.dataset.chatMessageId === unstableBoundaryMessageId
-      ? messageElements.find((element) => (
-        element.dataset.chatMessageId !== unstableBoundaryMessageId &&
-        element.getBoundingClientRect().bottom > timelineRect.top + 4
-      )) ??
-        messageElements.find((element) => (
-          element.dataset.chatMessageId !== unstableBoundaryMessageId
-        )) ??
-        firstVisibleElement
-      : firstVisibleElement;
-
-  if (!anchorElement) return null;
-
-  return {
-    messageId: anchorElement.dataset.chatMessageId ?? "",
-    offsetTop: anchorElement.getBoundingClientRect().top - timelineRect.top,
-    phase: "restoring" as const,
-    stableFrames: 0,
-  };
-}
-
-function restoreHistoryAnchor() {
-  const timeline = timelineRef.value;
-  const historyAnchor = pendingHistoryAnchor.value;
-  if (!timeline || !historyAnchor?.messageId) return false;
-
-  const anchorElement = getMessageElement(historyAnchor.messageId);
-  if (!anchorElement) {
-    pendingHistoryAnchor.value = null;
-    return false;
-  }
-
-  const timelineRect = timeline.getBoundingClientRect();
-  const currentOffset = anchorElement.getBoundingClientRect().top - timelineRect.top;
-  const delta = currentOffset - historyAnchor.offsetTop;
-
-  if (Math.abs(delta) < 0.5) {
-    historyAnchor.phase = "settling";
-    historyAnchor.stableFrames += 1;
-    return false;
-  }
-
-  timeline.scrollTop += delta;
-  historyAnchor.phase = "restoring";
-  historyAnchor.stableFrames = 0;
-  return true;
-}
-
-function settleHistoryAnchor() {
-  cancelHistoryAnchorFrame();
-
-  historyAnchorFrame = window.requestAnimationFrame(() => {
-    historyAnchorFrame = 0;
-
-    const historyAnchor = pendingHistoryAnchor.value;
-    if (!historyAnchor || props.loadingHistory) return;
-
-    const corrected = restoreHistoryAnchor();
-    if (corrected) {
-      settleHistoryAnchor();
-      return;
-    }
-
-    if (historyAnchor.stableFrames >= 2) {
-      pendingHistoryAnchor.value = null;
-      return;
-    }
-
-    settleHistoryAnchor();
-  });
-}
+const timelineScroll = useChatTimelineScroll({
+  timelineRef,
+  roomKey: toRef(props, "roomKey"),
+  messages: toRef(props, "messages"),
+  loading: toRef(props, "loading"),
+  loadingHistory: toRef(props, "loadingHistory"),
+  sending: toRef(props, "sending"),
+  hasOlder: toRef(props, "hasOlder"),
+  onLoadOlder: () => emit("loadOlder"),
+});
 
 function handleSend(segments: ChatSegment[]) {
   if (segments.length === 0) return;
-  pendingScrollToBottomAtCount.value = props.messages.length + 1;
+  timelineScroll.markPendingSentMessage(props.messages.length + 1);
   emit("send", segments);
-}
-
-function scrollToBottom() {
-  const timeline = timelineRef.value;
-  if (!timeline) return;
-  timeline.scrollTop = timeline.scrollHeight;
-  shouldStickToBottom.value = true;
-}
-
-function handleTimelineScroll() {
-  const timeline = timelineRef.value;
-  if (!timeline) return;
-
-  if (isInitialScrollSettling.value) {
-    shouldStickToBottom.value = true;
-    return;
-  }
-
-  shouldStickToBottom.value = getDistanceToBottom() <= 24;
-
-  if (
-    timeline.scrollTop <= 4 &&
-    props.hasOlder &&
-    !props.loading &&
-    !props.loadingHistory &&
-    !pendingHistoryAnchor.value
-  ) {
-    cancelHistoryAnchorFrame();
-    pendingHistoryAnchor.value = captureHistoryAnchor();
-    emit("loadOlder");
-  }
 }
 
 function getMessageGroupKey(message: ChatMessage) {
@@ -231,165 +62,11 @@ const displayMessages = computed(() => props.messages.map((message, index, list)
   };
 }));
 
-onMounted(() => {
-  const timeline = timelineRef.value;
-
-  if (typeof ResizeObserver !== "undefined" && timeline) {
-    timelineResizeObserver = new ResizeObserver(() => {
-      if (pendingHistoryAnchor.value && !props.loadingHistory) {
-        void nextTick().then(() => {
-          settleHistoryAnchor();
-        });
-        return;
-      }
-
-      if (shouldStickToBottom.value || isInitialScrollSettling.value) {
-        if (isInitialScrollSettling.value) {
-          scheduleInitialScrollSettling();
-        }
-        void nextTick().then(() => {
-          scrollToBottom();
-        });
-      }
-    });
-    timelineResizeObserver.observe(timeline);
-  }
-
-  if (timeline) {
-    const onTimelineMediaLoad = (event: Event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLImageElement)) return;
-      if (!timeline.contains(target)) return;
-
-      if (pendingHistoryAnchor.value && !props.loadingHistory) {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            settleHistoryAnchor();
-          });
-        });
-        return;
-      }
-
-      if (!shouldStickToBottom.value && !isInitialScrollSettling.value) return;
-
-      if (isInitialScrollSettling.value) {
-        scheduleInitialScrollSettling();
-      }
-
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollToBottom();
-        });
-      });
-    };
-
-    const cancelInitialScrollSettlingOnWheel = () => cancelInitialScrollSettling();
-    const cancelInitialScrollSettlingOnTouchStart = () => cancelInitialScrollSettling();
-    const cancelInitialScrollSettlingOnPointerDown = () => cancelInitialScrollSettling();
-
-    timeline.addEventListener("load", onTimelineMediaLoad, true);
-    timeline.addEventListener("wheel", cancelInitialScrollSettlingOnWheel, { passive: true });
-    timeline.addEventListener("touchstart", cancelInitialScrollSettlingOnTouchStart, { passive: true });
-    timeline.addEventListener("pointerdown", cancelInitialScrollSettlingOnPointerDown, { passive: true });
-    removeTimelineLoadListener = () => {
-      timeline.removeEventListener("load", onTimelineMediaLoad, true);
-      removeTimelineLoadListener = null;
-    };
-    removeInitialScrollInteractionListeners = () => {
-      timeline.removeEventListener("wheel", cancelInitialScrollSettlingOnWheel);
-      timeline.removeEventListener("touchstart", cancelInitialScrollSettlingOnTouchStart);
-      timeline.removeEventListener("pointerdown", cancelInitialScrollSettlingOnPointerDown);
-      removeInitialScrollInteractionListeners = null;
-    };
-  }
-});
-
-onBeforeUnmount(() => {
-  clearInitialScrollSettlingTimer();
-  timelineResizeObserver?.disconnect();
-  timelineResizeObserver = null;
-  removeTimelineLoadListener?.();
-  removeInitialScrollInteractionListeners?.();
-  cancelHistoryAnchorFrame();
-});
-
-watch(
-  () => props.roomKey,
-  () => {
-    hasInitializedScroll.value = false;
-    pendingScrollToBottomAtCount.value = null;
-    pendingHistoryAnchor.value = null;
-    isInitialScrollSettling.value = false;
-    clearInitialScrollSettlingTimer();
-    shouldStickToBottom.value = true;
-    cancelHistoryAnchorFrame();
-  },
-);
-
-watch(
-  () => [props.loading, props.messages.length] as const,
-  async ([loading, messageCount]) => {
-    if (loading || hasInitializedScroll.value || messageCount === 0) return;
-
-    await nextTick();
-    scrollToBottom();
-    hasInitializedScroll.value = true;
-    scheduleInitialScrollSettling();
-  },
-  { immediate: true },
-);
-
-watch(
-  () => props.messages.length,
-  async (nextLength, previousLength) => {
-    if (nextLength === previousLength) return;
-
-    await nextTick();
-
-    const timeline = timelineRef.value;
-    if (!timeline) return;
-
-    if (pendingHistoryAnchor.value) {
-      settleHistoryAnchor();
-      return;
-    }
-
-    if (
-      pendingScrollToBottomAtCount.value != null &&
-      nextLength >= pendingScrollToBottomAtCount.value
-    ) {
-      scrollToBottom();
-      pendingScrollToBottomAtCount.value = null;
-    }
-  },
-);
-
-watch(
-  () => props.loadingHistory,
-  async (loadingHistory) => {
-    if (loadingHistory || !pendingHistoryAnchor.value) return;
-
-    await nextTick();
-
-    settleHistoryAnchor();
-  },
-);
-
-watch(
-  () => props.sending,
-  (sending) => {
-    if (!sending && pendingScrollToBottomAtCount.value != null) {
-      if (props.messages.length < pendingScrollToBottomAtCount.value) {
-        pendingScrollToBottomAtCount.value = null;
-      }
-    }
-  },
-);
 </script>
 
 <template>
   <div class="panel">
-    <div ref="timelineRef" class="timeline" @scroll="handleTimelineScroll">
+    <div ref="timelineRef" class="timeline" @scroll="timelineScroll.handleTimelineScroll">
       <div v-if="loading" class="feedback">
         <span class="feedbackText">{{ loadingLabel || "Loading…" }}</span>
       </div>

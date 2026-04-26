@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import {
   ArrowDownTrayIcon,
   ClipboardDocumentIcon,
@@ -7,56 +7,9 @@ import {
   HeartIcon,
 } from "@heroicons/vue/24/outline";
 import { useI18n } from "vue-i18n";
-import { useMediaViewerStore } from "@/stores/media-viewer.store";
-import { useStickersStore } from "@/stores/stickers.store";
-import { useToastsStore } from "@/stores/toasts.store";
+import { useChatMediaActions } from "@/features/chat/composables/useChatMediaActions";
+import { useChatMediaSelection } from "@/features/chat/composables/useChatMediaSelection";
 import BaseMenuItem from "@/ui/base/BaseMenuItem.vue";
-
-type SelectionSubscriber = () => void;
-type CopySubscriber = (event: ClipboardEvent) => void;
-
-const selectionSubscribers = new Set<SelectionSubscriber>();
-const copySubscribers = new Set<CopySubscriber>();
-
-function notifySelectionSubscribers() {
-  selectionSubscribers.forEach((callback) => callback());
-}
-
-function notifyCopySubscribers(event: ClipboardEvent) {
-  copySubscribers.forEach((callback) => callback(event));
-}
-
-function subscribeSelectionChange(callback: SelectionSubscriber) {
-  if (selectionSubscribers.size === 0 && typeof document !== "undefined") {
-    document.addEventListener("selectionchange", notifySelectionSubscribers);
-  }
-
-  selectionSubscribers.add(callback);
-
-  return () => {
-    selectionSubscribers.delete(callback);
-
-    if (selectionSubscribers.size === 0 && typeof document !== "undefined") {
-      document.removeEventListener("selectionchange", notifySelectionSubscribers);
-    }
-  };
-}
-
-function subscribeCopy(callback: CopySubscriber) {
-  if (copySubscribers.size === 0 && typeof document !== "undefined") {
-    document.addEventListener("copy", notifyCopySubscribers);
-  }
-
-  copySubscribers.add(callback);
-
-  return () => {
-    copySubscribers.delete(callback);
-
-    if (copySubscribers.size === 0 && typeof document !== "undefined") {
-      document.removeEventListener("copy", notifyCopySubscribers);
-    }
-  };
-}
 
 const props = withDefaults(defineProps<{
   kind: "emoji" | "image" | "sticker";
@@ -81,38 +34,35 @@ const props = withDefaults(defineProps<{
 });
 
 const { t } = useI18n();
-const mediaViewer = useMediaViewerStore();
-const stickersStore = useStickersStore();
-const toasts = useToastsStore();
 const rootRef = ref<HTMLElement | null>(null);
 const imageRef = ref<HTMLImageElement | null>(null);
 const contextMenuRef = ref<HTMLElement | null>(null);
 const mediaNaturalWidth = ref(0);
 const mediaNaturalHeight = ref(0);
 const mediaAvailableWidth = ref<number | null>(null);
-const domSelectedRange = ref(false);
-const domSelectedNode = ref(false);
-const domExactlySelected = ref(false);
 const measuredBlockWidth = ref<number | null>(null);
 const contextMenuOpen = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 let imageResizeObserver: ResizeObserver | null = null;
 let contentResizeObserver: ResizeObserver | null = null;
-let removeSelectionSubscription: (() => void) | null = null;
-let removeCopySubscription: (() => void) | null = null;
 
-const supportsNodeSelection = computed(
-  () => props.context === "message" && props.kind !== "emoji",
-);
-
-const mergedSelectedRange = computed(
-  () => props.selectedRange || domSelectedRange.value,
-);
-
-const mergedSelectedNode = computed(
-  () => props.selectedNode || domSelectedNode.value,
-);
+const {
+  mergedSelectedRange,
+  mergedSelectedNode,
+  selectMessageNode,
+} = useChatMediaSelection({
+  rootRef,
+  context: toRef(props, "context"),
+  kind: toRef(props, "kind"),
+  src: toRef(props, "src"),
+  alt: toRef(props, "alt"),
+  assetId: toRef(props, "assetId"),
+  emojiId: toRef(props, "emojiId"),
+  animated: toRef(props, "animated"),
+  selectedRange: toRef(props, "selectedRange"),
+  selectedNode: toRef(props, "selectedNode"),
+});
 
 const shouldMeasureBlockWidth = computed(() => (
   props.context === "message" &&
@@ -191,92 +141,25 @@ const messageMediaImageStyle = computed(() => {
   };
 });
 
-function getNodeIndex(node: Node) {
-  const parent = node.parentNode;
-  if (!parent) return -1;
-  return Array.prototype.indexOf.call(parent.childNodes, node);
-}
-
-function syncDomSelectionState() {
-  if (props.context !== "message") {
-    domSelectedRange.value = false;
-    domSelectedNode.value = false;
-    domExactlySelected.value = false;
-    return;
-  }
-
-  const root = rootRef.value;
-  const selection = window.getSelection();
-  if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
-    domSelectedRange.value = false;
-    domSelectedNode.value = false;
-    domExactlySelected.value = false;
-    return;
-  }
-
-  const range = selection.getRangeAt(0);
-  const nodeRange = document.createRange();
-  nodeRange.selectNode(root);
-  domSelectedRange.value =
-    range.compareBoundaryPoints(Range.START_TO_START, nodeRange) <= 0 &&
-    range.compareBoundaryPoints(Range.END_TO_END, nodeRange) >= 0;
-
-  domExactlySelected.value =
-    range.compareBoundaryPoints(Range.START_TO_START, nodeRange) === 0 &&
-    range.compareBoundaryPoints(Range.END_TO_END, nodeRange) === 0;
-
-  if (!supportsNodeSelection.value) {
-    domSelectedNode.value = false;
-    return;
-  }
-
-  const parent = root.parentNode;
-  const nodeIndex = getNodeIndex(root);
-  domSelectedNode.value =
-    nodeIndex >= 0 &&
-    selection.rangeCount > 0 &&
-    range.startContainer === parent &&
-    range.endContainer === parent &&
-    range.startOffset === nodeIndex &&
-    range.endOffset === nodeIndex + 1;
-
-  if (domSelectedNode.value) {
-    domSelectedRange.value = false;
-  }
-}
-
-function selectMessageNode() {
-  if (props.context !== "message") return;
-
-  const root = rootRef.value;
-  const selection = window.getSelection();
-  if (!root || !selection) return;
-
-  const range = document.createRange();
-  range.selectNode(root);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  syncDomSelectionState();
-}
-
-function openMediaViewer() {
-  if (
-    props.context !== "message" ||
-    !props.src ||
-    (props.kind !== "image" && props.kind !== "sticker")
-  ) {
-    return;
-  }
-
-  mediaViewer.openViewer({
-    src: props.src,
-    alt: props.alt,
-  });
-}
-
 function closeContextMenu() {
   contextMenuOpen.value = false;
 }
+
+const {
+  openMediaViewer,
+  copyMedia,
+  saveMedia,
+  collectMedia,
+  viewMedia,
+} = useChatMediaActions({
+  context: toRef(props, "context"),
+  kind: toRef(props, "kind"),
+  src: toRef(props, "src"),
+  alt: toRef(props, "alt"),
+  assetId: toRef(props, "assetId"),
+  closeContextMenu,
+  selectMessageNode,
+});
 
 function positionContextMenu() {
   const menu = contextMenuRef.value;
@@ -351,171 +234,6 @@ function handleContextMenu(event: MouseEvent) {
   void openContextMenuAt(event.clientX, event.clientY);
 }
 
-async function copyMedia() {
-  selectMessageNode();
-
-  try {
-    const copied = document.execCommand("copy");
-    if (!copied) {
-      throw new Error("copy-failed");
-    }
-  } catch {
-    toasts.push({
-      message: t("chat.mediaMenu.copyFailed"),
-      tone: "danger",
-    });
-  } finally {
-    closeContextMenu();
-  }
-}
-
-async function saveMedia() {
-  if (!props.src) return;
-
-  try {
-    const response = await fetch(getDownloadUrl());
-    if (!response.ok) {
-      throw new Error(`save-failed:${response.status}`);
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = getDownloadFilename();
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.setTimeout(() => {
-      URL.revokeObjectURL(objectUrl);
-    }, 1000);
-  } catch {
-    toasts.push({
-      message: t("chat.mediaMenu.saveFailed"),
-      tone: "danger",
-    });
-  } finally {
-    closeContextMenu();
-  }
-}
-
-async function collectMedia() {
-  if (props.kind !== "sticker" || !props.assetId) {
-    toasts.push({
-      message: t("chat.mediaMenu.collectImageUnsupported"),
-      tone: "warning",
-    });
-    closeContextMenu();
-    return;
-  }
-
-  const stickerId = Number(props.assetId);
-  if (!Number.isFinite(stickerId) || stickerId <= 0) {
-    toasts.push({
-      message: t("chat.mediaMenu.collectImageUnsupported"),
-      tone: "warning",
-    });
-    closeContextMenu();
-    return;
-  }
-
-  if (stickersStore.libraryIds.includes(stickerId)) {
-    toasts.push({
-      message: t("chat.emojiPanel.stickerUpload.duplicate"),
-      tone: "warning",
-    });
-    closeContextMenu();
-    return;
-  }
-
-  try {
-    await stickersStore.collectSticker(stickerId);
-    toasts.push({
-      message: t("chat.mediaMenu.collectSuccess"),
-      tone: "success",
-    });
-  } catch {
-    toasts.push({
-      message: stickersStore.error || t("chat.mediaMenu.collectFailed"),
-      tone: "danger",
-    });
-  } finally {
-    closeContextMenu();
-  }
-}
-
-function getDownloadFilename() {
-  const fallbackBase = props.kind === "sticker"
-    ? `sticker-${props.assetId || "media"}`
-    : `image-${props.assetId || "media"}`;
-
-  if (!props.src) {
-    return `${fallbackBase}.png`;
-  }
-
-  try {
-    const url = new URL(props.src, window.location.href);
-    const pathname = url.pathname;
-    const extension = pathname.match(/\.([a-zA-Z0-9]+)$/)?.[1] ?? "png";
-    return `${fallbackBase}.${extension}`;
-  } catch {
-    return `${fallbackBase}.png`;
-  }
-}
-
-function getDownloadUrl() {
-  if (!props.src) return "";
-
-  try {
-    const url = new URL(props.src, window.location.href);
-    const isCrossOrigin = url.origin !== window.location.origin;
-    const isPublicMediaPath = /^\/(avatar|image|sticker)\//.test(url.pathname);
-
-    if (isCrossOrigin && isPublicMediaPath) {
-      return `${window.location.origin}${url.pathname}${url.search}`;
-    }
-
-    return url.toString();
-  } catch {
-    return props.src;
-  }
-}
-
-function viewMedia() {
-  openMediaViewer();
-  closeContextMenu();
-}
-
-function handleDocumentCopy(event: ClipboardEvent) {
-  if (
-    props.context !== "message" ||
-    !props.src ||
-    !event.clipboardData
-  ) {
-    return;
-  }
-
-  const shouldCopyAsSingleMedia =
-    mergedSelectedNode.value ||
-    (props.kind === "emoji" && domExactlySelected.value);
-
-  if (!shouldCopyAsSingleMedia) {
-    return;
-  }
-
-  const escapedAlt = props.alt.replace(/"/g, "&quot;");
-  const escapedSrc = props.src.replace(/"/g, "&quot;");
-  const assetIdAttr = props.assetId ? ` data-asset-id="${props.assetId}"` : "";
-  const emojiIdAttr = props.emojiId ? ` data-emoji-id="${props.emojiId}"` : "";
-  const animatedAttr = props.animated ? ` data-animated="true"` : "";
-  const html = `<img src="${escapedSrc}" alt="${escapedAlt}" data-kind="${props.kind}"${assetIdAttr}${emojiIdAttr}${animatedAttr}>`;
-
-  event.clipboardData.setData("text/html", html);
-  event.clipboardData.setData("text/plain", props.alt);
-  event.preventDefault();
-}
-
 onMounted(() => {
   if (props.context !== "message") return;
 
@@ -538,9 +256,6 @@ onMounted(() => {
       contentResizeObserver.observe(content);
     }
   }
-
-  removeSelectionSubscription = subscribeSelectionChange(syncDomSelectionState);
-  removeCopySubscription = subscribeCopy(handleDocumentCopy);
 });
 
 onBeforeUnmount(() => {
@@ -549,10 +264,6 @@ onBeforeUnmount(() => {
   imageResizeObserver = null;
   contentResizeObserver?.disconnect();
   contentResizeObserver = null;
-  removeSelectionSubscription?.();
-  removeSelectionSubscription = null;
-  removeCopySubscription?.();
-  removeCopySubscription = null;
 });
 
 watch(

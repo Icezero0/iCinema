@@ -7,45 +7,13 @@ import InlineEmoji from "@/features/chat/editor/InlineEmoji";
 import TrailingInlineCursorAnchor, {
   handleTrailingInlineCursorKeyDown,
   moveCursorBeforeTrailingCursor,
-  stripInlineCursorAnchors,
 } from "@/features/chat/editor/TrailingInlineCursorAnchor";
 import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
+import { parseClipboardHtmlToContent } from "@/features/chat/editor/clipboard";
 import {
-  chatTextHasVisibleCharacters,
-  trimTrailingInvisibleTextSegments,
-} from "@/features/chat/segments";
-import type { ChatSegment } from "@/features/chat/types";
-
-type ComposerNode = {
-  type?: string;
-  text?: string;
-  attrs?: Record<string, unknown>;
-  content?: ComposerNode[];
-};
-
-type EditorInsertNode =
-  | { type: "text"; text: string }
-  | { type: "hardBreak" }
-  | {
-    type: "inlineEmoji";
-    attrs: {
-      src: string;
-      alt: string;
-      kind: "emoji";
-      emojiId: string;
-      animated: boolean;
-    };
-  }
-  | {
-    type: "inlineMedia";
-    attrs: {
-      src: string;
-      alt: string;
-      kind: "image" | "sticker";
-      assetId: string | null;
-      animated: boolean;
-    };
-  };
+  collectChatSegmentsFromComposerDoc,
+  type ComposerNode,
+} from "@/features/chat/editor/chatSegmentCodec";
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -62,147 +30,6 @@ function readFileAsDataUrl(file: File) {
     };
     reader.readAsDataURL(file);
   });
-}
-
-function appendEditorInsertText(target: EditorInsertNode[], text: string) {
-  if (!text) return;
-
-  const previous = target[target.length - 1];
-  if (previous?.type === "text") {
-    previous.text += text;
-    return;
-  }
-
-  target.push({
-    type: "text",
-    text,
-  });
-}
-
-function appendEditorHardBreak(target: EditorInsertNode[]) {
-  const previous = target[target.length - 1];
-  if (previous?.type === "hardBreak") return;
-
-  target.push({ type: "hardBreak" });
-}
-
-function normalizeEditorInsertNodes(nodes: EditorInsertNode[]) {
-  const normalized: EditorInsertNode[] = [];
-
-  nodes.forEach((node) => {
-    if (node.type === "text") {
-      appendEditorInsertText(normalized, node.text);
-      return;
-    }
-
-    if (node.type === "hardBreak") {
-      appendEditorHardBreak(normalized);
-      return;
-    }
-
-    normalized.push(node);
-  });
-
-  while (normalized[0]?.type === "hardBreak") {
-    normalized.shift();
-  }
-
-  while (normalized[normalized.length - 1]?.type === "hardBreak") {
-    normalized.pop();
-  }
-
-  return normalized;
-}
-
-function parseClipboardMediaImage(image: HTMLImageElement): EditorInsertNode[] {
-  const kind = image.getAttribute("data-kind");
-  const src = image.getAttribute("src") ?? undefined;
-  const alt = image.getAttribute("alt") ?? undefined;
-  const animated = image.getAttribute("data-animated") === "true";
-
-  if (kind === "emoji") {
-    const emojiId = image.getAttribute("data-emoji-id");
-    if (!emojiId || !src) return [];
-
-    return [{
-      type: "inlineEmoji",
-      attrs: {
-        src,
-        alt: alt || "",
-        kind: "emoji",
-        emojiId,
-        animated,
-      },
-    }];
-  }
-
-  if (kind !== "image" && kind !== "sticker") return [];
-  if (!src) return [];
-
-  return [{
-    type: "inlineMedia",
-    attrs: {
-      src,
-      alt: alt || (kind === "sticker" ? "Sticker" : "Image"),
-      kind,
-      assetId: image.getAttribute("data-asset-id"),
-      animated,
-    },
-  }];
-}
-
-function walkClipboardNode(node: Node, target: EditorInsertNode[]) {
-  if (node.nodeType === Node.TEXT_NODE) {
-    appendEditorInsertText(target, node.textContent ?? "");
-    return;
-  }
-
-  if (!(node instanceof HTMLElement)) {
-    return;
-  }
-
-  if (node.tagName === "BR") {
-    appendEditorHardBreak(target);
-    return;
-  }
-
-  if (node.tagName === "IMG" && node.hasAttribute("data-kind")) {
-    target.push(...parseClipboardMediaImage(node as HTMLImageElement));
-    return;
-  }
-
-  const isBlockLike = /^(P|DIV|LI|UL|OL|BLOCKQUOTE|PRE)$/.test(node.tagName);
-  const beforeLength = target.length;
-
-  Array.from(node.childNodes).forEach((child) => {
-    walkClipboardNode(child, target);
-  });
-
-  if (isBlockLike && target.length > beforeLength) {
-    appendEditorHardBreak(target);
-  }
-}
-
-function parseClipboardHtmlToContent(html: string) {
-  if (!html || typeof DOMParser === "undefined") return null;
-
-  const startFragment = "<!--StartFragment-->";
-  const endFragment = "<!--EndFragment-->";
-  const fragmentStart = html.indexOf(startFragment);
-  const fragmentEnd = html.indexOf(endFragment);
-  const htmlToParse = fragmentStart >= 0 && fragmentEnd > fragmentStart
-    ? html.slice(fragmentStart + startFragment.length, fragmentEnd)
-    : html;
-
-  const documentFragment = new DOMParser().parseFromString(htmlToParse, "text/html");
-  const content: EditorInsertNode[] = [];
-
-  Array.from(documentFragment.body.childNodes).forEach((node) => {
-    walkClipboardNode(node, content);
-  });
-
-  const normalized = normalizeEditorInsertNodes(content);
-  return normalized.length > 0 ? normalized : null;
 }
 
 const emit = defineEmits<{
@@ -278,104 +105,11 @@ function insertSticker(sticker: {
   syncEditorState();
 }
 
-function appendTextBuffer(
-  target: ChatSegment[],
-  textBuffer: string[],
-  options: { preserveInvisibleText?: boolean } = {},
-) {
-  const rawContent = textBuffer.join("");
-  const content = stripInlineCursorAnchors(rawContent)
-    .replace(/\u00a0/g, " ");
-  const hasVisibleText = chatTextHasVisibleCharacters(content);
-  const hasAnyText = content.length > 0;
-
-  if (!hasVisibleText && !(options.preserveInvisibleText && hasAnyText)) {
-    textBuffer.length = 0;
-    return;
-  }
-
-  target.push({
-    id: `text-${Date.now()}-${target.length}`,
-    type: "text",
-    content,
-  });
-  textBuffer.length = 0;
-}
-
-function collectSegmentsFromNode(
-  node: ComposerNode,
-  target: ChatSegment[],
-  textBuffer: string[],
-) {
-  if (node.type === "text" && typeof node.text === "string") {
-    textBuffer.push(node.text);
-    return;
-  }
-
-  if (node.type === "hardBreak") {
-    textBuffer.push("\n");
-    return;
-  }
-
-  if (node.type === "inlineEmoji") {
-    const attrs = node.attrs ?? {};
-    const emojiId = typeof attrs.emojiId === "string" ? attrs.emojiId : undefined;
-    if (!emojiId) return;
-
-    appendTextBuffer(target, textBuffer, { preserveInvisibleText: true });
-    target.push({
-      id: `emoji-${Date.now()}-${target.length}`,
-      type: "emoji",
-      emojiId,
-      animated: Boolean(attrs.animated),
-    });
-    return;
-  }
-
-  if (node.type === "inlineMedia" || node.type === "image") {
-    const attrs = node.attrs ?? {};
-    const src = typeof attrs.src === "string" ? attrs.src : undefined;
-    const kind = attrs.kind === "sticker" ? "sticker" : "image";
-    if (!src) return;
-
-    appendTextBuffer(target, textBuffer, { preserveInvisibleText: true });
-    target.push({
-      id: `media-${Date.now()}-${target.length}`,
-      type: "image",
-      alt: typeof attrs.alt === "string" ? attrs.alt : "Image",
-      src,
-      kind,
-      assetId: typeof attrs.assetId === "string" ? attrs.assetId : undefined,
-      animated: Boolean(attrs.animated),
-    });
-    return;
-  }
-
-  node.content?.forEach((child) => {
-    collectSegmentsFromNode(child, target, textBuffer);
-  });
-}
-
 function collectSegments() {
   if (!editor.value) return [];
 
   const json = editor.value.getJSON() as ComposerNode;
-  const segments: ChatSegment[] = [];
-  const textBuffer: string[] = [];
-
-  json.content?.forEach((node, index) => {
-    collectSegmentsFromNode(node, segments, textBuffer);
-
-    if (node.type === "paragraph" && index < (json.content?.length ?? 0) - 1) {
-      textBuffer.push("\n");
-    }
-  });
-
-  appendTextBuffer(segments, textBuffer);
-
-  trimTrailingInvisibleTextSegments(segments);
-
-  return segments;
+  return collectChatSegmentsFromComposerDoc(json);
 }
 
 function clearAndFocus() {
