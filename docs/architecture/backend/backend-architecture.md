@@ -387,6 +387,7 @@ Repository 不负责业务规则。
 职责：
 
 - 头像、图片、贴纸资源上传
+- 将已上传图片收藏为贴纸
 - 文件落盘
 - 媒体资源数据库记录维护
 - 图片过期处理
@@ -398,6 +399,21 @@ Repository 不负责业务规则。
 - 文件存在文件系统中
 - 元数据存在数据库中
 - 资源访问通过 `/avatar/{storage_key}`、`/image/{storage_key}`、`/sticker/{storage_key}` 完成
+- `image` 与 `sticker` 生命周期不同：图片有过期策略，贴纸默认不随图片过期
+- 将图片收藏为贴纸时，会派生或复用一个 `asset_type=sticker` 的媒体资源，再加入当前用户贴纸库
+
+当前贴纸相关 HTTP 接口包括：
+
+- `POST /api/v1/media/stickers`
+  上传贴纸，并自动加入当前用户贴纸库
+- `GET /api/v1/media/stickers/library`
+  查询当前用户贴纸库，支持分页或 `all=true`
+- `POST /api/v1/media/stickers/{sticker_id}/collect`
+  收藏已有贴纸到当前用户贴纸库
+- `POST /api/v1/media/images/{image_id}/collect-as-sticker`
+  将已有图片收藏为贴纸
+- `PATCH /api/v1/media/stickers/library`
+  按传入的完整 `sticker_ids` 列表重排并更新当前用户贴纸库
 
 ## 7.6 notifications
 
@@ -549,6 +565,8 @@ WebSocket 主要用于：
   用于直接返回当前用户创建或加入的房间摘要
 - `GET /api/v1/join-requests`
   用于直接返回当前用户待审批、我发起或与我相关的 join request 列表
+- `POST /api/v1/media/images/{image_id}/collect-as-sticker`
+  用于把已有图片派生或复用为贴纸，并加入当前用户贴纸库
 
 ## 11. 事务与提交约定
 
@@ -738,6 +756,35 @@ WebSocket 主要用于：
 - 图片资源当前有逻辑过期时间
 - 资源访问时会做 lazy expire
 - 后台任务会定期清理已过期图片文件
+
+### 14.5 贴纸库与图片收藏为贴纸
+
+贴纸库由 `UserStickerLibraryItem` 表维护，它表示“某个用户收藏了某个 sticker 资源”，不会复制用户私有资源记录。
+
+`StickerLibrarySource` 当前包括：
+
+- `upload`
+  用户直接上传贴纸时产生
+- `collect`
+  用户收藏已有贴纸时产生
+- `from_image`
+  用户将已有图片收藏为贴纸时产生
+
+`POST /api/v1/media/images/{image_id}/collect-as-sticker` 的语义如下：
+
+1. 校验 `image_id` 对应资源存在，类型为 `image`，状态可用且未过期。
+2. 如果存在相同 `sha256` 的 active sticker，则复用该 sticker。
+3. 如果不存在可复用 sticker，则把 image 文件复制到 sticker 存储目录，创建新的 `MediaAsset(asset_type=sticker, expires_at=None)`。
+4. 将该 sticker 加入当前用户贴纸库，来源记为 `from_image`。
+5. 如果当前用户已经收藏过该 sticker，则幂等返回已有贴纸库项，不重复插入。
+
+该接口不限制图片所有权。当前资源访问模型中 `/image/{storage_key}` 是公共资源路径，因此该接口只要求调用者已登录，且图片资源本身可用。
+
+需要注意：
+
+- 不能直接把 `asset_type=image` 的资源写入贴纸库；消息发送时 sticker 校验要求资源类型必须是 `sticker`
+- 不能让贴纸直接依赖原 image 的生命周期；image 可能过期，sticker 应作为独立资源长期可用
+- 派生出来的 sticker 复用原图片的 `mime_type`、`file_size`、`width`、`height`、`duration_seconds`、`sha256` 等元数据，但 `expires_at` 固定为 `None`
 
 ## 15. 错误模型
 
