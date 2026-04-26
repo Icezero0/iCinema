@@ -21,18 +21,18 @@ const firstSegment = computed(() => props.segments[0] ?? null);
 
 const isStandaloneMediaMessage = computed(() => (
   props.segments.length === 1 &&
-  firstSegment.value?.type === "image" &&
+  firstSegment.value?.type === "media" &&
   (firstSegment.value.kind === "image" || firstSegment.value.kind === "sticker")
 ));
 
 function getSegmentDisplayMode(segment: ChatSegment) {
-  if (segment.type !== "image") return "inline" as const;
+  if (segment.type !== "media") return "inline" as const;
   return isStandaloneMediaMessage.value ? "block" as const : "inline" as const;
 }
 
 function getSegmentLayoutClass(segment: ChatSegment) {
-  if (segment.type !== "image") return null;
-  return isStandaloneMediaMessage.value ? "segment-image-block" : "segment-image-inline";
+  if (segment.type !== "media") return null;
+  return isStandaloneMediaMessage.value ? "segment-media-block" : "segment-media-inline";
 }
 </script>
 
@@ -69,7 +69,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
           class="segment"
           :class="[
             `segment-${segment.type}`,
-            segment.type === 'image' ? `segment-image-${segment.kind ?? 'image'}` : null,
+            segment.type === 'media' ? `segment-media-${segment.kind}` : null,
             getSegmentLayoutClass(segment),
           ]"
         >
@@ -92,7 +92,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
           <template v-else>
             <ChatInlineMedia
               v-if="segment.src"
-              :kind="(segment.kind ?? 'image') as 'image' | 'sticker'"
+              :kind="segment.kind"
               context="message"
               :display-mode="getSegmentDisplayMode(segment)"
               :asset-id="segment.assetId"
@@ -101,7 +101,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
             />
             <ChatInlineMedia
               v-else
-              :kind="(segment.kind ?? 'image') as 'image' | 'sticker'"
+              :kind="segment.kind"
               context="message"
               :display-mode="getSegmentDisplayMode(segment)"
               :asset-id="segment.assetId"
@@ -214,17 +214,17 @@ function getSegmentLayoutClass(segment: ChatSegment) {
   word-break: break-word;
 }
 
-.segment-image-image,
-.segment-image-sticker {
+.segment-media-image,
+.segment-media-sticker {
   white-space: normal;
 }
 
-.segment-image-block {
+.segment-media-block {
   display: block;
   line-height: 0;
 }
 
-.segment-image-inline {
+.segment-media-inline {
   display: inline;
 }
 

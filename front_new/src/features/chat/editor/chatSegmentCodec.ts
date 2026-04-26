@@ -75,7 +75,7 @@ function collectSegmentsFromNode(
     appendTextBuffer(target, textBuffer, { preserveInvisibleText: true });
     target.push({
       id: `media-${Date.now()}-${target.length}`,
-      type: "image",
+      type: "media",
       alt: typeof attrs.alt === "string" ? attrs.alt : "Image",
       src,
       kind,

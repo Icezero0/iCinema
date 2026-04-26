@@ -80,7 +80,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       status: "paused" as const,
       segments: [
         { id: "2-1", type: "text" as const, content: t("room.mock.chatLineTwo") },
-        { id: "2-2", type: "image" as const, alt: t("room.mock.chatImageAlt") },
+        { id: "2-2", type: "media" as const, kind: "image" as const, alt: t("room.mock.chatImageAlt") },
       ],
     },
     {
@@ -124,7 +124,7 @@ export function createMockChatMessages(t: (key: string) => string): ChatMessage[
       status: "paused" as const,
       segments: [
         { id: "7-1", type: "text" as const, content: "这张截图是刚刚那一帧，你们看看是不是这里开始不同步。" },
-        { id: "7-2", type: "image" as const, alt: t("room.mock.chatImageAlt") },
+        { id: "7-2", type: "media" as const, kind: "image" as const, alt: t("room.mock.chatImageAlt") },
       ],
     },
     {

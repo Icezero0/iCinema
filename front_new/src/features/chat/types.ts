@@ -10,10 +10,10 @@ export type ChatSegment =
   }
   | {
     id: number | string;
-    type: "image";
+    type: "media";
     alt: string;
+    kind: "sticker" | "image";
     src?: string;
-    kind?: "sticker" | "image";
     assetId?: string;
     animated?: boolean;
   };

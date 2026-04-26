@@ -151,7 +151,7 @@ function sniffImageMimeType(bytes: Uint8Array) {
 }
 
 async function createUploadFileFromSegment(
-  segment: Extract<ChatSegment, { type: "image" }>,
+  segment: Extract<ChatSegment, { type: "media" }>,
 ) {
   if (!segment.src) {
     throw new Error("Media segment is missing source data");
@@ -184,7 +184,7 @@ async function prepareSegmentsForSend(
   assets: ReturnType<typeof useAssetsStore>,
 ) {
   const resolvedSegments = await Promise.all(segments.map(async (segment) => {
-    if (segment.type !== "image") {
+    if (segment.type !== "media") {
       return segment;
     }
 
@@ -297,7 +297,7 @@ function mapMessageToChatMessage(
 
       return {
         id: `${message.id}-${index}`,
-        type: "image",
+        type: "media",
         alt: segment.type === "sticker" ? "Sticker" : "Image",
         src: resolveMediaUrl(segment.url) || undefined,
         kind: segment.type === "sticker" ? "sticker" : "image",
