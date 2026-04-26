@@ -260,6 +260,75 @@ class MediaService:
         await db.commit()
         return asset
 
+    async def collect_image_as_sticker(
+        self,
+        db: AsyncSession,
+        *,
+        image_id: int,
+        user: User,
+    ) -> MediaAsset:
+        image = await self.find_media_asset_by_id(db, image_id)
+        if image is None or image.asset_type != MediaAssetType.IMAGE:
+            raise NotFoundError("Image not found")
+
+        image = await self.expire_asset_if_needed(db, image)
+        if self.is_asset_expired(image):
+            raise NotFoundError("Image not found")
+
+        sticker = None
+        if image.sha256:
+            sticker = await self.repo.find_active_media_asset_by_type_and_sha256(
+                db,
+                asset_type=MediaAssetType.STICKER,
+                sha256=image.sha256,
+            )
+
+        if sticker is None:
+            try:
+                storage_key = self.storage.copy_media_file(
+                    source_asset_type=MediaAssetType.IMAGE,
+                    source_storage_key=image.storage_key,
+                    target_asset_type=MediaAssetType.STICKER,
+                )
+            except FileNotFoundError as exc:
+                raise NotFoundError("Media file not found") from exc
+
+            sticker = await self.repo.create_media_asset(
+                db,
+                asset_type=MediaAssetType.STICKER,
+                storage_key=storage_key,
+                mime_type=image.mime_type,
+                file_size=image.file_size,
+                width=image.width,
+                height=image.height,
+                duration_seconds=image.duration_seconds,
+                sha256=image.sha256,
+                uploaded_by_user_id=user.id,
+                status=MediaAssetStatus.ACTIVE,
+                expires_at=None,
+            )
+
+        item = await self.repo.find_user_sticker_library_item(
+            db,
+            user_id=user.id,
+            media_asset_id=sticker.id,
+        )
+        if item is None:
+            next_sort_order = await self.repo.get_next_user_sticker_sort_order(
+                db,
+                user_id=user.id,
+            )
+            await self.repo.create_user_sticker_library_item(
+                db,
+                user_id=user.id,
+                media_asset_id=sticker.id,
+                source=StickerLibrarySource.FROM_IMAGE,
+                sort_order=next_sort_order,
+            )
+
+        await db.commit()
+        return sticker
+
     async def get_user_sticker_library(
         self,
         db: AsyncSession,

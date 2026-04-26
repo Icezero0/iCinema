@@ -78,6 +78,29 @@ async def upload_sticker(
     )
 
 
+@router.post("/images/{image_id}/collect-as-sticker", response_model=StickerResponse)
+async def collect_image_as_sticker(
+    image_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StickerResponse:
+    asset = await media_service.collect_image_as_sticker(
+        db,
+        image_id=image_id,
+        user=current_user,
+    )
+
+    item = await media_service.get_user_sticker_library_item(
+        db,
+        user_id=current_user.id,
+        media_asset_id=asset.id,
+    )
+    if item is None:
+        raise RuntimeError("Sticker library item not found after collect")
+
+    return _build_sticker_response(item, asset)
+
+
 @router.get("/stickers/library", response_model=StickerLibraryResponse)
 async def get_my_stickers(
     all: bool = Query(default=False),
