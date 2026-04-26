@@ -48,10 +48,14 @@ const canPanX = computed(() => overflowX.value > 0.5);
 const canPanY = computed(() => overflowY.value > 0.5);
 
 const imageStyle = computed(() => ({
-  width: imageNaturalWidth.value > 0 ? `${imageNaturalWidth.value}px` : undefined,
-  height: imageNaturalHeight.value > 0 ? `${imageNaturalHeight.value}px` : undefined,
-  transform: `translate(${offsetX.value}px, ${offsetY.value}px) scale(${effectiveScale.value})`,
-  transition: isDragging.value ? "none" : "transform 90ms ease-out",
+  left: `calc(50% + ${offsetX.value}px)`,
+  top: `calc(50% + ${offsetY.value}px)`,
+  width: renderedWidth.value > 0 ? `${renderedWidth.value}px` : undefined,
+  height: renderedHeight.value > 0 ? `${renderedHeight.value}px` : undefined,
+  transform: "translate(-50%, -50%)",
+  transition: isDragging.value
+    ? "none"
+    : "left 90ms ease-out, top 90ms ease-out, width 90ms ease-out, height 90ms ease-out",
   cursor: isDragging.value ? "grabbing" : "grab",
 }));
 
@@ -249,12 +253,12 @@ watch(
 .viewerStage {
   width: 100%;
   height: 100%;
-  display: grid;
-  place-items: center;
+  position: relative;
   overflow: hidden;
 }
 
 .viewerImage {
+  position: absolute;
   object-fit: contain;
   transform-origin: center center;
   user-select: none;
