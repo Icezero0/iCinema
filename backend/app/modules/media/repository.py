@@ -34,6 +34,24 @@ class MediaRepository:
         )
         return result.scalars().first()
 
+    async def find_active_media_asset_by_type_and_sha256(
+        self,
+        db: AsyncSession,
+        *,
+        asset_type: str,
+        sha256: str,
+    ) -> MediaAsset | None:
+        result = await db.execute(
+            select(MediaAsset)
+            .where(
+                MediaAsset.asset_type == asset_type,
+                MediaAsset.sha256 == sha256,
+                MediaAsset.status == MediaAssetStatus.ACTIVE,
+            )
+            .order_by(MediaAsset.id.asc())
+        )
+        return result.scalars().first()
+
     async def find_media_asset_by_type_and_storage_key(
         self,
         db: AsyncSession,

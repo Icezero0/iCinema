@@ -1,4 +1,5 @@
 import hashlib
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -134,6 +135,28 @@ class MediaStorageService:
             height=prepared.height,
             duration_seconds=prepared.duration_seconds,
         )
+
+    def copy_media_file(
+        self,
+        *,
+        source_asset_type: str,
+        source_storage_key: str,
+        target_asset_type: str,
+    ) -> str:
+        source = self.get_file_path(
+            asset_type=source_asset_type,
+            storage_key=source_storage_key,
+        )
+        if not source.exists():
+            raise FileNotFoundError(source)
+
+        target_dir = self._get_base_dir(target_asset_type)
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"{uuid4().hex}{source.suffix.lower()}"
+        target = target_dir / filename
+        shutil.copyfile(source, target)
+        return filename
 
     def get_file_path(self, *, asset_type: str, storage_key: str) -> Path:
         if "/" in storage_key or "\\" in storage_key or ".." in storage_key:

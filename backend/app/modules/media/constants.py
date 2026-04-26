@@ -17,6 +17,7 @@ class MediaAssetStatus(StrEnum):
 class StickerLibrarySource(StrEnum):
     UPLOAD = "upload"
     COLLECT = "collect"
+    FROM_IMAGE = "from_image"
 
 
 class EmojiProvider(StrEnum):
