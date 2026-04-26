@@ -11,13 +11,9 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    AppHeader: typeof import('./src/ui/layouts/components/AppHeader.vue')['default']
     AppIcon: typeof import('./src/ui/base/AppIcon.vue')['default']
-    AppLayout: typeof import('./src/ui/layouts/AppLayout.vue')['default']
     AppPageShell: typeof import('./src/ui/layout/AppPageShell.vue')['default']
-    AppSidebar: typeof import('./src/ui/layouts/components/AppSidebar.vue')['default']
     AppTabs: typeof import('./src/ui/layout/AppTabs.vue')['default']
-    AuthLayout: typeof import('./src/ui/layouts/AuthLayout.vue')['default']
     AvatarCropDialog: typeof import('./src/ui/domain/avatar/AvatarCropDialog.vue')['default']
     BaseAvatar: typeof import('./src/ui/base/BaseAvatar.vue')['default']
     BaseButton: typeof import('./src/ui/base/BaseButton.vue')['default']
@@ -33,7 +29,6 @@ declare module 'vue' {
     BaseMenuItem: typeof import('./src/ui/base/BaseMenuItem.vue')['default']
     BasePill: typeof import('./src/ui/base/BasePill.vue')['default']
     BaseSelect: typeof import('./src/ui/base/BaseSelect.vue')['default']
-    BaseToast: typeof import('./src/ui/base/BaseToast.vue')['default']
     BaseToastViewport: typeof import('./src/ui/base/BaseToastViewport.vue')['default']
     PanelSectionHeader: typeof import('./src/ui/layout/PanelSectionHeader.vue')['default']
     QfacePenguinIcon: typeof import('./src/ui/icons/QfacePenguinIcon.vue')['default']

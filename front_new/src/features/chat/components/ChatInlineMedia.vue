@@ -204,10 +204,25 @@ function syncMeasuredBlockWidth() {
 function syncMediaAvailableWidth() {
   const root = rootRef.value;
   const content = root?.closest(".content");
-  const nextWidth =
+  const contentWidth =
     content instanceof HTMLElement
       ? Math.round(content.getBoundingClientRect().width)
       : null;
+  const bubble = root?.closest(".bubble");
+  const bubbleStyle =
+    bubble instanceof HTMLElement &&
+    !bubble.classList.contains("bubbleless")
+      ? window.getComputedStyle(bubble)
+      : null;
+  const bubbleInlineChrome = bubbleStyle
+    ? Number.parseFloat(bubbleStyle.paddingLeft) +
+      Number.parseFloat(bubbleStyle.paddingRight) +
+      Number.parseFloat(bubbleStyle.borderLeftWidth) +
+      Number.parseFloat(bubbleStyle.borderRightWidth)
+    : 0;
+  const nextWidth = contentWidth == null
+    ? null
+    : Math.max(0, Math.round(contentWidth - bubbleInlineChrome));
 
   mediaAvailableWidth.value =
     nextWidth && nextWidth > 24 ? nextWidth : null;

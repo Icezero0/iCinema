@@ -151,8 +151,9 @@ export const useEntitiesStore = defineStore("entities", {
       members.forEach((member) => {
         if (!member) return;
         this.upsertUser(member.user);
-        groupedMembers[member.room_id] = groupedMembers[member.room_id] ?? [];
-        groupedMembers[member.room_id].push({
+        const roomMembers = groupedMembers[member.room_id] ?? [];
+        groupedMembers[member.room_id] = roomMembers;
+        roomMembers.push({
           room_id: member.room_id,
           user_id: member.user_id,
           joined_at: member.joined_at,

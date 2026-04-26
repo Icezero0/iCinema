@@ -177,6 +177,7 @@ function getSegmentLayoutClass(segment: ChatSegment) {
 }
 
 .bubble {
+  box-sizing: border-box;
   width: fit-content;
   max-width: 100%;
   padding: 9px 11px;

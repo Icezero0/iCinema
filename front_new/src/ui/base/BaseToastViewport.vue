@@ -4,10 +4,6 @@ import { useToastsStore } from "@/stores/toasts.store";
 
 const toasts = useToastsStore();
 const { items } = storeToRefs(toasts);
-
-function dismiss(toastId: number) {
-  toasts.dismiss(toastId);
-}
 </script>
 
 <template>

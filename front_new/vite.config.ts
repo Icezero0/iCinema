@@ -39,6 +39,41 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('qface.index.json')) {
+              return 'chat-qface-data'
+            }
+
+            if (!id.includes('node_modules')) {
+              return undefined
+            }
+
+            if (id.includes('@tiptap') || id.includes('prosemirror')) {
+              return 'vendor-editor'
+            }
+
+            if (id.includes('@heroicons')) {
+              return 'vendor-icons'
+            }
+
+            if (
+              id.includes('/vue') ||
+              id.includes('\\vue') ||
+              id.includes('pinia') ||
+              id.includes('vue-router') ||
+              id.includes('vue-i18n')
+            ) {
+              return 'vendor-vue'
+            }
+
+            return 'vendor'
+          },
+        },
+      },
+    },
   }
 })
 
