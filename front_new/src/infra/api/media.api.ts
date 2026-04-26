@@ -116,6 +116,14 @@ export async function collectSticker(stickerId: number) {
   return data;
 }
 
+export async function collectImageAsSticker(imageId: number) {
+  const { data } = await http.post<StickerResponse>(
+    `/media/images/${imageId}/collect-as-sticker`,
+  );
+
+  return data;
+}
+
 export async function getPlatformEmojis() {
   const { data } = await http.get<PlatformEmojiListResponse>("/media/emojis");
   return data;

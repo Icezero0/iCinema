@@ -48,7 +48,7 @@ export default {
       save: "Save",
       collectSuccess: "Added to your sticker library.",
       collectFailed: "Failed to collect.",
-      collectImageUnsupported: "The backend does not support collecting images into stickers yet.",
+      collectImageUnsupported: "This image cannot be collected as a sticker yet.",
       copyFailed: "Failed to copy.",
       saveFailed: "Failed to save.",
     },

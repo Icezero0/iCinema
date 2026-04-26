@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import {
+  collectImageAsSticker as collectImageAsStickerApi,
   collectSticker,
   getStickerLibrary,
   updateStickerLibrary,
@@ -213,6 +214,32 @@ export const useStickersStore = defineStore("stickers", {
         return sticker;
       } catch (error: any) {
         const message = extractErrorMessage(error, "Failed to collect sticker");
+        this.error = message;
+        throw new Error(message);
+      }
+    },
+
+    async collectImageAsSticker(imageId: number) {
+      this.error = null;
+
+      try {
+        const sticker = await collectImageAsStickerApi(imageId);
+        const existedInLibrary = this.libraryIds.includes(sticker.id);
+        this.upsertSticker(sticker);
+
+        if (!existedInLibrary) {
+          this.libraryIds = [sticker.id, ...this.libraryIds.filter((id) => id !== sticker.id)];
+          this.recentStickerIds = withRecentStickerId(this.recentStickerIds, sticker.id);
+          this.total = Math.max(this.total, this.libraryIds.length);
+        }
+
+        this.persist();
+        return {
+          sticker,
+          existedInLibrary,
+        };
+      } catch (error: any) {
+        const message = extractErrorMessage(error, "Failed to collect image as sticker");
         this.error = message;
         throw new Error(message);
       }

@@ -85,6 +85,11 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
     }
   }
 
+  function parsePositiveAssetId() {
+    const parsed = Number(assetId.value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
   async function copyMedia() {
     selectMessageNode();
 
@@ -135,7 +140,7 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
   }
 
   async function collectMedia() {
-    if (kind.value !== "sticker" || !assetId.value) {
+    if ((kind.value !== "sticker" && kind.value !== "image") || !assetId.value) {
       toasts.push({
         message: t("chat.mediaMenu.collectImageUnsupported"),
         tone: "warning",
@@ -144,8 +149,8 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
       return;
     }
 
-    const stickerId = Number(assetId.value);
-    if (!Number.isFinite(stickerId) || stickerId <= 0) {
+    const mediaId = parsePositiveAssetId();
+    if (!mediaId) {
       toasts.push({
         message: t("chat.mediaMenu.collectImageUnsupported"),
         tone: "warning",
@@ -154,7 +159,7 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
       return;
     }
 
-    if (stickersStore.libraryIds.includes(stickerId)) {
+    if (kind.value === "sticker" && stickersStore.libraryIds.includes(mediaId)) {
       toasts.push({
         message: t("chat.emojiPanel.stickerUpload.duplicate"),
         tone: "warning",
@@ -164,11 +169,21 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
     }
 
     try {
-      await stickersStore.collectSticker(stickerId);
-      toasts.push({
-        message: t("chat.mediaMenu.collectSuccess"),
-        tone: "success",
-      });
+      if (kind.value === "image") {
+        const result = await stickersStore.collectImageAsSticker(mediaId);
+        toasts.push({
+          message: result.existedInLibrary
+            ? t("chat.emojiPanel.stickerUpload.duplicate")
+            : t("chat.mediaMenu.collectSuccess"),
+          tone: result.existedInLibrary ? "warning" : "success",
+        });
+      } else {
+        await stickersStore.collectSticker(mediaId);
+        toasts.push({
+          message: t("chat.mediaMenu.collectSuccess"),
+          tone: "success",
+        });
+      }
     } catch {
       toasts.push({
         message: stickersStore.error || t("chat.mediaMenu.collectFailed"),

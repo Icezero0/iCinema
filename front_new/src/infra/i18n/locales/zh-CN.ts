@@ -49,7 +49,7 @@ export default {
       save: "保存",
       collectSuccess: "已加入贴纸库。",
       collectFailed: "收藏失败。",
-      collectImageUnsupported: "当前后端暂不支持把图片直接收藏为贴纸。",
+      collectImageUnsupported: "这张图片暂时无法收藏为贴纸。",
       copyFailed: "复制失败。",
       saveFailed: "保存失败。",
     },
