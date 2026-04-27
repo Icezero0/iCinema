@@ -14,7 +14,12 @@ import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 const props = defineProps<{
   isPlaying: boolean;
   progress: number;
+  bufferedProgress: number;
+  bufferedRanges: Array<{ startPercent: number; endPercent: number }>;
   volume: number;
+  sourceType: RoomVideoSourceType;
+  sourceUrl: string;
+  sourceFileName: string;
   timelineLabel: string;
   playLabel: string;
   pauseLabel: string;
@@ -28,17 +33,52 @@ const emit = defineEmits<{
   (e: "toggle-play"): void;
   (e: "update:progress", value: number): void;
   (e: "update:volume", value: number): void;
+  (e: "apply-source", value: {
+    sourceType: RoomVideoSourceType;
+    externalUrl: string;
+    localFile: File | null;
+  }): void;
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);
 const sourceOpen = ref(false);
-const sourceType = ref<RoomVideoSourceType>("external_url");
-const sourceExternalUrl = ref("");
-const sourceLocalFileName = ref("");
+const sourceTypeDraft = ref<RoomVideoSourceType>(props.sourceType);
+const sourceExternalUrlDraft = ref(props.sourceUrl);
+const sourceLocalFileDraft = ref<File | null>(null);
+const sourceLocalFileNameDraft = ref(props.sourceFileName);
 const volumeOpen = ref(false);
 const syncAnimating = ref(false);
 const volumeValue = computed(() =>
   Math.min(100, Math.max(0, Math.round(props.volume))));
+const progressValue = computed(() =>
+  Math.min(100, Math.max(0, props.progress)));
+const bufferedValue = computed(() =>
+  Math.max(progressValue.value, Math.min(100, Math.max(0, props.bufferedProgress))));
+const shouldShowBufferedSegments = computed(() => props.sourceType === "external_url");
+const bufferedSegments = computed(() => {
+  if (!shouldShowBufferedSegments.value) return [];
+
+  if (props.bufferedRanges.length > 0) {
+    return props.bufferedRanges
+      .map((range) => {
+        const start = Math.min(100, Math.max(0, range.startPercent));
+        const end = Math.min(100, Math.max(start, range.endPercent));
+        return {
+          left: `${start}%`,
+          width: `${end - start}%`,
+          minWidth: "6px",
+        };
+      })
+      .filter((range) => Number.parseFloat(range.width) > 0);
+  }
+
+  if (bufferedValue.value <= 0) return [];
+  return [{
+    left: "0%",
+    width: `${bufferedValue.value}%`,
+    minWidth: bufferedValue.value > 0 ? "6px" : "0",
+  }];
+});
 
 function onProgressInput(event: Event) {
   const target = event.target as HTMLInputElement;
@@ -46,16 +86,26 @@ function onProgressInput(event: Event) {
 }
 
 function handleLocalFileSelected(file: File | null) {
-  sourceLocalFileName.value = file?.name ?? "";
+  sourceLocalFileDraft.value = file;
+  sourceLocalFileNameDraft.value = file?.name ?? "";
 }
 
 function handleApplySourceDraft() {
+  emit("apply-source", {
+    sourceType: sourceTypeDraft.value,
+    externalUrl: sourceExternalUrlDraft.value,
+    localFile: sourceLocalFileDraft.value,
+  });
   sourceOpen.value = false;
 }
 
 function toggleSourcePanel() {
   sourceOpen.value = !sourceOpen.value;
   if (sourceOpen.value) {
+    sourceTypeDraft.value = props.sourceType;
+    sourceExternalUrlDraft.value = props.sourceUrl;
+    sourceLocalFileDraft.value = null;
+    sourceLocalFileNameDraft.value = props.sourceFileName;
     volumeOpen.value = false;
   }
 }
@@ -126,11 +176,11 @@ onBeforeUnmount(() => {
           <div v-if="sourceOpen" class="sourcePanel">
             <RoomSourcePanel
               :title="sourcePanelTitle"
-              :source-type="sourceType"
-              :external-url="sourceExternalUrl"
-              :local-file-name="sourceLocalFileName"
-              @update:source-type="sourceType = $event"
-              @update:external-url="sourceExternalUrl = $event"
+              :source-type="sourceTypeDraft"
+              :external-url="sourceExternalUrlDraft"
+              :local-file-name="sourceLocalFileNameDraft"
+              @update:source-type="sourceTypeDraft = $event"
+              @update:external-url="sourceExternalUrlDraft = $event"
               @select-local-file="handleLocalFileSelected"
               @apply="handleApplySourceDraft"
             />
@@ -168,14 +218,29 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="timelineGroup">
-      <input
-        class="timelineSlider"
-        type="range"
-        min="0"
-        max="100"
-        :value="progress"
-        @input="onProgressInput"
-      >
+      <div class="timelineSliderWrap">
+        <div class="timelineTrack" aria-hidden="true">
+          <span
+            v-for="(range, index) in bufferedSegments"
+            :key="`buffered-${index}-${range.left}-${range.width}`"
+            class="timelineBufferedSegment"
+            :style="{ left: range.left, width: range.width, minWidth: range.minWidth }"
+          />
+          <span
+            class="timelineProgressFill"
+            :style="{ width: `${progressValue}%` }"
+          />
+        </div>
+        <input
+          class="timelineSlider"
+          type="range"
+          min="0"
+          max="100"
+          step="0.01"
+          :value="progress"
+          @input="onProgressInput"
+        >
+      </div>
       <span class="timelineLabel">{{ timelineLabel }}</span>
     </div>
 
@@ -292,11 +357,94 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.timelineSliderWrap {
+  position: relative;
+  height: 18px;
+  min-width: 0;
+}
+
+.timelineTrack {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-border) 74%, var(--c-bg));
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.timelineBufferedSegment,
+.timelineProgressFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+}
+
+.timelineBufferedSegment {
+  z-index: 1;
+  background: color-mix(in srgb, var(--c-text-muted) 44%, var(--c-border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 18%, transparent);
+}
+
+.timelineProgressFill {
+  left: 0;
+  z-index: 2;
+  background: #62a5ff;
+  box-shadow: 0 0 10px rgb(98 165 255 / 0.24);
+}
+
 .timelineSlider {
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 18px;
   margin: 0;
+  appearance: none;
+  background: transparent;
   accent-color: #62a5ff;
   cursor: pointer;
+}
+
+.timelineSlider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.timelineSlider::-webkit-slider-thumb {
+  width: 0;
+  height: 0;
+  margin-top: 0;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.timelineSlider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.timelineSlider::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.timelineSlider::-moz-range-thumb {
+  width: 0;
+  height: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .timelineLabel {

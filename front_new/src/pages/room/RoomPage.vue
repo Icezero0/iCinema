@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component, type Ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Component, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -19,6 +19,7 @@ import {
   unsetRoomMemberManager,
   type Room,
   type RoomJoinRequest,
+  type RoomVideoSourceType,
 } from "@/infra/api/rooms.api";
 import {
   approveJoinRequestById,
@@ -34,6 +35,7 @@ import RoomRequestsTab from "@/features/room/components/workspace/RoomRequestsTa
 import RoomSettingsTab from "@/features/room/components/workspace/RoomSettingsTab.vue";
 import type { RoomPanelKey, RoomRole } from "@/features/room/types";
 import type { ChatSegment } from "@/features/chat/types";
+import { useRoomTheaterLayout } from "@/features/room/composables/useRoomTheaterLayout";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
 import { useRoomSettingsState } from "@/features/room/composables/useRoomSettingsState";
 import { useMessagesStore } from "@/stores/messages.store";
@@ -70,6 +72,13 @@ const isLeavingRoom = ref(false);
 const isDisbandingRoom = ref(false);
 const settingManagerUserIds = ref<number[]>([]);
 const removingMemberUserIds = ref<number[]>([]);
+const mainGridRef = ref<HTMLElement | null>(null);
+const playerStageRef = ref<{
+  togglePlayback: () => Promise<void>;
+  pauseVideo: () => void;
+  seekToPercent: (percent: number) => void;
+  captureCurrentFrame: () => Promise<Blob>;
+} | null>(null);
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -79,9 +88,19 @@ const roomId = computed(() => {
 
 const currentUserRole = ref<RoomRoleState>("unknown");
 const activePanel = ref<RoomPanelKey>("chat");
+const panelBeforeTheater = ref<RoomPanelKey>("chat");
 const playbackIsPlaying = ref(false);
 const playbackProgress = ref(0);
+const playbackBufferedProgress = ref(0);
+const playbackBufferedRanges = ref<Array<{ startPercent: number; endPercent: number }>>([]);
 const playbackVolume = ref(DEFAULT_LOCAL_ROOM_VOLUME);
+const playbackCurrentTime = ref(0);
+const playbackDuration = ref(0);
+const playbackSourceType = ref<RoomVideoSourceType>("external_url");
+const playbackSourceUrl = ref("");
+const playbackSourceFile = ref<File | null>(null);
+const playbackSourceFileName = ref("");
+const playbackSourceRevision = ref(0);
 const canManageRoomRequests = computed(() =>
   currentUserRole.value === "owner" || currentUserRole.value === "manager");
 const currentUserIsOwner = computed(() => currentUserRole.value === "owner");
@@ -158,8 +177,15 @@ const layout = useRoomWorkspaceLayout({
   roomId: computed(() => room.value?.id),
   isLoading,
 });
+const theaterLayout = useRoomTheaterLayout(roomId);
 const mainGridStyle = computed(() => layout.mainGridStyle.value);
 const workspaceCardStyle = computed(() => layout.workspaceCardStyle.value);
+const effectiveMainGridStyle = computed(() =>
+  theaterLayout.isTheaterMode.value
+    ? theaterLayout.theaterMainGridStyle.value
+    : mainGridStyle.value);
+const effectiveWorkspaceCardStyle = computed(() =>
+  theaterLayout.isTheaterMode.value ? undefined : workspaceCardStyle.value);
 const hasOlderMessages = computed(() => roomMessagesState.value.nextBeforeId != null);
 const {
   roomSettings,
@@ -194,9 +220,106 @@ const syncPolicyStatusLabel = computed(() => {
 
   return t("room.playback.syncPolicyAuto");
 });
+const playbackTimelineLabel = computed(() =>
+  `${formatPlaybackTime(playbackCurrentTime.value)} / ${formatPlaybackTime(playbackDuration.value)}`);
+
+function formatPlaybackTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "00:00";
+
+  const totalSeconds = Math.floor(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const restSeconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(restSeconds).padStart(2, "0");
+
+  if (hours <= 0) return `${mm}:${ss}`;
+  return `${hours}:${mm}:${ss}`;
+}
+
+function updatePlaybackProgress() {
+  playbackProgress.value =
+    playbackDuration.value > 0
+      ? Math.min(100, Math.max(0, (playbackCurrentTime.value / playbackDuration.value) * 100))
+      : 0;
+}
 
 function togglePlayback() {
-  playbackIsPlaying.value = !playbackIsPlaying.value;
+  void playerStageRef.value?.togglePlayback();
+}
+
+function handlePlaybackProgressChange(value: number) {
+  playerStageRef.value?.pauseVideo();
+  playbackIsPlaying.value = false;
+  playbackProgress.value = value;
+  playerStageRef.value?.seekToPercent(value);
+}
+
+function handlePlaybackDurationChange(value: number) {
+  playbackDuration.value = value;
+  updatePlaybackProgress();
+}
+
+function handlePlaybackTimeChange(value: number) {
+  playbackCurrentTime.value = value;
+  updatePlaybackProgress();
+}
+
+function handleApplyPlaybackSource(payload: {
+  sourceType: RoomVideoSourceType;
+  externalUrl: string;
+  localFile: File | null;
+}) {
+  playbackSourceType.value = payload.sourceType;
+
+  if (payload.sourceType === "external_url") {
+    playbackSourceUrl.value = payload.externalUrl.trim();
+    playbackSourceFile.value = null;
+    playbackSourceFileName.value = "";
+  } else if (payload.localFile) {
+    playbackSourceFile.value = payload.localFile;
+    playbackSourceFileName.value = payload.localFile.name;
+    playbackSourceUrl.value = "";
+    playbackBufferedProgress.value = 0;
+    playbackBufferedRanges.value = [];
+  }
+
+  playbackCurrentTime.value = 0;
+  playbackDuration.value = 0;
+  playbackProgress.value = 0;
+  playbackBufferedProgress.value = 0;
+  playbackBufferedRanges.value = [];
+  playbackIsPlaying.value = false;
+  playbackSourceRevision.value += 1;
+}
+
+async function handleCopyPlayerScreenshot() {
+  try {
+    const blob = await playerStageRef.value?.captureCurrentFrame();
+    if (!blob) {
+      throw new Error(t("room.playback.screenshotNoFrame"));
+    }
+
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      throw new Error(t("room.playback.screenshotClipboardUnsupported"));
+    }
+
+    await navigator.clipboard.write([
+      new ClipboardItem({ [blob.type]: blob }),
+    ]);
+    toasts.push({
+      message: t("room.playback.screenshotCopied"),
+      tone: "success",
+    });
+  } catch (error) {
+    toasts.push({
+      message:
+        error instanceof Error && error.message
+          ? error.message
+          : t("room.playback.screenshotFailed"),
+      tone: "danger",
+    });
+  }
 }
 
 function loadLocalPlaybackVolume() {
@@ -205,6 +328,69 @@ function loadLocalPlaybackVolume() {
 
 function handlePlaybackVolumeChange(value: number) {
   playbackVolume.value = entitiesStore.setRoomLocalVolume(roomId.value, value);
+}
+
+function resetPlaybackState() {
+  playbackIsPlaying.value = false;
+  playbackProgress.value = 0;
+  playbackBufferedProgress.value = 0;
+  playbackBufferedRanges.value = [];
+  playbackCurrentTime.value = 0;
+  playbackDuration.value = 0;
+  playbackSourceType.value = "external_url";
+  playbackSourceUrl.value = "";
+  playbackSourceFile.value = null;
+  playbackSourceFileName.value = "";
+  playbackSourceRevision.value += 1;
+}
+
+function isTheaterFullscreenActive() {
+  return Boolean(
+    mainGridRef.value &&
+      document.fullscreenElement === mainGridRef.value,
+  );
+}
+
+async function enterTheaterFullscreen() {
+  try {
+    await mainGridRef.value?.requestFullscreen?.();
+  } catch {
+    // The CSS theater layout still works when browser fullscreen is unavailable.
+  }
+}
+
+async function exitTheaterFullscreen() {
+  if (!isTheaterFullscreenActive()) return;
+
+  try {
+    await document.exitFullscreen?.();
+  } catch {
+    // Browser may already be exiting fullscreen.
+  }
+}
+
+async function toggleTheaterMode() {
+  if (theaterLayout.isTheaterMode.value) {
+    await exitTheaterFullscreen();
+    theaterLayout.setTheaterMode(false);
+    activePanel.value = panelBeforeTheater.value;
+    return;
+  }
+
+  if (!theaterLayout.canUseTheaterMode.value) return;
+
+  panelBeforeTheater.value = activePanel.value;
+  activePanel.value = "chat";
+  theaterLayout.setTheaterMode(true);
+  await enterTheaterFullscreen();
+}
+
+function syncTheaterFullscreenState() {
+  if (!theaterLayout.isTheaterMode.value) return;
+  if (document.fullscreenElement) return;
+
+  theaterLayout.setTheaterMode(false);
+  activePanel.value = panelBeforeTheater.value;
 }
 
 function syncCurrentUserRole() {
@@ -525,9 +711,14 @@ async function handleRemoveRoomMember(userId: number) {
 }
 
 onMounted(() => {
+  document.addEventListener("fullscreenchange", syncTheaterFullscreenState);
   void fetchRoom();
   void fetchRoomMessages();
   void fetchRoomMembers();
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", syncTheaterFullscreenState);
 });
 watch(roomId, () => {
   currentUserRole.value = "unknown";
@@ -539,6 +730,8 @@ watch(roomId, () => {
   settingManagerUserIds.value = [];
   removingMemberUserIds.value = [];
   playbackVolume.value = DEFAULT_LOCAL_ROOM_VOLUME;
+  resetPlaybackState();
+  theaterLayout.setTheaterMode(false);
   void fetchRoom();
   void fetchRoomMessages();
   void fetchRoomMembers();
@@ -560,6 +753,24 @@ watch(activePanel, (panel) => {
     void fetchRoomRequests();
   }
 });
+
+watch(
+  () => theaterLayout.isTheaterMode.value,
+  (active) => {
+    if (!active) {
+      void exitTheaterFullscreen();
+    }
+  },
+);
+watch(
+  () => theaterLayout.canUseTheaterMode.value,
+  async (canUse) => {
+    if (canUse || !theaterLayout.isTheaterMode.value) return;
+    await exitTheaterFullscreen();
+    theaterLayout.setTheaterMode(false);
+    activePanel.value = panelBeforeTheater.value;
+  },
+);
 </script>
 
 <template>
@@ -570,7 +781,7 @@ watch(activePanel, (panel) => {
       <div v-else-if="error" class="state error">{{ error }}</div>
 
       <template v-else-if="room">
-        <BaseCard class="topStrip">
+        <BaseCard v-if="!theaterLayout.isTheaterMode.value" class="topStrip">
           <div class="roomIntro">
             <h2 class="roomName">{{ room.name }}</h2>
           </div>
@@ -580,22 +791,54 @@ watch(activePanel, (panel) => {
           </div>
         </BaseCard>
 
-        <div class="mainGrid" :style="mainGridStyle">
+        <div
+          ref="mainGridRef"
+          class="mainGrid"
+          :class="{
+            theaterMode: theaterLayout.isTheaterMode.value,
+          }"
+          :style="effectiveMainGridStyle"
+        >
           <section
             :ref="(el) => { layout.setStageColumnEl(el as HTMLElement | null); }"
             class="stageColumn"
           >
             <BaseCard class="stageCard">
               <RoomPlayerStage
+                ref="playerStageRef"
+                class="playerStage"
                 :title="t('room.playback.emptyTitle')"
                 :hint="t('room.playback.emptyHint')"
+                :source-type="playbackSourceType"
+                :source-url="playbackSourceUrl"
+                :source-file="playbackSourceFile"
+                :source-revision="playbackSourceRevision"
+                :volume="playbackVolume"
+                :video-fullscreen-label="t('room.playback.controls.videoFullscreen')"
+                :exit-video-fullscreen-label="t('room.playback.controls.exitVideoFullscreen')"
+                :theater-mode-label="t('room.playback.controls.theaterMode')"
+                :exit-theater-mode-label="t('room.playback.controls.exitTheaterMode')"
+                :is-theater-mode="theaterLayout.isTheaterMode.value"
+                :theater-mode-available="theaterLayout.canUseTheaterMode.value"
+                @toggle-theater-mode="toggleTheaterMode"
+                @play-state-change="playbackIsPlaying = $event"
+                @duration-change="handlePlaybackDurationChange"
+                @time-change="handlePlaybackTimeChange"
+                @buffered-progress-change="playbackBufferedProgress = $event"
+                @buffered-ranges-change="playbackBufferedRanges = $event"
               />
 
               <RoomPlaybackControls
+                class="playbackControls"
                 :is-playing="playbackIsPlaying"
                 :progress="playbackProgress"
+                :buffered-progress="playbackBufferedProgress"
+                :buffered-ranges="playbackBufferedRanges"
                 :volume="playbackVolume"
-                :timeline-label="t('room.playback.timelineUnavailable')"
+                :source-type="playbackSourceType"
+                :source-url="playbackSourceUrl"
+                :source-file-name="playbackSourceFileName"
+                :timeline-label="playbackTimelineLabel"
                 :play-label="t('room.playback.controls.play')"
                 :pause-label="t('room.playback.controls.pause')"
                 :sync-label="t('room.playback.controls.syncNow')"
@@ -603,11 +846,24 @@ watch(activePanel, (panel) => {
                 :source-panel-title="t('room.sourcePanel.title')"
                 :volume-label="t('room.playback.controls.volume')"
                 @toggle-play="togglePlayback"
-                @update:progress="playbackProgress = $event"
+                @update:progress="handlePlaybackProgressChange"
                 @update:volume="handlePlaybackVolumeChange"
+                @apply-source="handleApplyPlaybackSource"
               />
             </BaseCard>
           </section>
+
+          <div
+            v-if="theaterLayout.isTheaterMode.value"
+            class="theaterDivider"
+            :class="{ resizing: theaterLayout.isResizing.value }"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-label="t('room.playback.resizeChatPanel')"
+            @pointerdown="theaterLayout.startWorkspaceResize"
+          >
+            <span class="dividerHandle" />
+          </div>
 
           <aside
             :ref="(el) => { layout.setWorkspaceColumnEl(el as HTMLElement | null); }"
@@ -615,9 +871,14 @@ watch(activePanel, (panel) => {
           >
             <BaseCard
               class="workspaceCard"
-              :style="workspaceCardStyle"
+              :class="{ theaterWorkspaceCard: theaterLayout.isTheaterMode.value }"
+              :style="effectiveWorkspaceCardStyle"
             >
-              <AppTabs v-model="activePanel" :items="panelOptions" />
+              <AppTabs
+                v-if="!theaterLayout.isTheaterMode.value"
+                v-model="activePanel"
+                :items="panelOptions"
+              />
 
               <RoomChatTab
                 v-show="activePanel === 'chat'"
@@ -632,6 +893,7 @@ watch(activePanel, (panel) => {
                 :loading-label="t('common.loading')"
                 :empty-label="t('room.chatEmpty')"
                 :send-message="handleSend"
+                :capture-screenshot="handleCopyPlayerScreenshot"
                 @load-older="loadOlderRoomMessages"
               />
 
@@ -745,6 +1007,39 @@ watch(activePanel, (panel) => {
   align-items: start;
 }
 
+.mainGrid.theaterMode {
+  position: fixed;
+  top: var(--room-visual-viewport-offset-top, 0px);
+  right: 0;
+  bottom: auto;
+  left: 0;
+  z-index: 80;
+  height: var(--room-visual-viewport-height, 100dvh);
+  min-height: 0;
+  padding: 16px;
+  box-sizing: border-box;
+  gap: 0;
+  align-items: stretch;
+  grid-template-rows: minmax(0, 1fr);
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--c-primary) 14%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--c-bg) 92%, var(--c-surface)),
+      color-mix(in srgb, var(--c-surface) 84%, var(--c-bg))
+    );
+}
+
+:global([data-theme="dark"]) .mainGrid.theaterMode {
+  background:
+    radial-gradient(circle at top left, rgb(65 93 126 / 0.26), transparent 32%),
+    linear-gradient(145deg, rgb(10 14 20), rgb(18 24 34));
+}
+
 .stageColumn,
 .workspaceColumn {
   min-width: 0;
@@ -752,6 +1047,14 @@ watch(activePanel, (panel) => {
 
 .workspaceColumn {
   align-self: start;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.mainGrid.theaterMode .stageColumn,
+.mainGrid.theaterMode .workspaceColumn {
+  align-self: stretch;
   height: 100%;
   max-height: 100%;
   overflow: hidden;
@@ -765,6 +1068,63 @@ watch(activePanel, (panel) => {
     linear-gradient(180deg, color-mix(in srgb, var(--c-surface) 92%, white), color-mix(in srgb, var(--c-surface) 86%, var(--c-bg)));
 }
 
+.mainGrid.theaterMode .stageCard {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.mainGrid.theaterMode .playerStage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.mainGrid.theaterMode .playerStage :deep(.playerSurface) {
+  height: 100%;
+  aspect-ratio: auto;
+}
+
+.mainGrid.theaterMode .playbackControls {
+  width: 100%;
+}
+
+.theaterDivider {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.dividerHandle {
+  width: 3px;
+  height: 78px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-text-muted) 62%, var(--c-border));
+  transition:
+    background-color 160ms ease,
+    box-shadow 180ms ease,
+    height 180ms ease;
+}
+
+:global([data-theme="dark"]) .dividerHandle {
+  background: rgb(255 255 255 / 0.18);
+}
+
+.theaterDivider:hover .dividerHandle,
+.theaterDivider.resizing .dividerHandle {
+  height: 112px;
+  background: color-mix(in srgb, var(--c-primary) 62%, white);
+  box-shadow: 0 0 0 4px rgb(255 255 255 / 0.08);
+}
+
 .workspaceCard {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -772,6 +1132,20 @@ watch(activePanel, (panel) => {
   height: 100%;
   overflow: hidden;
   max-height: 100%;
+}
+
+.workspaceCard.theaterWorkspaceCard {
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  max-height: 100%;
+  border-radius: 16px;
+  border-color: rgb(255 255 255 / 0.12);
+  background: color-mix(in srgb, var(--c-surface) 94%, var(--c-bg));
+  box-shadow: 0 20px 46px rgb(0 0 0 / 0.22);
+}
+
+:global([data-theme="dark"]) .workspaceCard.theaterWorkspaceCard {
+  background: color-mix(in srgb, var(--c-surface) 92%, rgb(18 24 34));
 }
 
 :deep(.workspaceCard.card) {
@@ -844,5 +1218,22 @@ watch(activePanel, (panel) => {
   .statusBar :deep(.pill) {
     min-width: 0;
   }
+}
+
+:global(body.icinema-room-theater-active .app > .header) {
+  display: none;
+}
+
+:global(body.icinema-room-theater-active .app > .body) {
+  grid-template-columns: 1fr;
+  min-height: 100dvh;
+}
+
+:global(body.icinema-room-theater-active .app > .body > .sidebar) {
+  display: none;
+}
+
+:global(body.icinema-room-theater-active .app > .body > .content) {
+  z-index: 90;
 }
 </style>

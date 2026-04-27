@@ -17,6 +17,7 @@ const props = defineProps<{
   sendLabel?: string;
   sending?: boolean;
   sendMessage?: (segments: ChatSegment[]) => Promise<void> | void;
+  captureScreenshot?: () => Promise<void> | void;
 }>();
 
 const emit = defineEmits<{
@@ -29,11 +30,13 @@ const rootRef = ref<HTMLElement | null>(null);
 const emojiPanelOpen = ref(false);
 const canSend = ref(false);
 const sendPending = ref(false);
+const screenshotPending = ref(false);
 const emojiPanelStyle = ref<Record<string, string>>({
   left: "0px",
   top: "0px",
   visibility: "hidden",
 });
+const emojiTeleportTarget = ref<HTMLElement | "body">("body");
 const editorRef = ref<{
   insertQfaceById: (qfaceId: string) => void;
   insertSticker: (sticker: { id: number; url: string; alt?: string }) => void;
@@ -75,9 +78,16 @@ function scheduleEmojiPanelPositionUpdate() {
   });
 }
 
+function syncEmojiTeleportTarget() {
+  emojiTeleportTarget.value = document.fullscreenElement instanceof HTMLElement
+    ? document.fullscreenElement
+    : "body";
+}
+
 function toggleEmojiPanel() {
   emojiPanelOpen.value = !emojiPanelOpen.value;
   if (emojiPanelOpen.value) {
+    syncEmojiTeleportTarget();
     emojiPanelStyle.value = {
       left: "0px",
       top: "0px",
@@ -151,9 +161,21 @@ async function sendMessage() {
   }
 }
 
+async function captureScreenshot() {
+  if (!props.captureScreenshot || screenshotPending.value) return;
+
+  screenshotPending.value = true;
+  try {
+    await props.captureScreenshot();
+  } finally {
+    screenshotPending.value = false;
+  }
+}
+
 onMounted(() => {
   document.addEventListener("pointerdown", onDocumentPointerDown);
   document.addEventListener("keydown", onDocumentKeyDown);
+  document.addEventListener("fullscreenchange", syncEmojiTeleportTarget);
   window.addEventListener("resize", scheduleEmojiPanelPositionUpdate);
   window.addEventListener("scroll", scheduleEmojiPanelPositionUpdate, true);
 });
@@ -161,6 +183,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", onDocumentPointerDown);
   document.removeEventListener("keydown", onDocumentKeyDown);
+  document.removeEventListener("fullscreenchange", syncEmojiTeleportTarget);
   window.removeEventListener("resize", scheduleEmojiPanelPositionUpdate);
   window.removeEventListener("scroll", scheduleEmojiPanelPositionUpdate, true);
   if (pickerPositionFrame) {
@@ -183,7 +206,7 @@ onBeforeUnmount(() => {
           <AppIcon :icon="FaceSmileIcon" :size="16" />
         </BaseIconButton>
 
-        <Teleport to="body">
+        <Teleport :to="emojiTeleportTarget">
           <Transition name="floating-fade">
             <ChatEmojiPicker
               v-show="emojiPanelOpen"
@@ -195,9 +218,10 @@ onBeforeUnmount(() => {
       </div>
 
       <BaseIconButton
-        class="toolButton disabledTool"
+        class="toolButton"
         :aria-label="t('chat.toolbar.screenshot')"
-        disabled
+        :disabled="screenshotPending"
+        @click="captureScreenshot"
       >
         <AppIcon :icon="CameraIcon" :size="16" />
       </BaseIconButton>
@@ -285,5 +309,9 @@ onBeforeUnmount(() => {
 .floating-fade-leave-from {
   opacity: 1;
   transform: translate(-50%, calc(-100% - 12px));
+}
+
+:global(body.icinema-room-theater-active [data-emoji-panel-root="true"]) {
+  z-index: 180;
 }
 </style>

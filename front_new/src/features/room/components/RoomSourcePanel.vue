@@ -33,12 +33,20 @@ const videoUrlExtensions = [
   ".ogv",
   ".mov",
   ".m4v",
-  ".mkv",
-  ".avi",
-  ".flv",
-  ".ts",
   ".m3u8",
 ];
+const supportedLocalFileTypes = [
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+  ".mp4",
+  ".m4v",
+  ".webm",
+  ".ogg",
+  ".ogv",
+  ".mov",
+].join(",");
 
 const sourceTypeOptions = computed(() => [
   {
@@ -153,7 +161,7 @@ function onFileChange(event: Event) {
           ref="fileInputRef"
           class="hiddenFileInput"
           type="file"
-          accept="video/*"
+          :accept="supportedLocalFileTypes"
           @change="onFileChange"
         >
       </div>
