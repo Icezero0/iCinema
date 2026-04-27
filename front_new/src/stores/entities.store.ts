@@ -21,6 +21,7 @@ export type LocalRoomSyncStrategy =
   | "manual-sync";
 
 export const DEFAULT_LOCAL_ROOM_SYNC_STRATEGY: LocalRoomSyncStrategy = "adaptive-speed";
+export const DEFAULT_LOCAL_ROOM_VOLUME = 50;
 
 function isLocalRoomSyncStrategy(value: unknown): value is LocalRoomSyncStrategy {
   return (
@@ -32,6 +33,18 @@ function isLocalRoomSyncStrategy(value: unknown): value is LocalRoomSyncStrategy
 
 function roomLocalSyncStrategyStorageKey(roomId: number) {
   return `icinema:room:${roomId}:localSyncStrategy`;
+}
+
+function roomLocalVolumeStorageKey(roomId: number) {
+  return `icinema:room:${roomId}:volume`;
+}
+
+function normalizeLocalRoomVolume(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_LOCAL_ROOM_VOLUME;
+  }
+
+  return Math.min(100, Math.max(0, Math.round(value)));
 }
 
 type EntityUser = {
@@ -55,6 +68,7 @@ type EntityRoom = {
   sync_policy?: RoomSettings["sync_policy"];
   active_sync_permission?: RoomSettings["active_sync_permission"];
   local_sync_strategy?: LocalRoomSyncStrategy;
+  local_volume?: number;
 };
 
 type EntityRoomMember = {
@@ -220,6 +234,36 @@ export const useEntitiesStore = defineStore("entities", {
       });
 
       return strategy;
+    },
+
+    setRoomLocalVolume(roomId: number, volume: number) {
+      const normalizedVolume = normalizeLocalRoomVolume(volume);
+      if (!roomId) return normalizedVolume;
+
+      this.roomsById[roomId] = mergeDefined(this.roomsById[roomId], {
+        id: roomId,
+        local_volume: normalizedVolume,
+      });
+      writePersistedState(roomLocalVolumeStorageKey(roomId), normalizedVolume);
+
+      return normalizedVolume;
+    },
+
+    loadRoomLocalVolume(roomId: number) {
+      if (!roomId) return DEFAULT_LOCAL_ROOM_VOLUME;
+
+      const persisted = readPersistedState<unknown>(
+        roomLocalVolumeStorageKey(roomId),
+        DEFAULT_LOCAL_ROOM_VOLUME,
+      );
+      const volume = normalizeLocalRoomVolume(persisted);
+
+      this.roomsById[roomId] = mergeDefined(this.roomsById[roomId], {
+        id: roomId,
+        local_volume: volume,
+      });
+
+      return volume;
     },
 
     upsertRoomMembers(members: Array<RoomMember | null | undefined>) {

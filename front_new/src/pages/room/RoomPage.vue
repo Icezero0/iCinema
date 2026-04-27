@@ -26,6 +26,7 @@ import {
 } from "@/infra/api/join-requests.api";
 import BasePill from "@/ui/base/BasePill.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
+import RoomPlayerStage from "@/features/room/components/RoomPlayerStage.vue";
 import RoomPlaybackControls from "@/features/room/components/RoomPlaybackControls.vue";
 import RoomChatTab from "@/features/room/components/workspace/RoomChatTab.vue";
 import RoomMembersTab from "@/features/room/components/workspace/RoomMembersTab.vue";
@@ -36,7 +37,10 @@ import type { ChatSegment } from "@/features/chat/types";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
 import { useRoomSettingsState } from "@/features/room/composables/useRoomSettingsState";
 import { useMessagesStore } from "@/stores/messages.store";
-import { useEntitiesStore } from "@/stores/entities.store";
+import {
+  DEFAULT_LOCAL_ROOM_VOLUME,
+  useEntitiesStore,
+} from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
@@ -75,8 +79,9 @@ const roomId = computed(() => {
 
 const currentUserRole = ref<RoomRoleState>("unknown");
 const activePanel = ref<RoomPanelKey>("chat");
-const isPlaying = ref(false);
-const mockProgress = ref(24);
+const playbackIsPlaying = ref(false);
+const playbackProgress = ref(0);
+const playbackVolume = ref(DEFAULT_LOCAL_ROOM_VOLUME);
 const canManageRoomRequests = computed(() =>
   currentUserRole.value === "owner" || currentUserRole.value === "manager");
 const currentUserIsOwner = computed(() => currentUserRole.value === "owner");
@@ -85,15 +90,15 @@ const currentUserCanRemoveMembers = computed(() =>
 const memberDangerActionDisabled = computed(() => currentUserRole.value === "unknown");
 
 const allPanelOptions = computed<{ key: RoomPanelKey; label: string; badge?: string; icon?: Component }[]>(() => [
-  { key: "chat", label: t("room.mock.tabs.chat"), icon: ChatBubbleLeftRightIcon },
-  { key: "members", label: t("room.mock.tabs.members"), icon: UserGroupIcon },
+  { key: "chat", label: t("room.tabs.chat"), icon: ChatBubbleLeftRightIcon },
+  { key: "members", label: t("room.tabs.members"), icon: UserGroupIcon },
   {
     key: "requests",
-    label: t("room.mock.tabs.requests"),
+    label: t("room.tabs.requests"),
     badge: roomJoinRequests.value.length > 0 ? String(roomJoinRequests.value.length) : undefined,
     icon: ClipboardDocumentCheckIcon,
   },
-  { key: "settings", label: t("room.mock.tabs.settings"), icon: Cog6ToothIcon },
+  { key: "settings", label: t("room.tabs.settings"), icon: Cog6ToothIcon },
 ]);
 
 const panelOptions = computed(() => {
@@ -119,8 +124,8 @@ const roomRequestItems = computed(() => roomJoinRequests.value.map((request) => 
       user?.email ||
       `User #${isApply ? request.initiator_user_id : request.target_user_id}`,
     note: isApply
-      ? t("room.mock.requestApply")
-      : t("room.mock.requestInvite"),
+      ? t("room.requests.applyNote")
+      : t("room.requests.inviteNote"),
     time: formatLocalDateTime(request.updated_at || request.created_at),
   };
 }));
@@ -174,9 +179,32 @@ const {
   canManageRoomSettings: canManageRoomRequests,
   isOwner: currentUserIsOwner,
 });
+const syncPolicyStatusLabel = computed(() => {
+  if (roomSettingsError.value && !roomSettings.value) {
+    return t("room.playback.syncPolicyUnavailable");
+  }
+
+  if (!roomSettings.value) {
+    return t("room.playback.syncPolicyLoading");
+  }
+
+  if (roomSettings.value?.sync_policy === "disabled") {
+    return t("room.playback.syncPolicyManual");
+  }
+
+  return t("room.playback.syncPolicyAuto");
+});
 
 function togglePlayback() {
-  isPlaying.value = !isPlaying.value;
+  playbackIsPlaying.value = !playbackIsPlaying.value;
+}
+
+function loadLocalPlaybackVolume() {
+  playbackVolume.value = entitiesStore.loadRoomLocalVolume(roomId.value);
+}
+
+function handlePlaybackVolumeChange(value: number) {
+  playbackVolume.value = entitiesStore.setRoomLocalVolume(roomId.value, value);
 }
 
 function syncCurrentUserRole() {
@@ -213,6 +241,7 @@ async function fetchRoom() {
     room.value = await getRoomById(roomId.value);
     entitiesStore.upsertRoom(room.value);
     loadLocalSyncStrategy();
+    loadLocalPlaybackVolume();
     syncCurrentUserRole();
   } catch (e: any) {
     room.value = null;
@@ -509,6 +538,7 @@ watch(roomId, () => {
   requestActionIds.value = [];
   settingManagerUserIds.value = [];
   removingMemberUserIds.value = [];
+  playbackVolume.value = DEFAULT_LOCAL_ROOM_VOLUME;
   void fetchRoom();
   void fetchRoomMessages();
   void fetchRoomMembers();
@@ -546,7 +576,7 @@ watch(activePanel, (panel) => {
           </div>
 
           <div class="statusBar">
-            <BasePill tone="default">{{ t("room.mock.syncPolicy") }}</BasePill>
+            <BasePill tone="default">{{ syncPolicyStatusLabel }}</BasePill>
           </div>
         </BaseCard>
 
@@ -556,27 +586,25 @@ watch(activePanel, (panel) => {
             class="stageColumn"
           >
             <BaseCard class="stageCard">
-              <div class="playerShell" role="presentation">
-                <div class="playerSurface">
-                  <div class="playerOverlay">
-                    <div class="screenLabel">{{ t("room.mock.playerLabel") }}</div>
-                    <div class="screenHint">{{ t("room.mock.playerHint") }}</div>
-                  </div>
-                </div>
-              </div>
+              <RoomPlayerStage
+                :title="t('room.playback.emptyTitle')"
+                :hint="t('room.playback.emptyHint')"
+              />
 
               <RoomPlaybackControls
-                :is-playing="isPlaying"
-                :progress="mockProgress"
-                timeline-label="01:24 / 13:42"
-                :play-label="t('room.mock.controls.play')"
-                :pause-label="t('room.mock.controls.pause')"
-                :sync-label="t('room.mock.controls.syncNow')"
-                :source-label="t('room.mock.controls.source')"
-                :source-panel-title="t('room.mock.controls.sourcePanelTitle')"
-                :volume-label="t('room.mock.controls.volume')"
+                :is-playing="playbackIsPlaying"
+                :progress="playbackProgress"
+                :volume="playbackVolume"
+                :timeline-label="t('room.playback.timelineUnavailable')"
+                :play-label="t('room.playback.controls.play')"
+                :pause-label="t('room.playback.controls.pause')"
+                :sync-label="t('room.playback.controls.syncNow')"
+                :source-label="t('room.playback.controls.source')"
+                :source-panel-title="t('room.sourcePanel.title')"
+                :volume-label="t('room.playback.controls.volume')"
                 @toggle-play="togglePlayback"
-                @update:progress="mockProgress = $event"
+                @update:progress="playbackProgress = $event"
+                @update:volume="handlePlaybackVolumeChange"
               />
             </BaseCard>
           </section>
@@ -595,7 +623,7 @@ watch(activePanel, (panel) => {
                 v-show="activePanel === 'chat'"
                 :room-key="roomId"
                 :messages="roomChatMessages"
-                :send-label="t('room.mock.send')"
+                :send-label="t('room.chat.send')"
                 :loading="roomMessagesState.isLoading"
                 :sending="roomMessagesState.isSending"
                 :loading-history="roomMessagesState.isLoadingHistory"
@@ -610,9 +638,9 @@ watch(activePanel, (panel) => {
               <RoomMembersTab
                 v-show="activePanel === 'members'"
                 :members="roomMemberItems"
-                :search-placeholder="t('room.mock.membersSearchPlaceholder')"
-                :invite-label="t('room.mock.invite')"
-                :leave-room-label="t('room.mock.leaveRoom')"
+                :search-placeholder="t('room.members.searchPlaceholder')"
+                :invite-label="t('room.members.invite')"
+                :leave-room-label="t('room.members.leaveRoom')"
                 :disband-room-label="t('room.members.disbandRoom')"
                 :is-owner="currentUserIsOwner"
                 :can-remove-members="currentUserCanRemoveMembers"
@@ -735,40 +763,6 @@ watch(activePanel, (panel) => {
   gap: 14px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--c-surface) 92%, white), color-mix(in srgb, var(--c-surface) 86%, var(--c-bg)));
-}
-
-.playerShell {
-  width: 100%;
-  border-radius: 22px;
-  border: 1px solid color-mix(in srgb, var(--c-primary) 16%, var(--c-border));
-  background:
-    linear-gradient(145deg, rgb(17 23 31), rgb(37 50 68)),
-    radial-gradient(circle at top left, rgb(255 255 255 / 0.06), transparent 30%);
-  box-shadow: 0 20px 60px rgb(0 0 0 / 0.18);
-}
-
-.playerSurface {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  display: grid;
-  place-items: center;
-}
-
-.playerOverlay {
-  text-align: center;
-  color: white;
-}
-
-.screenLabel {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.screenHint {
-  margin-top: 8px;
-  font-size: 13px;
-  color: rgb(226 233 242 / 0.78);
 }
 
 .workspaceCard {

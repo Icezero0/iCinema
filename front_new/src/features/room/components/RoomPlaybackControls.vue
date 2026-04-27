@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   ArrowPathIcon,
   FilmIcon,
@@ -11,9 +11,10 @@ import AppIcon from "@/ui/base/AppIcon.vue";
 import RoomSourcePanel from "@/features/room/components/RoomSourcePanel.vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 
-defineProps<{
+const props = defineProps<{
   isPlaying: boolean;
   progress: number;
+  volume: number;
   timelineLabel: string;
   playLabel: string;
   pauseLabel: string;
@@ -26,6 +27,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: "toggle-play"): void;
   (e: "update:progress", value: number): void;
+  (e: "update:volume", value: number): void;
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -34,8 +36,9 @@ const sourceType = ref<RoomVideoSourceType>("external_url");
 const sourceExternalUrl = ref("");
 const sourceLocalFileName = ref("");
 const volumeOpen = ref(false);
-const volumeValue = ref(68);
 const syncAnimating = ref(false);
+const volumeValue = computed(() =>
+  Math.min(100, Math.max(0, Math.round(props.volume))));
 
 function onProgressInput(event: Event) {
   const target = event.target as HTMLInputElement;
@@ -76,7 +79,7 @@ function triggerSyncAnimation() {
 
 function onVolumeInput(event: Event) {
   const target = event.target as HTMLInputElement;
-  volumeValue.value = Number(target.value);
+  emit("update:volume", Math.min(100, Math.max(0, Math.round(Number(target.value)))));
 }
 
 function onDocumentPointerDown(event: PointerEvent) {
