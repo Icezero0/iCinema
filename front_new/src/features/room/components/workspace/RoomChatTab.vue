@@ -37,7 +37,6 @@ const emit = defineEmits<{
       :loading-label="loadingLabel"
       :empty-label="emptyLabel"
       :send-message="sendMessage"
-      self-author="Icezero"
       @send="emit('send', $event)"
       @load-older="emit('loadOlder')"
     />

@@ -43,6 +43,8 @@ const entitiesStore = useEntitiesStore();
 const messagesStore = useMessagesStore();
 const toasts = useToastsStore();
 
+type RoomRoleState = RoomRole | "unknown";
+
 const room = ref<Room | null>(null);
 const isLoading = ref(false);
 const error = ref("");
@@ -60,11 +62,13 @@ const roomId = computed(() => {
   return Number.isFinite(parsed) ? parsed : 0;
 });
 
-const currentUserRole = ref<RoomRole>("owner");
+const currentUserRole = ref<RoomRoleState>("unknown");
 const activePanel = ref<RoomPanelKey>("chat");
 const isPlaying = ref(false);
 const mockProgress = ref(24);
 const localSyncStrategy = ref("soft-lock");
+const canManageRoomRequests = computed(() =>
+  currentUserRole.value === "owner" || currentUserRole.value === "manager");
 
 const allPanelOptions = computed<{ key: RoomPanelKey; label: string; badge?: string; icon?: Component }[]>(() => [
   { key: "chat", label: t("room.mock.tabs.chat"), icon: ChatBubbleLeftRightIcon },
@@ -79,7 +83,7 @@ const allPanelOptions = computed<{ key: RoomPanelKey; label: string; badge?: str
 ]);
 
 const panelOptions = computed(() => {
-  if (currentUserRole.value === "member") {
+  if (!canManageRoomRequests.value) {
     return allPanelOptions.value.filter((panel) =>
       panel.key === "chat" || panel.key === "members" || panel.key === "settings");
   }
@@ -141,7 +145,10 @@ function togglePlayback() {
 
 function syncCurrentUserRole() {
   const meId = auth.me?.id;
-  if (!meId) return;
+  if (!meId) {
+    currentUserRole.value = "unknown";
+    return;
+  }
 
   if (room.value?.owner_id === meId) {
     currentUserRole.value = "owner";
@@ -151,7 +158,10 @@ function syncCurrentUserRole() {
   const selfMember = entityRoomMembers.value.find((member) => member.user_id === meId);
   if (selfMember) {
     currentUserRole.value = selfMember.role;
+    return;
   }
+
+  currentUserRole.value = "unknown";
 }
 
 async function fetchRoom() {
@@ -223,7 +233,7 @@ async function loadOlderRoomMessages() {
 }
 
 async function fetchRoomRequests(options?: { force?: boolean }) {
-  if (!roomId.value || currentUserRole.value === "member") {
+  if (!roomId.value || !canManageRoomRequests.value) {
     roomJoinRequests.value = [];
     requestsLoaded.value = false;
     requestsError.value = "";
@@ -320,6 +330,7 @@ onMounted(() => {
   void fetchRoomMembers();
 });
 watch(roomId, () => {
+  currentUserRole.value = "unknown";
   roomJoinRequests.value = [];
   requestsLoaded.value = false;
   requestsError.value = "";
@@ -418,7 +429,6 @@ watch(activePanel, (panel) => {
                 :loading-label="t('common.loading')"
                 :empty-label="t('room.chatEmpty')"
                 :send-message="handleSend"
-                @send="handleSend"
                 @load-older="loadOlderRoomMessages"
               />
 

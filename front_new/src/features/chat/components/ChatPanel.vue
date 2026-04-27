@@ -9,7 +9,6 @@ const props = defineProps<{
   roomKey?: number | string | null;
   messages: ChatMessage[];
   sendLabel?: string;
-  selfAuthor?: string;
   loading?: boolean;
   sending?: boolean;
   loadingHistory?: boolean;
