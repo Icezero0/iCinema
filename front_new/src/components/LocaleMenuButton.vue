@@ -91,7 +91,9 @@ onBeforeUnmount(() => {
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  min-width: 200px;
+  width: max-content;
+  min-width: 120px;
+  max-width: min(180px, calc(100vw - 16px));
 
   border: 1px solid var(--c-border);
   background: var(--c-surface);

@@ -8,7 +8,7 @@ REM ---- Verify node executable ----
 node -v >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Node.js not found.
-    echo Please install Node.js ^(version 20 LTS^) from:
+    echo Please install Node.js from:
     echo https://nodejs.org
     exit /b 1
 )
@@ -26,12 +26,12 @@ if not defined NODE_MAJOR (
 )
 
 REM ---- Enforce version ----
-if !NODE_MAJOR! LSS 20 (
+if !NODE_MAJOR! LSS 18 (
     echo.
     echo ==========================================
     echo   Node.js version too old
     echo ==========================================
-    echo Required: Node.js ^>= 20
+    echo Required: Node.js ^>= 18
     echo Current : !NODE_MAJOR!
     echo.
     echo Download: https://nodejs.org
@@ -56,8 +56,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM ---- Start dev server ----
-echo [INFO] Starting Vite dev server...
-call npm run dev -- --host
+echo [INFO] Frontend dependencies are ready.
+echo [INFO] Run run_frontend.bat to start the Vite dev server.
 
 endlocal

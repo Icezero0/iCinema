@@ -42,11 +42,31 @@ const props = withDefaults(
   box-shadow: 0 10px 22px rgb(0 0 0 / 0.08);
 }
 
-/* 文字鼠标与选择规则（你要的：非 I-beam 但可选文字） */
 .item,
 .item * {
   cursor: default;
   user-select: text;
+}
+
+.item :deep(button),
+.item :deep(button *),
+.item :deep([role="button"]),
+.item :deep([role="button"] *),
+.item :deep(a),
+.item :deep(a *),
+.item :deep(input),
+.item :deep(select),
+.item :deep(textarea),
+.item :deep(label) {
+  cursor: pointer;
+}
+
+.item :deep(button:disabled),
+.item :deep(button:disabled *),
+.item :deep(input:disabled),
+.item :deep(select:disabled),
+.item :deep(textarea:disabled) {
+  cursor: not-allowed;
 }
 </style>
 

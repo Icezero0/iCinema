@@ -1,34 +1,33 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useNotificationsStore } from "@/stores/notifications.store";
+import { resolveMediaUrl } from "@/infra/media";
 
 import AppIcon from "@/ui/base/AppIcon.vue";
 import BaseIconButton from "@/ui/base/BaseIconButton.vue";
-import { Bars3Icon, BellIcon } from "@heroicons/vue/24/outline";
+import {
+  Bars3Icon,
+  BellIcon,
+  ClipboardDocumentCheckIcon,
+} from "@heroicons/vue/24/outline";
 import AccountMenuPopover from "@/layouts/components/AccountMenuPopover.vue";
 import LocaleMenuButton from "@/components/LocaleMenuButton.vue";
 
 const props = defineProps<{ sidebarOpen: boolean }>();
 const emit = defineEmits<{ (e: "update:sidebarOpen", v: boolean): void }>();
 
+const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 const notifications = useNotificationsStore();
 
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
-
 const userEmail = computed(() => auth.me?.email || "null@example.com");
 const userName = computed(() => auth.me?.username || "User");
 const avatarPath = computed(() => auth.me?.avatar_url || "");
-
-const avatarUrl = computed(() => {
-  if (!avatarPath.value) return "";
-  return avatarPath.value.startsWith("http")
-    ? avatarPath.value
-    : `${apiOrigin}${avatarPath.value}`;
-});
+const avatarUrl = computed(() => resolveMediaUrl(avatarPath.value));
 
 function toggleSidebar() {
   emit("update:sidebarOpen", !props.sidebarOpen);
@@ -36,6 +35,10 @@ function toggleSidebar() {
 
 function goNotifications() {
   router.push("/notifications");
+}
+
+function goJoinRequests() {
+  router.push("/join-requests");
 }
 
 const badgeText = computed(() => {
@@ -53,11 +56,13 @@ onMounted(() => {
 <template>
   <header class="header">
     <div class="left">
-      <BaseIconButton aria-label="Toggle sidebar" @click="toggleSidebar">
+      <BaseIconButton :aria-label="t('appShell.toggleNavigation')" @click="toggleSidebar">
         <AppIcon :icon="Bars3Icon" :size="22" />
       </BaseIconButton>
       <span class="brand">iCinema</span>
     </div>
+
+    <div class="spacer" aria-hidden="true" />
 
     <div class="right">
       <AccountMenuPopover
@@ -67,8 +72,12 @@ onMounted(() => {
         :email="userEmail"
       />
 
+      <BaseIconButton :aria-label="t('joinRequests.title')" @click="goJoinRequests">
+        <AppIcon :icon="ClipboardDocumentCheckIcon" :size="20" />
+      </BaseIconButton>
+
       <div class="notiBtn">
-        <BaseIconButton aria-label="Notifications" @click="goNotifications">
+        <BaseIconButton :aria-label="t('notifications.title')" @click="goNotifications">
           <AppIcon :icon="BellIcon" :size="20" />
         </BaseIconButton>
 
@@ -85,36 +94,37 @@ onMounted(() => {
 <style scoped>
 .header {
   height: 56px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-
   padding: 0 var(--s-4);
   border-bottom: 1px solid var(--c-border);
-  background: var(--c-surface);
+  background: color-mix(in srgb, var(--c-surface) 92%, var(--c-bg));
   position: relative;
   overflow: visible;
   z-index: 50;
+  gap: 20px;
 }
 
 .left,
 .right {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
+  gap: 10px;
+  min-width: 0;
+}
+
+.spacer {
   min-width: 0;
 }
 
 .brand {
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 12rem;
-}
-
-.accountPopover {
-  margin-right: var(--s-1);
 }
 
 .notiBtn {
@@ -147,9 +157,20 @@ onMounted(() => {
   user-select: none;
 }
 
+.accountPopover {
+  margin-right: 2px;
+}
+
+@media (max-width: 860px) {
+  .header {
+    gap: 12px;
+  }
+}
+
 @media (max-width: 640px) {
   .header {
     padding: 0 var(--s-2);
+    grid-template-columns: auto 1fr auto;
   }
 
   .left,
@@ -157,12 +178,8 @@ onMounted(() => {
     gap: var(--s-1);
   }
 
-  .accountPopover {
-    margin-right: 0;
-  }
-
   .brand {
-    max-width: 7rem;
+    max-width: 6rem;
     font-size: 0.95rem;
   }
 }

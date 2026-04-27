@@ -39,7 +39,7 @@ withDefaults(
   justify-content: center;
   padding: 0 14px;
   border-radius: var(--r-2);
-  cursor: pointer;
+  cursor: pointer !important;
   gap: 8px;
 
   font-weight: 500;
@@ -76,11 +76,16 @@ withDefaults(
 
 .btn:disabled {
   opacity: 0.6;
-  cursor: not-allowed;
+  cursor: not-allowed !important;
 }
 
 .content.hidden {
   opacity: 0;
+}
+
+.content,
+.loading {
+  pointer-events: none;
 }
 
 .loading {

@@ -1890,6 +1890,53 @@
                 ]
             }
         },
+        "/api/v1/media/images/{image_id}/collect-as-sticker": {
+            "post": {
+                "tags": [
+                    "media"
+                ],
+                "summary": "Collect Image As Sticker",
+                "operationId": "collect_image_as_sticker_api_v1_media_images__image_id__collect_as_sticker_post",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "image_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Image Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StickerResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/media/stickers/library": {
             "get": {
                 "tags": [

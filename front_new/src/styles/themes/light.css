@@ -7,6 +7,7 @@
   --c-text-muted: rgba(0,0,0,0.60);
 
   --c-danger: rgb(220, 38, 38);
+  --c-danger-hover: rgb(185, 28, 28);
 
   --auth-tint-1: rgba(80, 180, 200, 0.10);
   --auth-tint-2: rgba(80, 180, 200, 0.06);

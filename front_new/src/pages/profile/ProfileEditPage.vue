@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { patchMe, patchMyAvatar } from "@/infra/api/users.api";
+import { resolveMediaUrl } from "@/infra/media";
 
 import BaseCard from "@/ui/base/BaseCard.vue";
 import BaseButton from "@/ui/base/BaseButton.vue";
@@ -14,17 +15,10 @@ const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8000";
-
 const me = computed(() => auth.me);
 
 const avatarPath = computed(() => me.value?.avatar_url ?? "");
-const avatarUrl = computed(() => {
-  if (!avatarPath.value) return "";
-  return avatarPath.value.startsWith("http")
-    ? avatarPath.value
-    : `${apiOrigin}${avatarPath.value}`;
-});
+const avatarUrl = computed(() => resolveMediaUrl(avatarPath.value));
 
 // 初始值（用来判断 dirty）
 const initial = ref({
@@ -218,7 +212,7 @@ async function onSave() {
   }
 }
 
-function onCancel() {
+function onBack() {
   if (isSubmitting.value) return;
 
   if (isDirty.value) {
@@ -237,7 +231,13 @@ const displayAvatarSrc = computed(() => avatarPreviewSrc.value || avatarUrl.valu
 </script>
 
 <template>
-  <div class="page">
+  <AppPageShell
+    :title="t('profile.title')"
+    :back-text="t('profile.cancel')"
+    :max-width="760"
+    back-behavior="emit"
+    @back="onBack"
+  >
     <!-- Unsaved confirm -->
     <BaseConfirmDialog
       v-model="leaveDialogOpen"
@@ -259,8 +259,6 @@ const displayAvatarSrc = computed(() => avatarPreviewSrc.value || avatarUrl.valu
     />
 
     <BaseCard class="card">
-      <h1 class="title">{{ t("profile.title") }}</h1>
-
       <div class="avatarBlock">
         <button type="button" class="avatarButton" @click="openFilePicker">
           <img
@@ -338,44 +336,20 @@ const displayAvatarSrc = computed(() => avatarPreviewSrc.value || avatarUrl.valu
         >
           {{ t("profile.save") }}
         </BaseButton>
-
-        <BaseButton
-          type="button"
-          variant="default"
-          :disabled="isSubmitting"
-          @click="onCancel"
-        >
-          {{ t("profile.cancel") }}
-        </BaseButton>
       </div>
     </BaseCard>
-  </div>
+  </AppPageShell>
 </template>
 
 <style scoped>
-.page {
-  min-height: 100%;
-  display: grid;
-  place-items: center;
-  padding: 32px 16px;
-  background: var(--c-bg);
-  color: var(--c-text);
-}
-
 .card {
   width: min(720px, 100%);
+  margin: 0 auto;
   padding: 28px 28px 22px;
   border: 1px solid var(--c-border);
   background: var(--c-surface);
   border-radius: 16px;
   box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.06));
-}
-
-.title {
-  text-align: center;
-  margin: 0 0 18px;
-  font-size: 20px;
-  letter-spacing: 0.02em;
 }
 
 .avatarBlock {
@@ -531,7 +505,7 @@ const displayAvatarSrc = computed(() => avatarPreviewSrc.value || avatarUrl.valu
 .actions {
   margin-top: 18px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 12px;
 }
 </style>

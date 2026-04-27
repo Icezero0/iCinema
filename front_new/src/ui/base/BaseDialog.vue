@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -35,15 +35,27 @@ const emit = defineEmits<{
 }>();
 
 const open = computed(() => props.modelValue);
+const pointerDownOnOverlay = ref(false);
 
 function close() {
   emit("update:modelValue", false);
   emit("close");
 }
 
-function onOverlayClick() {
-  if (!props.closeOnOverlay) return;
+function onOverlayPointerDown(event: PointerEvent) {
+  if (event.button !== 0) return;
+  pointerDownOnOverlay.value = true;
+}
+
+function onOverlayPointerUp(event: PointerEvent) {
+  if (event.button !== 0) return;
+  if (!props.closeOnOverlay || !pointerDownOnOverlay.value) return;
+  pointerDownOnOverlay.value = false;
   close();
+}
+
+function onDialogPointerDown() {
+  pointerDownOnOverlay.value = false;
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -60,6 +72,9 @@ watch(
   (v) => {
     if (!props.lockScroll) return;
     document.documentElement.style.overflow = v ? "hidden" : "";
+    if (!v) {
+      pointerDownOnOverlay.value = false;
+    }
   }
 );
 
@@ -81,7 +96,8 @@ const dialogStyle = computed(() => ({ maxWidth: `${props.maxWidth}px` }));
         class="overlay"
         :style="overlayStyle"
         role="presentation"
-        @click="onOverlayClick"
+        @pointerdown.self="onOverlayPointerDown"
+        @pointerup.self="onOverlayPointerUp"
       >
         <Transition name="pop">
           <div
@@ -90,6 +106,7 @@ const dialogStyle = computed(() => ({ maxWidth: `${props.maxWidth}px` }));
             role="dialog"
             aria-modal="true"
             :aria-label="ariaLabel"
+            @pointerdown="onDialogPointerDown"
             @click.stop
           >
             <slot />

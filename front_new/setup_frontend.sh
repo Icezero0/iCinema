@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# iCinema frontend dev bootstrap (Linux/macOS)
+# iCinema frontend setup (Linux/macOS)
 # - Check Node.js exists + version >= 18
-# - Install deps if node_modules or package-lock.json missing
-# - Run: npm run dev -- --host
+# - Install dependencies
+# - Leave dev server startup to run_frontend.sh
 
 info() { echo "[INFO] $*"; }
-warn() { echo "[WARN] $*"; }
 error() { echo "[ERROR] $*"; }
 
 info "Checking Node.js..."
@@ -26,17 +25,13 @@ if [ "${NODE_MAJOR}" -lt 18 ]; then
   exit 1
 fi
 
-# deps check
-if [ ! -d "node_modules" ]; then
-  info "node_modules not found, installing dependencies..."
-  npm install
-elif [ ! -f "package-lock.json" ]; then
-  warn "package-lock.json not found, reinstalling dependencies..."
-  npm install
+# deps install
+info "Installing dependencies..."
+if [ -f "package-lock.json" ]; then
+  npm ci
 else
-  info "Dependencies already installed."
+  npm install
 fi
 
-info "Starting Vite dev server..."
-# --host allows access from LAN / mobile devices
-npm run dev -- --host
+info "Frontend dependencies are ready."
+info "Run ./run_frontend.sh to start the Vite dev server."
