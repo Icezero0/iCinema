@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -32,10 +32,12 @@ class RoomMembershipRepository:
         user_id: int,
     ) -> RoomMember | None:
         result = await db.execute(
-            select(RoomMember).where(
+            select(RoomMember)
+            .where(
                 RoomMember.room_id == room_id,
                 RoomMember.user_id == user_id,
             )
+            .options(selectinload(RoomMember.user))
         )
         return result.scalar_one_or_none()
 
@@ -78,3 +80,22 @@ class RoomMembershipRepository:
             )
         )
         await db.flush()
+
+    async def update_member_role(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+        user_id: int,
+        role: str,
+    ) -> RoomMember | None:
+        await db.execute(
+            update(RoomMember)
+            .where(
+                RoomMember.room_id == room_id,
+                RoomMember.user_id == user_id,
+            )
+            .values(role=role)
+        )
+        await db.flush()
+        return await self.get_member(db, room_id=room_id, user_id=user_id)

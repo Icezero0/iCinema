@@ -81,6 +81,95 @@ async def test_remove_room_member_requires_manager_permission_for_manager_target
         )
 
 
+# 验证成员主动退出房间不需要管理权限。
+async def test_leave_room_allows_member_without_manage_members_permission(
+    db_session,
+    factories,
+) -> None:
+    owner = await factories.create_user()
+    member = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    await factories.add_member(room=room, user=member, role=RoomRole.MEMBER)
+    await factories.commit()
+
+    await RoomMembershipService().leave_room(
+        db_session,
+        room_id=room.id,
+        user=member,
+    )
+
+    membership = await RoomMembershipService().find_room_member(
+        db_session,
+        room_id=room.id,
+        user_id=member.id,
+    )
+    assert membership is None
+
+
+# 验证房主不能主动退出房间，只能删除房间。
+async def test_leave_room_rejects_owner(db_session, factories) -> None:
+    owner = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    await factories.commit()
+
+    with pytest.raises(ForbiddenError, match="Owner cannot leave the room"):
+        await RoomMembershipService().leave_room(
+            db_session,
+            room_id=room.id,
+            user=owner,
+        )
+
+
+# 验证设置和解除管理员都要求 MANAGE_MANAGERS 权限。
+async def test_set_room_member_manager_status_requires_manage_managers(
+    db_session,
+    factories,
+) -> None:
+    owner = await factories.create_user()
+    manager = await factories.create_user()
+    member = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    await factories.add_member(room=room, user=manager, role=RoomRole.MANAGER)
+    await factories.add_member(room=room, user=member, role=RoomRole.MEMBER)
+    await factories.commit()
+
+    with pytest.raises(ForbiddenError, match="You do not have permission"):
+        await RoomMembershipService().set_room_member_manager_status(
+            db_session,
+            room_id=room.id,
+            target_user_id=member.id,
+            is_manager=True,
+            current_user=manager,
+        )
+
+
+# 验证房主可以设置和解除管理员。
+async def test_set_room_member_manager_status_updates_role(db_session, factories) -> None:
+    owner = await factories.create_user()
+    member = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    await factories.add_member(room=room, user=member, role=RoomRole.MEMBER)
+    await factories.commit()
+
+    promoted = await RoomMembershipService().set_room_member_manager_status(
+        db_session,
+        room_id=room.id,
+        target_user_id=member.id,
+        is_manager=True,
+        current_user=owner,
+    )
+    assert promoted.role == RoomRole.MANAGER
+
+    demoted = await RoomMembershipService().set_room_member_manager_status(
+        db_session,
+        room_id=room.id,
+        target_user_id=member.id,
+        is_manager=False,
+        current_user=owner,
+    )
+    assert demoted.role == RoomRole.MEMBER
+
+
 # 验证读取公开房间设置时，缺失配置会被惰性创建。
 async def test_get_accessible_room_settings_creates_default_settings_for_public_room(
     db_session,
