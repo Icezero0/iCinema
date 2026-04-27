@@ -25,6 +25,12 @@ export default {
           title: "Actions",
           upload: "Upload",
           edit: "Edit",
+          save: "Save",
+          cancel: "Cancel",
+          unsavedTitle: "Unsaved sticker edits",
+          unsavedMessage: "You have unsaved sticker removals or ordering changes. Exit editing?",
+          discard: "Exit",
+          keepEditing: "Keep editing",
         },
         unicodeEmojiCategories: {
           faces: "Faces",

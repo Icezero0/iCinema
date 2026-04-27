@@ -44,6 +44,7 @@ export type UnicodeEmojiTabProps = {
 export type StickerTabProps = {
   stickerLibrary: StickerResponse[];
   actionItems: StickerActionItem[];
+  isEditing?: boolean;
   isLoading?: boolean;
   error?: string | null;
   loadingLabel?: string;

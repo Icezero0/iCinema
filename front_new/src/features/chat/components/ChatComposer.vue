@@ -8,6 +8,7 @@ import {
 import { useI18n } from "vue-i18n";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import type { ChatSegment } from "@/features/chat/types";
+import { STICKER_DRAG_ACTIVE_ATTR } from "./emoji-picker/stickerDrag.constants";
 import type { ChatEmojiPickerSelection } from "./emoji-picker/types";
 import ChatEmojiPicker from "./ChatEmojiPicker.vue";
 import ChatRichEditor from "./ChatRichEditor.vue";
@@ -110,6 +111,10 @@ function onDocumentPointerDown(event: PointerEvent) {
   const panelTarget = target instanceof Element
     ? target.closest("[data-emoji-panel-root='true']")
     : null;
+  const stickerDragActive = document.documentElement.hasAttribute(
+    STICKER_DRAG_ACTIVE_ATTR,
+  );
+  if (stickerDragActive) return;
   if (!root || !target || root.contains(target) || panelTarget) return;
   emojiPanelOpen.value = false;
 }

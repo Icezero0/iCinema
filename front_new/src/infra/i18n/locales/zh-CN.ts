@@ -26,6 +26,12 @@ export default {
           title: "功能",
           upload: "上传贴纸",
           edit: "编辑贴纸",
+          save: "保存",
+          cancel: "取消",
+          unsavedTitle: "未保存的贴纸库编辑",
+          unsavedMessage: "你有未保存的贴纸删除或排序修改，确定要退出编辑吗？",
+          discard: "退出",
+          keepEditing: "继续编辑",
         },
         unicodeEmojiCategories: {
           faces: "表情",

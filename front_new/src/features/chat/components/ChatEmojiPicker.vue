@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {
+  CheckIcon,
   FaceSmileIcon,
   HeartIcon,
   PencilSquareIcon,
   PlusIcon,
+  XMarkIcon,
 } from "@heroicons/vue/24/outline";
 import { computed, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
 import { useI18n } from "vue-i18n";
@@ -13,6 +15,7 @@ import { useQfaceStore } from "@/stores/qface.store";
 import { useUnicodeEmojiStore } from "@/stores/unicode_emoji.store";
 import { useStickersStore } from "@/stores/stickers.store";
 import QfacePenguinIcon from "@/ui/icons/QfacePenguinIcon.vue";
+import BaseConfirmDialog from "@/ui/base/BaseConfirmDialog.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
 import ChatQfaceTab from "./emoji-picker/ChatQfaceTab.vue";
 import ChatStickerTab from "./emoji-picker/ChatStickerTab.vue";
@@ -40,30 +43,64 @@ const activeEmojiTab = ref<EmojiPickerTabKey>("qface");
 const isCompactViewport = ref(false);
 const hasRequestedStickerLibrary = ref(false);
 const stickerUploadInputRef = ref<HTMLInputElement | null>(null);
+const stickerEditMode = ref(false);
+const stickerEditDraftIds = ref<number[]>([]);
+const stickerCancelConfirmOpen = ref(false);
 let viewportMediaQuery: MediaQueryList | null = null;
 let removeViewportListener: (() => void) | null = null;
 const qfaceCatalog = computed(() => qfaceStore.allQfaces);
 const unicodeEmojiCatalog = computed(() => unicodeEmojiStore.allUnicodeEmojis);
 const stickerLibrary = computed(() => stickersStore.library);
+const stickerEditDraftLibrary = computed(() => (
+  stickerEditDraftIds.value
+    .map((id) => stickersStore.getSticker(id))
+    .filter((sticker): sticker is NonNullable<ReturnType<typeof stickersStore.getSticker>> => Boolean(sticker))
+));
+const displayedStickerLibrary = computed(() => (
+  stickerEditMode.value ? stickerEditDraftLibrary.value : stickerLibrary.value
+));
+const stickerEditDirty = computed(() => {
+  const sourceIds = stickersStore.libraryIds;
+  const draftIds = stickerEditDraftIds.value;
+  if (sourceIds.length !== draftIds.length) return true;
+  return sourceIds.some((id, index) => id !== draftIds[index]);
+});
 const recentDisplayLimit = computed(() => (isCompactViewport.value ? 8 : 10));
 const recentQfaces = computed(() => qfaceStore.recentQfaces.slice(0, recentDisplayLimit.value));
 const recentUnicodeEmoji = computed(() => (
   unicodeEmojiStore.recentUnicodeEmojis.slice(0, recentDisplayLimit.value)
 ));
-const stickerActionItems = computed<StickerActionItem[]>(() => [
-  {
-    key: "upload",
-    label: t("chat.emojiPanel.sections.stickerActions.upload"),
-    icon: PlusIcon,
-    disabled: stickersStore.isUploading,
-  },
-  {
-    key: "edit",
-    label: t("chat.emojiPanel.sections.stickerActions.edit"),
-    icon: PencilSquareIcon,
-    disabled: true,
-  },
-]);
+const stickerActionItems = computed<StickerActionItem[]>(() => (
+  stickerEditMode.value
+    ? [
+      {
+        key: "save",
+        label: t("chat.emojiPanel.sections.stickerActions.save"),
+        icon: CheckIcon,
+        disabled: stickersStore.isSyncingLibrary,
+      },
+      {
+        key: "cancel",
+        label: t("chat.emojiPanel.sections.stickerActions.cancel"),
+        icon: XMarkIcon,
+        disabled: stickersStore.isSyncingLibrary,
+      },
+    ]
+    : [
+      {
+        key: "upload",
+        label: t("chat.emojiPanel.sections.stickerActions.upload"),
+        icon: PlusIcon,
+        disabled: stickersStore.isUploading,
+      },
+      {
+        key: "edit",
+        label: t("chat.emojiPanel.sections.stickerActions.edit"),
+        icon: PencilSquareIcon,
+        disabled: stickersStore.isLoading,
+      },
+    ]
+));
 const unicodeEmojiCategoryOrder = [
   "faces",
   "gestures",
@@ -174,6 +211,52 @@ function triggerStickerUpload() {
   stickerUploadInputRef.value?.click();
 }
 
+function enterStickerEditMode() {
+  stickerEditDraftIds.value = stickersStore.libraryIds.filter((id) => stickersStore.getSticker(id));
+  stickerEditMode.value = true;
+}
+
+function exitStickerEditMode() {
+  stickerEditMode.value = false;
+  stickerEditDraftIds.value = [];
+  stickerCancelConfirmOpen.value = false;
+}
+
+async function saveStickerEditMode() {
+  if (!stickerEditDirty.value) {
+    exitStickerEditMode();
+    return;
+  }
+
+  try {
+    await stickersStore.syncLibrary(stickerEditDraftIds.value);
+    exitStickerEditMode();
+  } catch {
+    // stickers.store keeps the latest error state for the panel
+  }
+}
+
+function requestCancelStickerEditMode() {
+  if (!stickerEditDirty.value) {
+    exitStickerEditMode();
+    return;
+  }
+
+  stickerCancelConfirmOpen.value = true;
+}
+
+function removeStickerFromDraft(stickerId: number) {
+  stickerEditDraftIds.value = stickerEditDraftIds.value.filter((id) => id !== stickerId);
+}
+
+function reorderStickerDraft(stickerIds: number[]) {
+  const knownIds = new Set(stickerEditDraftIds.value);
+  const nextIds = stickerIds.filter((id) => knownIds.has(id));
+  if (nextIds.length !== stickerEditDraftIds.value.length) return;
+
+  stickerEditDraftIds.value = nextIds;
+}
+
 async function handleStickerUploadChange(event: Event) {
   const input = event.target as HTMLInputElement | null;
   const [file] = Array.from(input?.files ?? []);
@@ -199,6 +282,12 @@ async function handleStickerUploadChange(event: Event) {
 function handleStickerAction(actionKey: string) {
   if (actionKey === "upload") {
     triggerStickerUpload();
+  } else if (actionKey === "edit") {
+    enterStickerEditMode();
+  } else if (actionKey === "save") {
+    void saveStickerEditMode();
+  } else if (actionKey === "cancel") {
+    requestCancelStickerEditMode();
   }
 }
 </script>
@@ -237,16 +326,29 @@ function handleStickerAction(actionKey: string) {
 
       <ChatStickerTab
         v-else
-        :sticker-library="stickerLibrary"
+        :sticker-library="displayedStickerLibrary"
         :action-items="stickerActionItems"
+        :is-editing="stickerEditMode"
         :is-loading="stickersStore.isLoading"
         :error="stickersStore.error"
         :loading-label="t('common.loading')"
         :empty-label="t('chat.emojiPanel.emptyStickers')"
         @action="handleStickerAction"
         @select="selectSticker"
+        @remove="removeStickerFromDraft"
+        @reorder="reorderStickerDraft"
       />
     </div>
+
+    <BaseConfirmDialog
+      v-model="stickerCancelConfirmOpen"
+      :title="t('chat.emojiPanel.sections.stickerActions.unsavedTitle')"
+      :message="t('chat.emojiPanel.sections.stickerActions.unsavedMessage')"
+      :confirm-text="t('chat.emojiPanel.sections.stickerActions.discard')"
+      :cancel-text="t('chat.emojiPanel.sections.stickerActions.keepEditing')"
+      variant="danger"
+      @confirm="exitStickerEditMode"
+    />
   </div>
 </template>
 

@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { resolveMediaUrl } from "@/infra/media";
 import type { StickerTabProps } from "./types";
+import { useStickerPointerDrag } from "./useStickerPointerDrag";
 
 const props = defineProps<StickerTabProps>();
 
 const emit = defineEmits<{
   action: [actionKey: string];
   select: [stickerId: number];
+  remove: [stickerId: number];
+  reorder: [stickerIds: number[]];
 }>();
 
 const { t } = useI18n();
@@ -27,6 +30,19 @@ const hoveredSticker = computed(() => (
     ? null
     : props.stickerLibrary.find((sticker) => sticker.id === hoveredStickerId.value) ?? null
 ));
+const {
+  draggedSticker,
+  draggingStickerId,
+  dragOverlayStyle,
+  setDragOverlayRef,
+  pointerDragState,
+  handleStickerPointerDown,
+} = useStickerPointerDrag({
+  stickerLibrary: toRef(props, "stickerLibrary"),
+  isEditing: toRef(props, "isEditing"),
+  closePreview,
+  reorder: (stickerIds) => emit("reorder", stickerIds),
+});
 
 function closePreview() {
   if (previewOpenTimer != null) {
@@ -60,7 +76,7 @@ function clampPreviewPosition() {
 }
 
 async function openPreview(stickerId: number, event: MouseEvent | FocusEvent) {
-  if (!previewEnabled.value) return;
+  if (!previewEnabled.value || props.isEditing) return;
 
   const target = event.currentTarget as HTMLElement | null;
   const nextX = event instanceof MouseEvent
@@ -99,7 +115,7 @@ async function openPreview(stickerId: number, event: MouseEvent | FocusEvent) {
 }
 
 function updatePreviewPosition(event: MouseEvent) {
-  if (!previewEnabled.value) return;
+  if (!previewEnabled.value || props.isEditing) return;
 
   previewX.value = event.clientX + 16;
   previewY.value = event.clientY - 8;
@@ -138,8 +154,10 @@ onMounted(() => {
 
 function handleStickerClick(stickerId: number) {
   closePreview();
+  if (props.isEditing) return;
   emit("select", stickerId);
 }
+
 </script>
 
 <template>
@@ -178,31 +196,70 @@ function handleStickerClick(stickerId: number) {
         {{ emptyLabel }}
       </div>
       <div v-else class="emojiGrid stickerGrid">
-        <button
+        <div
           v-for="sticker in stickerLibrary"
           :key="`sticker-${sticker.id}`"
           class="emojiOption stickerOption"
-          type="button"
+          :class="{
+            stickerOptionEditing: isEditing,
+            stickerOptionDragging: draggingStickerId === sticker.id,
+            stickerOptionDropTarget: pointerDragState?.targetStickerId === sticker.id,
+          }"
+          :data-sticker-id="sticker.id"
+          role="button"
+          tabindex="0"
           :aria-label="`Sticker ${sticker.id}`"
-          @mousedown.prevent
           @mouseenter="openPreview(sticker.id, $event)"
           @mousemove="updatePreviewPosition"
           @mouseleave="closePreview"
           @focus="openPreview(sticker.id, $event)"
           @blur="closePreview"
+          @pointerdown="handleStickerPointerDown(sticker.id, $event)"
           @click="handleStickerClick(sticker.id)"
+          @keydown.enter.prevent="handleStickerClick(sticker.id)"
+          @keydown.space.prevent="handleStickerClick(sticker.id)"
         >
+          <button
+            v-if="isEditing && draggingStickerId !== sticker.id"
+            class="stickerRemoveButton"
+            type="button"
+            :aria-label="`Remove sticker ${sticker.id}`"
+            @mousedown.stop
+            @click.stop="emit('remove', sticker.id)"
+          >
+            ×
+          </button>
           <img
+            v-if="draggingStickerId !== sticker.id"
             class="stickerOptionImage"
             :src="resolveMediaUrl(sticker.url)"
             :alt="`Sticker ${sticker.id}`"
           >
-        </button>
+          <span
+            v-else
+            class="stickerDragPlaceholder"
+            aria-hidden="true"
+          />
+        </div>
       </div>
     </section>
   </div>
 
   <Teleport to="body">
+    <div
+      v-if="pointerDragState && draggedSticker"
+      :ref="setDragOverlayRef"
+      class="stickerDragOverlay emojiOption stickerOption"
+      :style="dragOverlayStyle"
+      aria-hidden="true"
+    >
+      <img
+        class="stickerOptionImage"
+        :src="resolveMediaUrl(draggedSticker.url)"
+        :alt="`Sticker ${draggedSticker.id}`"
+      >
+    </div>
+
     <div
       v-if="previewOpen && hoveredSticker"
       ref="previewRef"
@@ -244,6 +301,83 @@ function handleStickerClick(stickerId: number) {
   max-width: 152px;
   height: auto;
   max-height: 152px;
+  object-fit: contain;
+}
+
+:deep(.stickerOptionEditing) {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+:deep(.stickerOptionEditing:active) {
+  cursor: grabbing;
+}
+
+:deep(.stickerOptionDragging) {
+  border-color: color-mix(in srgb, var(--c-border) 72%, transparent);
+  background: color-mix(in srgb, var(--c-surface) 58%, transparent);
+  box-shadow: none;
+}
+
+:deep(.stickerOptionDropTarget) {
+  border-color: color-mix(in srgb, var(--c-primary) 48%, var(--c-border));
+  background: color-mix(in srgb, var(--c-primary) 12%, var(--c-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-primary) 34%, transparent);
+}
+
+.stickerRemoveButton {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, #ef4444 72%, white);
+  border-radius: 999px;
+  background: #ef4444;
+  color: white;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgb(239 68 68 / 0.26);
+}
+
+.stickerRemoveButton:hover {
+  background: #dc2626;
+}
+
+.stickerDragPlaceholder {
+  width: 100%;
+  max-width: 46px;
+  aspect-ratio: 1;
+  border-radius: 9px;
+  border: 1px dashed color-mix(in srgb, var(--c-text-muted) 32%, transparent);
+  background: color-mix(in srgb, var(--c-surface) 72%, transparent);
+}
+
+.stickerDragOverlay {
+  position: fixed;
+  z-index: 160;
+  display: grid;
+  place-items: center;
+  min-height: 58px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 24%, var(--c-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c-surface) 94%, var(--c-bg));
+  box-shadow: 0 16px 34px rgb(0 0 0 / 0.2);
+  pointer-events: none;
+}
+
+.stickerDragOverlay .stickerOptionImage {
+  width: 100%;
+  max-width: 46px;
+  height: auto;
+  max-height: 46px;
   object-fit: contain;
 }
 </style>
