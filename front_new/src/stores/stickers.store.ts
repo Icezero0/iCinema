@@ -8,6 +8,11 @@ import {
   type MediaAssetUploadResponse,
   type StickerResponse,
 } from "@/infra/api/media.api";
+import {
+  clearStickerImageCache,
+  ensureStickerImageBlob,
+  pruneStickerImageCache,
+} from "@/infra/sticker-image-cache";
 import { useAssetsStore } from "@/stores/assets.store";
 import { readPersistedState, writePersistedState } from "@/stores/persistence";
 import { useToastsStore } from "@/stores/toasts.store";
@@ -16,6 +21,10 @@ import { i18n } from "@/infra/i18n";
 const STORAGE_KEY = "icinema:stickers-store";
 const MAX_RECENT_STICKERS = 30;
 const MAX_PERSISTED_STICKERS = 200;
+
+export type StickerWithDisplayUrl = StickerResponse & {
+  display_url?: string;
+};
 
 type PersistedState = {
   stickersById: Record<number, StickerResponse>;
@@ -29,6 +38,8 @@ type State = PersistedState & {
   isUploading: boolean;
   isSyncingLibrary: boolean;
   isEditingLibrary: boolean;
+  stickerImageUrls: Record<number, string>;
+  cachingStickerImageIds: Record<number, boolean>;
   error: string | null;
 };
 
@@ -111,6 +122,8 @@ export const useStickersStore = defineStore("stickers", {
       isUploading: false,
       isSyncingLibrary: false,
       isEditingLibrary: false,
+      stickerImageUrls: {},
+      cachingStickerImageIds: {},
       error: null,
     };
   },
@@ -119,20 +132,57 @@ export const useStickersStore = defineStore("stickers", {
     library(state) {
       return state.libraryIds
         .map((id) => state.stickersById[id])
-        .filter((sticker): sticker is StickerResponse => Boolean(sticker));
+        .filter((sticker): sticker is StickerResponse => Boolean(sticker))
+        .map((sticker) => ({
+          ...sticker,
+          display_url: state.stickerImageUrls[sticker.id],
+        }));
     },
     recentStickers(state) {
       return state.recentStickerIds
         .map((id) => state.stickersById[id])
-        .filter((sticker): sticker is StickerResponse => Boolean(sticker));
+        .filter((sticker): sticker is StickerResponse => Boolean(sticker))
+        .map((sticker) => ({
+          ...sticker,
+          display_url: state.stickerImageUrls[sticker.id],
+        }));
     },
     getSticker: (state) => {
       return (stickerId: number | null | undefined) =>
         typeof stickerId === "number" ? state.stickersById[stickerId] ?? null : null;
     },
+    getStickerDisplayUrl: (state) => {
+      return (stickerId: number | null | undefined) =>
+        typeof stickerId === "number" ? state.stickerImageUrls[stickerId] ?? null : null;
+    },
   },
 
   actions: {
+    setStickerImageUrl(stickerId: number, url: string) {
+      const previousUrl = this.stickerImageUrls[stickerId];
+      if (previousUrl && previousUrl !== url) {
+        URL.revokeObjectURL(previousUrl);
+      }
+
+      this.stickerImageUrls[stickerId] = url;
+    },
+
+    revokeStickerImageUrl(stickerId: number) {
+      const previousUrl = this.stickerImageUrls[stickerId];
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl);
+      }
+
+      delete this.stickerImageUrls[stickerId];
+    },
+
+    revokeAllStickerImageUrls() {
+      Object.values(this.stickerImageUrls).forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+      this.stickerImageUrls = {};
+    },
+
     persist() {
       const libraryIds = this.libraryIds.filter((id) => this.stickersById[id]);
       const recentStickerIds = this.recentStickerIds.filter((id) => this.stickersById[id]);
@@ -159,6 +209,7 @@ export const useStickersStore = defineStore("stickers", {
       this.stickersById[sticker.id] = sticker;
       assets.upsertStickerAsset(sticker);
       this.persist();
+      void this.ensureStickerImageCached(sticker);
     },
 
     upsertStickers(stickers: Array<StickerResponse | null | undefined>) {
@@ -171,6 +222,48 @@ export const useStickersStore = defineStore("stickers", {
         }
       });
       this.persist();
+      void this.syncStickerImageCache();
+    },
+
+    async ensureStickerImageCached(sticker: StickerResponse | null | undefined) {
+      if (!sticker?.id || this.cachingStickerImageIds[sticker.id]) return;
+
+      this.cachingStickerImageIds[sticker.id] = true;
+
+      try {
+        const blob = await ensureStickerImageBlob(sticker);
+        if (!blob) return;
+
+        this.setStickerImageUrl(sticker.id, URL.createObjectURL(blob));
+      } catch {
+        // Keep using the original remote URL if local image caching fails.
+      } finally {
+        delete this.cachingStickerImageIds[sticker.id];
+      }
+    },
+
+    async syncStickerImageCache() {
+      const libraryStickers = this.libraryIds
+        .map((id) => this.stickersById[id])
+        .filter((sticker): sticker is StickerResponse => Boolean(sticker));
+      const libraryIds = libraryStickers.map((sticker) => sticker.id);
+
+      Object.keys(this.stickerImageUrls).forEach((rawId) => {
+        const stickerId = Number(rawId);
+        if (!libraryIds.includes(stickerId)) {
+          this.revokeStickerImageUrl(stickerId);
+        }
+      });
+
+      try {
+        await pruneStickerImageCache(libraryIds);
+      } catch {
+        // Cache cleanup is best-effort.
+      }
+
+      for (const sticker of libraryStickers) {
+        void this.ensureStickerImageCached(sticker);
+      }
     },
 
     rememberRecentSticker(stickerId: number) {
@@ -197,6 +290,7 @@ export const useStickersStore = defineStore("stickers", {
         this.libraryIds = response.items.map((sticker) => sticker.id);
         this.total = response.total;
         this.persist();
+        void this.syncStickerImageCache();
         return response;
       } catch (error: any) {
         const message = extractErrorMessage(error, "Failed to load sticker library");
@@ -217,6 +311,7 @@ export const useStickersStore = defineStore("stickers", {
         this.recentStickerIds = withRecentStickerId(this.recentStickerIds, sticker.id);
         this.total = Math.max(this.total, this.libraryIds.length);
         this.persist();
+        void this.syncStickerImageCache();
         return sticker;
       } catch (error: any) {
         const message = extractErrorMessage(error, "Failed to collect sticker");
@@ -240,6 +335,7 @@ export const useStickersStore = defineStore("stickers", {
         }
 
         this.persist();
+        void this.syncStickerImageCache();
         return {
           sticker,
           existedInLibrary,
@@ -261,6 +357,7 @@ export const useStickersStore = defineStore("stickers", {
         this.libraryIds = ids;
         this.total = ids.length;
         this.persist();
+        void this.syncStickerImageCache();
       } catch (error: any) {
         const message = extractErrorMessage(error, "Failed to sync sticker library");
         this.error = message;
@@ -290,6 +387,7 @@ export const useStickersStore = defineStore("stickers", {
           });
         }
         this.persist();
+        void this.syncStickerImageCache();
         return sticker;
       } catch (error: any) {
         const message = extractErrorMessage(error, "Failed to upload sticker");
@@ -313,8 +411,11 @@ export const useStickersStore = defineStore("stickers", {
       this.isUploading = false;
       this.isSyncingLibrary = false;
       this.isEditingLibrary = false;
+      this.cachingStickerImageIds = {};
+      this.revokeAllStickerImageUrls();
       this.error = null;
       this.persist();
+      void clearStickerImageCache();
     },
   },
 });

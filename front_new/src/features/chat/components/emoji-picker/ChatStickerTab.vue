@@ -232,7 +232,7 @@ function handleStickerClick(stickerId: number) {
           <img
             v-if="draggingStickerId !== sticker.id"
             class="stickerOptionImage"
-            :src="resolveMediaUrl(sticker.url)"
+            :src="sticker.display_url || resolveMediaUrl(sticker.url)"
             :alt="`Sticker ${sticker.id}`"
           >
           <span
@@ -255,7 +255,7 @@ function handleStickerClick(stickerId: number) {
     >
       <img
         class="stickerOptionImage"
-        :src="resolveMediaUrl(draggedSticker.url)"
+        :src="draggedSticker.display_url || resolveMediaUrl(draggedSticker.url)"
         :alt="`Sticker ${draggedSticker.id}`"
       >
     </div>
@@ -272,7 +272,7 @@ function handleStickerClick(stickerId: number) {
     >
       <img
         class="stickerHoverPreviewImage"
-        :src="resolveMediaUrl(hoveredSticker.url)"
+        :src="hoveredSticker.display_url || resolveMediaUrl(hoveredSticker.url)"
         :alt="`Sticker ${hoveredSticker.id}`"
       >
     </div>

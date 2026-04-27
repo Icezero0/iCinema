@@ -1,5 +1,5 @@
 import type { Component } from "vue";
-import type { StickerResponse } from "@/infra/api/media.api";
+import type { StickerWithDisplayUrl } from "@/stores/stickers.store";
 import type {
   QfaceDefinition,
   UnicodeEmojiDefinition,
@@ -42,7 +42,7 @@ export type UnicodeEmojiTabProps = {
 };
 
 export type StickerTabProps = {
-  stickerLibrary: StickerResponse[];
+  stickerLibrary: StickerWithDisplayUrl[];
   actionItems: StickerActionItem[];
   isEditing?: boolean;
   isLoading?: boolean;
