@@ -260,6 +260,24 @@ export async function removeRoomMember(roomId: number, targetUserId: number) {
   await http.delete(`/rooms/${roomId}/members/${targetUserId}`);
 }
 
+export async function leaveRoom(roomId: number) {
+  await http.delete(`/rooms/${roomId}/members/me`);
+}
+
+export async function setRoomMemberManager(roomId: number, targetUserId: number) {
+  const { data } = await http.put<RoomMember>(
+    `/rooms/${roomId}/members/${targetUserId}/manager`,
+  );
+  return data;
+}
+
+export async function unsetRoomMemberManager(roomId: number, targetUserId: number) {
+  const { data } = await http.delete<RoomMember>(
+    `/rooms/${roomId}/members/${targetUserId}/manager`,
+  );
+  return data;
+}
+
 export async function getRoomSettings(roomId: number) {
   const { data } = await http.get<RoomSettings>(`/rooms/${roomId}/settings`);
   return data;

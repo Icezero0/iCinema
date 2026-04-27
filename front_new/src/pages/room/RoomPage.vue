@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component } from "vue";
+import { computed, onMounted, ref, watch, type Component, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -13,9 +13,20 @@ import {
   getRoomMembers,
   getRoomJoinRequests,
   deleteRoom,
+  leaveRoom,
   removeRoomMember,
+  setRoomMemberManager,
+  unsetRoomMemberManager,
+  getRoomSettings,
+  patchRoom,
+  patchRoomSettings,
   type Room,
+  type RoomActiveSyncPermission,
   type RoomJoinRequest,
+  type RoomJoinAuditMode,
+  type RoomSettings,
+  type RoomSyncPolicy,
+  type RoomVisibility,
 } from "@/infra/api/rooms.api";
 import {
   approveJoinRequestById,
@@ -33,6 +44,10 @@ import type { ChatSegment } from "@/features/chat/types";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
 import { useMessagesStore } from "@/stores/messages.store";
 import { useEntitiesStore } from "@/stores/entities.store";
+import {
+  DEFAULT_LOCAL_ROOM_SYNC_STRATEGY,
+  type LocalRoomSyncStrategy,
+} from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
@@ -56,10 +71,17 @@ const membersError = ref("");
 const requestsLoading = ref(false);
 const requestsError = ref("");
 const requestsLoaded = ref(false);
+const roomSettings = ref<RoomSettings | null>(null);
+const roomSettingsLoading = ref(false);
+const roomSettingsError = ref("");
+const roomSettingsLoaded = ref(false);
+const roomSettingsSaving = ref(false);
 const roomJoinRequests = ref<RoomJoinRequest[]>([]);
 const requestActionIds = ref<number[]>([]);
 const isLeavingRoom = ref(false);
 const isDisbandingRoom = ref(false);
+const settingManagerUserIds = ref<number[]>([]);
+const removingMemberUserIds = ref<number[]>([]);
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -71,10 +93,12 @@ const currentUserRole = ref<RoomRoleState>("unknown");
 const activePanel = ref<RoomPanelKey>("chat");
 const isPlaying = ref(false);
 const mockProgress = ref(24);
-const localSyncStrategy = ref("soft-lock");
+const localSyncStrategy = ref<LocalRoomSyncStrategy>(DEFAULT_LOCAL_ROOM_SYNC_STRATEGY);
 const canManageRoomRequests = computed(() =>
   currentUserRole.value === "owner" || currentUserRole.value === "manager");
 const currentUserIsOwner = computed(() => currentUserRole.value === "owner");
+const currentUserCanRemoveMembers = computed(() =>
+  currentUserRole.value === "owner" || currentUserRole.value === "manager");
 const memberDangerActionDisabled = computed(() => currentUserRole.value === "unknown");
 
 const allPanelOptions = computed<{ key: RoomPanelKey; label: string; badge?: string; icon?: Component }[]>(() => [
@@ -98,10 +122,10 @@ const panelOptions = computed(() => {
   return allPanelOptions.value;
 });
 
-const localSyncOptions = computed(() => [
-  { value: "soft-lock", label: t("room.mock.localSyncModes.softLock") },
-  { value: "follow-host", label: t("room.mock.localSyncModes.followHost") },
-  { value: "manual-first", label: t("room.mock.localSyncModes.manualFirst") },
+const localSyncOptions = computed<Array<{ value: LocalRoomSyncStrategy; label: string }>>(() => [
+  { value: "adaptive-speed", label: t("room.settings.localSyncAdaptiveSpeed") },
+  { value: "auto-seek", label: t("room.settings.localSyncAutoSeek") },
+  { value: "manual-sync", label: t("room.settings.localSyncManual") },
 ]);
 
 const roomMessagesState = computed(() => messagesStore.getRoomState(roomId.value));
@@ -141,6 +165,7 @@ const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
       user?.username ||
       user?.email ||
       `User #${member.user_id}`,
+    email: user?.email ?? null,
     avatarUrl: resolveMediaUrl(user?.avatar_url),
     role: member.role,
     status: "idle" as const,
@@ -154,6 +179,15 @@ const layout = useRoomWorkspaceLayout({
 const mainGridStyle = computed(() => layout.mainGridStyle.value);
 const workspaceCardStyle = computed(() => layout.workspaceCardStyle.value);
 const hasOlderMessages = computed(() => roomMessagesState.value.nextBeforeId != null);
+
+type RoomSettingsSavePayload = {
+  name: string;
+  visibility: RoomVisibility;
+  joinAuditMode: RoomJoinAuditMode;
+  syncPolicy: RoomSyncPolicy;
+  activeSyncPermission: RoomActiveSyncPermission;
+  localSyncStrategy: LocalRoomSyncStrategy;
+};
 
 function togglePlayback() {
   isPlaying.value = !isPlaying.value;
@@ -192,6 +226,7 @@ async function fetchRoom() {
   try {
     room.value = await getRoomById(roomId.value);
     entitiesStore.upsertRoom(room.value);
+    localSyncStrategy.value = entitiesStore.loadRoomLocalSyncStrategy(roomId.value);
     syncCurrentUserRole();
   } catch (e: any) {
     room.value = null;
@@ -341,13 +376,12 @@ async function handleSend(segments: ChatSegment[]) {
 }
 
 async function handleLeaveRoom() {
-  const meId = auth.me?.id;
-  if (!roomId.value || !meId || isLeavingRoom.value) return;
+  if (!roomId.value || isLeavingRoom.value) return;
 
   isLeavingRoom.value = true;
 
   try {
-    await removeRoomMember(roomId.value, meId);
+    await leaveRoom(roomId.value);
     toasts.push({
       message: t("room.members.leaveSuccess"),
       tone: "success",
@@ -391,6 +425,196 @@ async function handleDisbandRoom() {
   }
 }
 
+async function fetchRoomSettings(options?: { force?: boolean }) {
+  if (!roomId.value || currentUserRole.value === "unknown") {
+    roomSettings.value = null;
+    roomSettingsError.value = "";
+    roomSettingsLoaded.value = false;
+    return;
+  }
+
+  if (roomSettingsLoading.value) return;
+  if (!options?.force && roomSettingsLoaded.value) return;
+
+  roomSettingsLoading.value = true;
+  roomSettingsError.value = "";
+
+  try {
+    roomSettings.value = await getRoomSettings(roomId.value);
+    entitiesStore.upsertRoomSettings(roomSettings.value);
+    roomSettingsLoaded.value = true;
+  } catch (e: any) {
+    roomSettingsError.value =
+      e?.response?.data?.detail ||
+      e?.message ||
+      t("room.settings.loadFailed");
+  } finally {
+    roomSettingsLoading.value = false;
+  }
+}
+
+async function handleSaveRoomSettings(payload: RoomSettingsSavePayload) {
+  if (!room.value || !roomId.value || roomSettingsSaving.value) return;
+
+  if (!payload.name) {
+    toasts.push({
+      message: t("room.settings.nameRequired"),
+      tone: "danger",
+    });
+    return;
+  }
+
+  roomSettingsSaving.value = true;
+
+  try {
+    const roomPatch: {
+      name?: string;
+      visibility?: RoomVisibility;
+      join_audit_mode?: RoomJoinAuditMode;
+    } = {};
+
+    if (canManageRoomRequests.value) {
+      if (payload.name !== room.value.name) roomPatch.name = payload.name;
+      if (payload.visibility !== room.value.visibility) roomPatch.visibility = payload.visibility;
+      if (payload.joinAuditMode !== (room.value.join_audit_mode ?? "manual_review")) {
+        roomPatch.join_audit_mode = payload.joinAuditMode;
+      }
+    }
+
+    if (Object.keys(roomPatch).length > 0) {
+      room.value = await patchRoom(roomId.value, roomPatch);
+      entitiesStore.upsertRoom(room.value);
+    }
+
+    const settingsPatch: {
+      sync_policy?: RoomSyncPolicy;
+      active_sync_permission?: RoomActiveSyncPermission;
+    } = {};
+
+    if (canManageRoomRequests.value) {
+      if (payload.syncPolicy !== (roomSettings.value?.sync_policy ?? "auto_sync")) {
+        settingsPatch.sync_policy = payload.syncPolicy;
+      }
+      if (
+        currentUserIsOwner.value &&
+        payload.activeSyncPermission !==
+          (roomSettings.value?.active_sync_permission ?? "owner_and_manager")
+      ) {
+        settingsPatch.active_sync_permission = payload.activeSyncPermission;
+      }
+    }
+
+    if (Object.keys(settingsPatch).length > 0) {
+      roomSettings.value = await patchRoomSettings(roomId.value, settingsPatch);
+      entitiesStore.upsertRoomSettings(roomSettings.value);
+    }
+
+    if (payload.localSyncStrategy !== localSyncStrategy.value) {
+      localSyncStrategy.value = payload.localSyncStrategy;
+      entitiesStore.setRoomLocalSyncStrategy(roomId.value, payload.localSyncStrategy);
+    }
+
+    toasts.push({
+      message: t("room.settings.saveSuccess"),
+      tone: "success",
+    });
+  } catch (e: any) {
+    toasts.push({
+      message:
+        e?.response?.data?.detail ||
+        e?.message ||
+        t("room.settings.saveFailed"),
+      tone: "danger",
+    });
+  } finally {
+    roomSettingsSaving.value = false;
+  }
+}
+
+function setMemberActionLoading(actionIds: Ref<number[]>, userId: number, loading: boolean) {
+  actionIds.value = loading
+    ? [...new Set([...actionIds.value, userId])]
+    : actionIds.value.filter((id) => id !== userId);
+}
+
+async function handleSetMemberManager(userId: number) {
+  if (!roomId.value || settingManagerUserIds.value.includes(userId)) return;
+
+  setMemberActionLoading(settingManagerUserIds, userId, true);
+
+  try {
+    const member = await setRoomMemberManager(roomId.value, userId);
+    entitiesStore.upsertRoomMember(member);
+    syncCurrentUserRole();
+    toasts.push({
+      message: t("room.members.setManagerSuccess"),
+      tone: "success",
+    });
+  } catch (e: any) {
+    toasts.push({
+      message:
+        e?.response?.data?.detail ||
+        e?.message ||
+        t("room.members.setManagerFailed"),
+      tone: "danger",
+    });
+  } finally {
+    setMemberActionLoading(settingManagerUserIds, userId, false);
+  }
+}
+
+async function handleUnsetMemberManager(userId: number) {
+  if (!roomId.value || settingManagerUserIds.value.includes(userId)) return;
+
+  setMemberActionLoading(settingManagerUserIds, userId, true);
+
+  try {
+    const member = await unsetRoomMemberManager(roomId.value, userId);
+    entitiesStore.upsertRoomMember(member);
+    syncCurrentUserRole();
+    toasts.push({
+      message: t("room.members.unsetManagerSuccess"),
+      tone: "success",
+    });
+  } catch (e: any) {
+    toasts.push({
+      message:
+        e?.response?.data?.detail ||
+        e?.message ||
+        t("room.members.unsetManagerFailed"),
+      tone: "danger",
+    });
+  } finally {
+    setMemberActionLoading(settingManagerUserIds, userId, false);
+  }
+}
+
+async function handleRemoveRoomMember(userId: number) {
+  if (!roomId.value || removingMemberUserIds.value.includes(userId)) return;
+
+  setMemberActionLoading(removingMemberUserIds, userId, true);
+
+  try {
+    await removeRoomMember(roomId.value, userId);
+    entitiesStore.removeRoomMember(roomId.value, userId);
+    syncCurrentUserRole();
+    toasts.push({
+      message: t("room.members.removeSuccess"),
+      tone: "success",
+    });
+  } catch (e: any) {
+    toasts.push({
+      message:
+        e?.response?.data?.detail ||
+        e?.message ||
+        t("room.members.removeFailed"),
+      tone: "danger",
+    });
+  } finally {
+    setMemberActionLoading(removingMemberUserIds, userId, false);
+  }
+}
+
 onMounted(() => {
   void fetchRoom();
   void fetchRoomMessages();
@@ -401,7 +625,13 @@ watch(roomId, () => {
   roomJoinRequests.value = [];
   requestsLoaded.value = false;
   requestsError.value = "";
+  roomSettings.value = null;
+  roomSettingsError.value = "";
+  roomSettingsLoaded.value = false;
+  roomSettingsSaving.value = false;
   requestActionIds.value = [];
+  settingManagerUserIds.value = [];
+  removingMemberUserIds.value = [];
   void fetchRoom();
   void fetchRoomMessages();
   void fetchRoomMembers();
@@ -416,6 +646,7 @@ watch(() => auth.me?.id, () => {
 });
 watch([roomId, currentUserRole], () => {
   void fetchRoomRequests();
+  void fetchRoomSettings();
 });
 watch(activePanel, (panel) => {
   if (panel === "requests") {
@@ -507,15 +738,21 @@ watch(activePanel, (panel) => {
                 :leave-room-label="t('room.mock.leaveRoom')"
                 :disband-room-label="t('room.members.disbandRoom')"
                 :is-owner="currentUserIsOwner"
+                :can-remove-members="currentUserCanRemoveMembers"
                 :action-disabled="memberDangerActionDisabled"
                 :leaving="isLeavingRoom"
                 :disbanding="isDisbandingRoom"
                 :pending-join-requests="pendingMemberInviteStates"
+                :setting-manager-user-ids="settingManagerUserIds"
+                :removing-member-user-ids="removingMemberUserIds"
                 :loading="membersLoading"
                 :loading-label="t('common.loading')"
                 :empty-label="membersError || t('room.membersEmpty')"
                 @leave-room="handleLeaveRoom"
                 @disband-room="handleDisbandRoom"
+                @set-manager="handleSetMemberManager"
+                @unset-manager="handleUnsetMemberManager"
+                @remove-member="handleRemoveRoomMember"
               />
 
               <RoomRequestsTab
@@ -532,23 +769,15 @@ watch(activePanel, (panel) => {
               <RoomSettingsTab
                 v-show="activePanel === 'settings'"
                 :room="room"
-                :room-name-label="t('room.mock.settingLabels.roomName')"
-                :visibility-label="t('room.mock.settingLabels.visibility')"
-                :sync-policy-label="t('room.mock.settingLabels.policy')"
-                :sync-policy-value="t('room.mock.syncPolicy')"
-                :sync-permission-label="t('room.mock.settingLabels.permission')"
-                :sync-permission-value="t('room.mock.syncPermission')"
-                :local-sync-title="t('room.mock.localSyncTitle')"
-                :local-sync-hint="t('room.mock.localSyncHint')"
-                :info-title="t('room.mock.settingGroups.info')"
-                :sync-title="t('room.mock.settingGroups.sync')"
-                :advanced-title="t('room.mock.settingGroups.advanced')"
-                :advanced-hint="t('room.mock.advancedHint')"
-                :public-label="t('room.fields.public')"
-                :private-label="t('room.fields.private')"
+                :room-settings="roomSettings"
+                :settings-loading="roomSettingsLoading"
+                :settings-error="roomSettingsError"
+                :settings-saving="roomSettingsSaving"
+                :can-manage-room-settings="canManageRoomRequests"
+                :is-owner="currentUserIsOwner"
                 :local-sync-strategy="localSyncStrategy"
                 :local-sync-options="localSyncOptions"
-                @update:local-sync-strategy="localSyncStrategy = $event"
+                @save="handleSaveRoomSettings"
               />
             </BaseCard>
           </aside>
