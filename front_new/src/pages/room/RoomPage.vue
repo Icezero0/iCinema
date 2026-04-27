@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch, type Component } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   ChatBubbleLeftRightIcon,
@@ -12,6 +12,8 @@ import {
   getRoomById,
   getRoomMembers,
   getRoomJoinRequests,
+  deleteRoom,
+  removeRoomMember,
   type Room,
   type RoomJoinRequest,
 } from "@/infra/api/rooms.api";
@@ -38,6 +40,7 @@ import { formatLocalDateTime } from "@/utils/datetime";
 
 const { t } = useI18n();
 const route = useRoute();
+const router = useRouter();
 const auth = useAuthStore();
 const entitiesStore = useEntitiesStore();
 const messagesStore = useMessagesStore();
@@ -55,6 +58,8 @@ const requestsError = ref("");
 const requestsLoaded = ref(false);
 const roomJoinRequests = ref<RoomJoinRequest[]>([]);
 const requestActionIds = ref<number[]>([]);
+const isLeavingRoom = ref(false);
+const isDisbandingRoom = ref(false);
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -69,6 +74,8 @@ const mockProgress = ref(24);
 const localSyncStrategy = ref("soft-lock");
 const canManageRoomRequests = computed(() =>
   currentUserRole.value === "owner" || currentUserRole.value === "manager");
+const currentUserIsOwner = computed(() => currentUserRole.value === "owner");
+const memberDangerActionDisabled = computed(() => currentUserRole.value === "unknown");
 
 const allPanelOptions = computed<{ key: RoomPanelKey; label: string; badge?: string; icon?: Component }[]>(() => [
   { key: "chat", label: t("room.mock.tabs.chat"), icon: ChatBubbleLeftRightIcon },
@@ -116,6 +123,15 @@ const roomRequestItems = computed(() => roomJoinRequests.value.map((request) => 
     time: formatLocalDateTime(request.updated_at || request.created_at),
   };
 }));
+const pendingMemberInviteStates = computed(() => roomJoinRequests.value
+  .filter((request) => request.status === "pending")
+  .map((request) => ({
+    userId:
+      request.source === "apply"
+        ? request.initiator_user_id
+        : request.target_user_id,
+    source: request.source,
+  })));
 const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
 
@@ -324,6 +340,57 @@ async function handleSend(segments: ChatSegment[]) {
   }
 }
 
+async function handleLeaveRoom() {
+  const meId = auth.me?.id;
+  if (!roomId.value || !meId || isLeavingRoom.value) return;
+
+  isLeavingRoom.value = true;
+
+  try {
+    await removeRoomMember(roomId.value, meId);
+    toasts.push({
+      message: t("room.members.leaveSuccess"),
+      tone: "success",
+    });
+    await router.push("/");
+  } catch (e: any) {
+    toasts.push({
+      message:
+        e?.response?.data?.detail ||
+        e?.message ||
+        t("room.members.leaveFailed"),
+      tone: "danger",
+    });
+  } finally {
+    isLeavingRoom.value = false;
+  }
+}
+
+async function handleDisbandRoom() {
+  if (!roomId.value || isDisbandingRoom.value) return;
+
+  isDisbandingRoom.value = true;
+
+  try {
+    await deleteRoom(roomId.value);
+    toasts.push({
+      message: t("room.members.disbandSuccess"),
+      tone: "success",
+    });
+    await router.push("/");
+  } catch (e: any) {
+    toasts.push({
+      message:
+        e?.response?.data?.detail ||
+        e?.message ||
+        t("room.members.disbandFailed"),
+      tone: "danger",
+    });
+  } finally {
+    isDisbandingRoom.value = false;
+  }
+}
+
 onMounted(() => {
   void fetchRoom();
   void fetchRoomMessages();
@@ -438,9 +505,17 @@ watch(activePanel, (panel) => {
                 :search-placeholder="t('room.mock.membersSearchPlaceholder')"
                 :invite-label="t('room.mock.invite')"
                 :leave-room-label="t('room.mock.leaveRoom')"
+                :disband-room-label="t('room.members.disbandRoom')"
+                :is-owner="currentUserIsOwner"
+                :action-disabled="memberDangerActionDisabled"
+                :leaving="isLeavingRoom"
+                :disbanding="isDisbandingRoom"
+                :pending-join-requests="pendingMemberInviteStates"
                 :loading="membersLoading"
                 :loading-label="t('common.loading')"
                 :empty-label="membersError || t('room.membersEmpty')"
+                @leave-room="handleLeaveRoom"
+                @disband-room="handleDisbandRoom"
               />
 
               <RoomRequestsTab

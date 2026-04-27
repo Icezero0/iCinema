@@ -13,9 +13,24 @@ defineProps<{
   searchPlaceholder: string;
   inviteLabel: string;
   leaveRoomLabel: string;
+  disbandRoomLabel: string;
+  isOwner?: boolean;
+  actionDisabled?: boolean;
+  leaving?: boolean;
+  disbanding?: boolean;
+  pendingJoinRequests?: Array<{
+    userId: number;
+    source: "apply" | "invite" | "member_invite";
+  }>;
   loading?: boolean;
   loadingLabel: string;
   emptyLabel: string;
+}>();
+
+const emit = defineEmits<{
+  inviteUser: [userId: number];
+  leaveRoom: [];
+  disbandRoom: [];
 }>();
 </script>
 
@@ -26,9 +41,18 @@ defineProps<{
       :search-placeholder="searchPlaceholder"
       :invite-label="inviteLabel"
       :leave-room-label="leaveRoomLabel"
+      :disband-room-label="disbandRoomLabel"
+      :is-owner="isOwner"
+      :action-disabled="actionDisabled"
+      :leaving="leaving"
+      :disbanding="disbanding"
+      :pending-join-requests="pendingJoinRequests"
       :loading="loading"
       :loading-label="loadingLabel"
       :empty-label="emptyLabel"
+      @invite-user="emit('inviteUser', $event.id)"
+      @leave-room="emit('leaveRoom')"
+      @disband-room="emit('disbandRoom')"
     />
   </div>
 </template>

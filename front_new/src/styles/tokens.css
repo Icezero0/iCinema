@@ -22,6 +22,7 @@
   --c-muted: rgba(0, 0, 0, 0.6);
   --c-border: rgba(0, 0, 0, 0.14);
   --c-danger: #b00020;
+  --c-danger-hover: #8f001a;
   --c-primary: rgb(59, 130, 246); /* 蓝，但不偏紫 */
   --c-primary-hover: rgb(37, 99, 235);
   --c-primary-text: #fff;
