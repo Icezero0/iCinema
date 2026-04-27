@@ -159,3 +159,80 @@ class RoomMembershipService:
             user_id=target_user_id,
         )
         await db.commit()
+
+    async def leave_room(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+        user: User,
+    ) -> None:
+        member = await self.find_room_member(
+            db,
+            room_id=room_id,
+            user_id=user.id,
+        )
+        if member is None:
+            raise NotFoundError("Room member not found")
+
+        try:
+            role = RoomRole(member.role)
+        except ValueError:
+            raise BadRequestError("Invalid member role")
+
+        if role == RoomRole.OWNER:
+            raise ForbiddenError("Owner cannot leave the room")
+
+        await self.repo.delete_members_by_room_and_user_id(
+            db,
+            room_id=room_id,
+            user_id=user.id,
+        )
+        await db.commit()
+
+    async def set_room_member_manager_status(
+        self,
+        db: AsyncSession,
+        *,
+        room_id: int,
+        target_user_id: int,
+        is_manager: bool,
+        current_user: User,
+    ) -> RoomMember:
+        role = await self.find_room_role(db, room_id=room_id, user_id=current_user.id)
+        if role is None:
+            raise ForbiddenError("You do not have permission to perform this action")
+
+        require_room_permission(role, RoomPermission.MANAGE_MANAGERS)
+
+        target_member = await self.find_room_member(
+            db,
+            room_id=room_id,
+            user_id=target_user_id,
+        )
+        if target_member is None:
+            raise NotFoundError("Room member not found")
+
+        try:
+            target_role = RoomRole(target_member.role)
+        except ValueError:
+            raise BadRequestError("Invalid target member role")
+
+        if target_role == RoomRole.OWNER:
+            raise ForbiddenError("Owner role cannot be changed")
+
+        next_role = RoomRole.MANAGER if is_manager else RoomRole.MEMBER
+        if target_role == next_role:
+            return target_member
+
+        updated_member = await self.repo.update_member_role(
+            db,
+            room_id=room_id,
+            user_id=target_user_id,
+            role=next_role.value,
+        )
+        if updated_member is None:
+            raise NotFoundError("Room member not found")
+
+        await db.commit()
+        return updated_member

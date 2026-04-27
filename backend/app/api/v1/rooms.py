@@ -296,6 +296,82 @@ async def invite_room_join_request(
 
 
 @router.delete(
+    "/{room_id}/members/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def leave_room(
+    room_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    manager: RealtimeManager = Depends(get_realtime_manager),
+    publisher: RealtimePublisher = Depends(get_realtime_publisher),
+    presence_service: RoomPresenceService = Depends(get_realtime_room_presence_service),
+    video_runtime_service: RoomVideoRuntimeService = Depends(get_realtime_room_video_runtime_service),
+) -> Response:
+    await membership_service.leave_room(
+        db,
+        room_id=room_id,
+        user=current_user,
+    )
+    await close_room_user_session(
+        db=db,
+        manager=manager,
+        publisher=publisher,
+        presence_service=presence_service,
+        video_runtime_service=video_runtime_service,
+        room_id=room_id,
+        user_id=current_user.id,
+        reason="left_room",
+    )
+    await publisher.publish_room_members(room_id=room_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put(
+    "/{room_id}/members/{target_user_id}/manager",
+    response_model=RoomMemberResponse,
+)
+async def set_room_member_manager(
+    room_id: int,
+    target_user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    publisher: RealtimePublisher = Depends(get_realtime_publisher),
+) -> RoomMemberResponse:
+    member = await membership_service.set_room_member_manager_status(
+        db,
+        room_id=room_id,
+        target_user_id=target_user_id,
+        is_manager=True,
+        current_user=current_user,
+    )
+    await publisher.publish_room_members(room_id=room_id)
+    return RoomMemberResponse.model_validate(member)
+
+
+@router.delete(
+    "/{room_id}/members/{target_user_id}/manager",
+    response_model=RoomMemberResponse,
+)
+async def unset_room_member_manager(
+    room_id: int,
+    target_user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    publisher: RealtimePublisher = Depends(get_realtime_publisher),
+) -> RoomMemberResponse:
+    member = await membership_service.set_room_member_manager_status(
+        db,
+        room_id=room_id,
+        target_user_id=target_user_id,
+        is_manager=False,
+        current_user=current_user,
+    )
+    await publisher.publish_room_members(room_id=room_id)
+    return RoomMemberResponse.model_validate(member)
+
+
+@router.delete(
     "/{room_id}/members/{target_user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )

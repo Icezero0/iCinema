@@ -338,6 +338,8 @@ Repository 不负责业务规则。
 - 房间管理
 - 公开房间大厅检索
 - 成员关系管理
+- 成员主动退出房间
+- 设置或解除房间管理员
 - 房间设置管理
 - 入房申请与邀请审批
 
@@ -349,6 +351,25 @@ Repository 不负责业务规则。
 - `join_request`：加入申请与邀请流
 
 房间权限通过 `RoomRole + RoomPermission` 组合实现。
+
+`membership` 子域当前覆盖：
+
+- `GET /api/v1/rooms/{room_id}/members`
+  查询房间成员列表，需要当前用户具备 `VIEW_MEMBERS`
+- `DELETE /api/v1/rooms/{room_id}/members/{target_user_id}`
+  管理型移除成员，不能移除自己；移除普通成员需要 `MANAGE_MEMBERS`，移除管理员需要 `MANAGE_MANAGERS`；房主不能被移除
+- `DELETE /api/v1/rooms/{room_id}/members/me`
+  当前成员主动退出房间，不需要管理权限；房主不能退出自己创建的房间，只能删除房间
+- `PUT /api/v1/rooms/{room_id}/members/{target_user_id}/manager`
+  将目标成员设置为管理员，需要 `MANAGE_MANAGERS`
+- `DELETE /api/v1/rooms/{room_id}/members/{target_user_id}/manager`
+  解除目标成员的管理员身份，需要 `MANAGE_MANAGERS`
+
+管理员设置接口采用“确保状态”的幂等语义：
+
+- `PUT .../manager` 表示确保目标成员角色为 `manager`
+- `DELETE .../manager` 表示确保目标成员角色为 `member`
+- 目标为 `owner` 时拒绝变更，房主身份不通过成员管理接口降级
 
 `GET /api/v1/rooms` 当前语义为“公开房间检索”，仅返回 `visibility=public` 的房间。
 
@@ -492,9 +513,10 @@ realtime 层内部主要组件：
 
 - 房间信息更新后，广播 `room_info`
 - 房间设置更新后，广播 `room_settings`
+- 成员加入、退出、被移除或角色变化后，广播 `room_members`
 - 消息创建后，广播 `message`
 - 通知状态变更后，广播 `notification`
-- 删除房间或移除成员后，通过 `rest_sync` 关闭在线会话
+- 删除房间、移除成员或成员主动退出后，通过 `rest_sync` 关闭在线会话
 
 ## 9. 数据模型概览
 
@@ -531,6 +553,7 @@ HTTP 主要用于：
 - 房间创建与查询
 - 房间设置查询与修改
 - 成员与审批管理
+- 成员主动退出与管理员身份管理
 - 消息写入与历史分页
 - 媒体资源上传与资源列表读取
 - 通知列表与已读状态管理
@@ -620,6 +643,16 @@ WebSocket 主要用于：
 - 发送消息
 
 权限判断由 service 层完成。
+
+成员管理权限约定：
+
+- 普通成员主动退出房间不需要管理权限
+- 房主不能通过退出成员关系离开自己创建的房间，只能删除房间
+- 管理型移除成员不能用于移除自己
+- 管理型移除普通成员需要 `MANAGE_MEMBERS`
+- 管理型移除管理员需要 `MANAGE_MANAGERS`
+- 设置或解除管理员需要 `MANAGE_MANAGERS`
+- 当前角色配置中只有 `owner` 具备 `MANAGE_MANAGERS`
 
 ## 12.4 主动同步权限
 

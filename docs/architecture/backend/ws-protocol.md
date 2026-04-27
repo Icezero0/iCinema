@@ -660,6 +660,7 @@
 当前可能的 `reason`：
 
 - `entered_elsewhere`
+- `left_room`
 - `removed_from_room`
 - `room_deleted`
 
