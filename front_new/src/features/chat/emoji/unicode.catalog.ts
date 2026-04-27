@@ -4,7 +4,8 @@ export type UnicodeEmojiCategory =
   | "hearts"
   | "symbols"
   | "objects"
-  | "nature";
+  | "nature"
+  | "animals";
 
 export type UnicodeEmojiDefinition = {
   id: string;
@@ -134,9 +135,14 @@ export const unicodeEmojiCatalog: UnicodeEmojiDefinition[] = [
   { id: "rose", char: "🌹", labelEn: "rose", labelZh: "玫瑰", category: "nature" },
   { id: "leaves", char: "🍃", labelEn: "leaf fluttering in wind", labelZh: "风中的树叶", category: "nature" },
   { id: "cherry-blossom", char: "🌸", labelEn: "cherry blossom", labelZh: "樱花", category: "nature" },
-  { id: "cat", char: "🐱", labelEn: "cat face", labelZh: "猫脸", category: "nature" },
-  { id: "dog", char: "🐶", labelEn: "dog face", labelZh: "狗脸", category: "nature" },
-  { id: "panda", char: "🐼", labelEn: "panda", labelZh: "熊猫", category: "nature" },
-  { id: "penguin", char: "🐧", labelEn: "penguin", labelZh: "企鹅", category: "nature" },
-  { id: "whale", char: "🐳", labelEn: "spouting whale", labelZh: "喷水鲸", category: "nature" },
+  { id: "cat-face", char: "🐱", labelEn: "cat face", labelZh: "猫脸", category: "animals" },
+  { id: "cat", char: "🐈", labelEn: "cat", labelZh: "猫", category: "animals" },
+  { id: "dog-face", char: "🐶", labelEn: "dog face", labelZh: "狗脸", category: "animals" },
+  { id: "dog", char: "🐕", labelEn: "dog", labelZh: "狗", category: "animals" },
+  { id: "pig-face", char: "🐷", labelEn: "pig face", labelZh: "猪脸", category: "animals" },
+  { id: "pig", char: "🐖", labelEn: "pig", labelZh: "猪", category: "animals" },
+  { id: "panda", char: "🐼", labelEn: "panda", labelZh: "熊猫", category: "animals" },
+  { id: "penguin", char: "🐧", labelEn: "penguin", labelZh: "企鹅", category: "animals" },
+  { id: "spouting-whale", char: "🐳", labelEn: "spouting whale", labelZh: "喷水鲸", category: "animals" },
+  { id: "whale", char: "🐋", labelEn: "whale", labelZh: "鲸鱼", category: "animals" },
 ];

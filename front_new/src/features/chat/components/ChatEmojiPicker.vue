@@ -71,6 +71,7 @@ const unicodeEmojiCategoryOrder = [
   "symbols",
   "objects",
   "nature",
+  "animals",
 ] as const;
 const unicodeEmojiSections = computed<UnicodeEmojiSection[]>(() => {
   const groups = new Map<typeof unicodeEmojiCategoryOrder[number], UnicodeEmojiDefinition[]>();

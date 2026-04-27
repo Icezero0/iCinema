@@ -34,6 +34,7 @@ export default {
           symbols: "符号",
           objects: "物品",
           nature: "自然",
+          animals: "动物",
         },
       },
       emptyUnicodeEmoji: "这里后续接入更多 Unicode Emoji。",

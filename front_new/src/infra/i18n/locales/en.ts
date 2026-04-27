@@ -33,6 +33,7 @@ export default {
           symbols: "Symbols",
           objects: "Objects",
           nature: "Nature",
+          animals: "Animals",
         },
       },
       emptyUnicodeEmoji: "More Unicode emoji will be added here later.",
