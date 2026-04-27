@@ -165,6 +165,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  stickersStore.setLibraryEditing(false);
   removeViewportListener?.();
 });
 
@@ -214,10 +215,12 @@ function triggerStickerUpload() {
 function enterStickerEditMode() {
   stickerEditDraftIds.value = stickersStore.libraryIds.filter((id) => stickersStore.getSticker(id));
   stickerEditMode.value = true;
+  stickersStore.setLibraryEditing(true);
 }
 
 function exitStickerEditMode() {
   stickerEditMode.value = false;
+  stickersStore.setLibraryEditing(false);
   stickerEditDraftIds.value = [];
   stickerCancelConfirmOpen.value = false;
 }

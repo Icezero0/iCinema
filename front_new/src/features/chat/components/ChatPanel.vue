@@ -17,6 +17,7 @@ const props = defineProps<{
   error?: string | null;
   loadingLabel?: string;
   emptyLabel?: string;
+  sendMessage?: (segments: ChatSegment[]) => Promise<void> | void;
 }>();
 const emit = defineEmits<{
   send: [segments: ChatSegment[]];
@@ -35,9 +36,15 @@ const timelineScroll = useChatTimelineScroll({
   onLoadOlder: () => emit("loadOlder"),
 });
 
-function handleSend(segments: ChatSegment[]) {
+async function handleSend(segments: ChatSegment[]) {
   if (segments.length === 0) return;
   timelineScroll.markPendingSentMessage(props.messages.length + 1);
+
+  if (props.sendMessage) {
+    await props.sendMessage(segments);
+    return;
+  }
+
   emit("send", segments);
 }
 
@@ -96,7 +103,12 @@ const displayMessages = computed(() => props.messages.map((message, index, list)
       </div>
     </div>
 
-    <ChatComposer :send-label="sendLabel" @send="handleSend" />
+    <ChatComposer
+      :send-label="sendLabel"
+      :sending="sending"
+      :send-message="handleSend"
+      @send="handleSend"
+    />
   </div>
 </template>
 

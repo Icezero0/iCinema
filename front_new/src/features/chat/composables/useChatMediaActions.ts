@@ -140,6 +140,15 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
   }
 
   async function collectMedia() {
+    if (stickersStore.isEditingLibrary) {
+      toasts.push({
+        message: t("chat.mediaMenu.collectBlockedDuringStickerEdit"),
+        tone: "warning",
+      });
+      closeContextMenu();
+      return;
+    }
+
     if ((kind.value !== "sticker" && kind.value !== "image") || !assetId.value) {
       toasts.push({
         message: t("chat.mediaMenu.collectImageUnsupported"),

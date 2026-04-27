@@ -13,6 +13,7 @@ defineProps<{
   error?: string | null;
   loadingLabel: string;
   emptyLabel: string;
+  sendMessage?: (segments: ChatSegment[]) => Promise<void> | void;
 }>();
 
 const emit = defineEmits<{
@@ -35,6 +36,7 @@ const emit = defineEmits<{
       :error="error"
       :loading-label="loadingLabel"
       :empty-label="emptyLabel"
+      :send-message="sendMessage"
       self-author="Icezero"
       @send="emit('send', $event)"
       @load-older="emit('loadOlder')"

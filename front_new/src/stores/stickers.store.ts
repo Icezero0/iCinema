@@ -28,6 +28,7 @@ type State = PersistedState & {
   isLoading: boolean;
   isUploading: boolean;
   isSyncingLibrary: boolean;
+  isEditingLibrary: boolean;
   error: string | null;
 };
 
@@ -109,6 +110,7 @@ export const useStickersStore = defineStore("stickers", {
       isLoading: false,
       isUploading: false,
       isSyncingLibrary: false,
+      isEditingLibrary: false,
       error: null,
     };
   },
@@ -175,6 +177,10 @@ export const useStickersStore = defineStore("stickers", {
       if (!this.stickersById[stickerId]) return;
       this.recentStickerIds = withRecentStickerId(this.recentStickerIds, stickerId);
       this.persist();
+    },
+
+    setLibraryEditing(isEditing: boolean) {
+      this.isEditingLibrary = isEditing;
     },
 
     async refreshLibrary(params?: {
@@ -306,6 +312,7 @@ export const useStickersStore = defineStore("stickers", {
       this.isLoading = false;
       this.isUploading = false;
       this.isSyncingLibrary = false;
+      this.isEditingLibrary = false;
       this.error = null;
       this.persist();
     },

@@ -15,6 +15,8 @@ import ChatRichEditor from "./ChatRichEditor.vue";
 
 const props = defineProps<{
   sendLabel?: string;
+  sending?: boolean;
+  sendMessage?: (segments: ChatSegment[]) => Promise<void> | void;
 }>();
 
 const emit = defineEmits<{
@@ -26,6 +28,7 @@ const { t } = useI18n();
 const rootRef = ref<HTMLElement | null>(null);
 const emojiPanelOpen = ref(false);
 const canSend = ref(false);
+const sendPending = ref(false);
 const emojiPanelStyle = ref<Record<string, string>>({
   left: "0px",
   top: "0px",
@@ -124,15 +127,28 @@ function onDocumentKeyDown(event: KeyboardEvent) {
   emojiPanelOpen.value = false;
 }
 
-function sendMockMessage() {
+async function sendMessage() {
   if (!editorRef.value || !canSend.value) return;
+  if (props.sending || sendPending.value) return;
 
   const segments = editorRef.value.collectSegments();
   if (segments.length === 0) return;
 
-  emit("send", segments);
-  editorRef.value.clearAndFocus();
-  canSend.value = false;
+  sendPending.value = true;
+  try {
+    if (props.sendMessage) {
+      await props.sendMessage(segments);
+    } else {
+      emit("send", segments);
+    }
+
+    editorRef.value.clearAndFocus();
+    canSend.value = false;
+  } catch {
+    // Keep the draft in place so the user can retry or edit it.
+  } finally {
+    sendPending.value = false;
+  }
 }
 
 onMounted(() => {
@@ -189,8 +205,8 @@ onBeforeUnmount(() => {
       <BaseIconButton
         class="sendButton"
         :aria-label="props.sendLabel || 'Send'"
-        :disabled="!canSend"
-        @click="sendMockMessage"
+        :disabled="!canSend || props.sending || sendPending"
+        @click="sendMessage"
       >
         <AppIcon :icon="PaperAirplaneIcon" :size="16" />
       </BaseIconButton>
@@ -199,7 +215,7 @@ onBeforeUnmount(() => {
     <ChatRichEditor
       ref="editorRef"
       @can-send-change="handleCanSendChange"
-      @submit-request="sendMockMessage"
+      @submit-request="sendMessage"
     />
   </div>
 </template>

@@ -32,6 +32,7 @@ import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorks
 import { useMessagesStore } from "@/stores/messages.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
 import { formatLocalDateTime } from "@/utils/datetime";
 
@@ -40,6 +41,7 @@ const route = useRoute();
 const auth = useAuthStore();
 const entitiesStore = useEntitiesStore();
 const messagesStore = useMessagesStore();
+const toasts = useToastsStore();
 
 const room = ref<Room | null>(null);
 const isLoading = ref(false);
@@ -302,8 +304,13 @@ async function handleSend(segments: ChatSegment[]) {
 
   try {
     await messagesStore.sendSegments(roomId.value, segments);
-  } catch {
+  } catch (error) {
     // messages.store already keeps the error state for the panel
+    toasts.push({
+      message: t("room.chatSendFailed"),
+      tone: "danger",
+    });
+    throw error;
   }
 }
 
@@ -410,6 +417,7 @@ watch(activePanel, (panel) => {
                 :error="roomMessagesState.error"
                 :loading-label="t('common.loading')"
                 :empty-label="t('room.chatEmpty')"
+                :send-message="handleSend"
                 @send="handleSend"
                 @load-older="loadOlderRoomMessages"
               />
