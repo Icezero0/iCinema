@@ -5,10 +5,8 @@ import { useStickersStore } from "@/stores/stickers.store";
 import { useToastsStore } from "@/stores/toasts.store";
 
 type ChatMediaKind = "emoji" | "image" | "sticker";
-type ChatMediaContext = "editor" | "message";
 
 type UseChatMediaActionsOptions = {
-  context: Ref<ChatMediaContext>;
   kind: Ref<ChatMediaKind>;
   src: Ref<string | undefined>;
   alt: Ref<string>;
@@ -19,7 +17,6 @@ type UseChatMediaActionsOptions = {
 
 export function useChatMediaActions(options: UseChatMediaActionsOptions) {
   const {
-    context,
     kind,
     src,
     alt,
@@ -35,7 +32,6 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
 
   function openMediaViewer() {
     if (
-      context.value !== "message" ||
       !src.value ||
       (kind.value !== "image" && kind.value !== "sticker")
     ) {

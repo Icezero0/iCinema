@@ -152,7 +152,6 @@ const {
   collectMedia,
   viewMedia,
 } = useChatMediaActions({
-  context: toRef(props, "context"),
   kind: toRef(props, "kind"),
   src: toRef(props, "src"),
   alt: toRef(props, "alt"),
