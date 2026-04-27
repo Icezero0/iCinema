@@ -17,16 +17,8 @@ import {
   removeRoomMember,
   setRoomMemberManager,
   unsetRoomMemberManager,
-  getRoomSettings,
-  patchRoom,
-  patchRoomSettings,
   type Room,
-  type RoomActiveSyncPermission,
   type RoomJoinRequest,
-  type RoomJoinAuditMode,
-  type RoomSettings,
-  type RoomSyncPolicy,
-  type RoomVisibility,
 } from "@/infra/api/rooms.api";
 import {
   approveJoinRequestById,
@@ -42,12 +34,9 @@ import RoomSettingsTab from "@/features/room/components/workspace/RoomSettingsTa
 import type { RoomPanelKey, RoomRole } from "@/features/room/types";
 import type { ChatSegment } from "@/features/chat/types";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
+import { useRoomSettingsState } from "@/features/room/composables/useRoomSettingsState";
 import { useMessagesStore } from "@/stores/messages.store";
 import { useEntitiesStore } from "@/stores/entities.store";
-import {
-  DEFAULT_LOCAL_ROOM_SYNC_STRATEGY,
-  type LocalRoomSyncStrategy,
-} from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
@@ -71,11 +60,6 @@ const membersError = ref("");
 const requestsLoading = ref(false);
 const requestsError = ref("");
 const requestsLoaded = ref(false);
-const roomSettings = ref<RoomSettings | null>(null);
-const roomSettingsLoading = ref(false);
-const roomSettingsError = ref("");
-const roomSettingsLoaded = ref(false);
-const roomSettingsSaving = ref(false);
 const roomJoinRequests = ref<RoomJoinRequest[]>([]);
 const requestActionIds = ref<number[]>([]);
 const isLeavingRoom = ref(false);
@@ -93,7 +77,6 @@ const currentUserRole = ref<RoomRoleState>("unknown");
 const activePanel = ref<RoomPanelKey>("chat");
 const isPlaying = ref(false);
 const mockProgress = ref(24);
-const localSyncStrategy = ref<LocalRoomSyncStrategy>(DEFAULT_LOCAL_ROOM_SYNC_STRATEGY);
 const canManageRoomRequests = computed(() =>
   currentUserRole.value === "owner" || currentUserRole.value === "manager");
 const currentUserIsOwner = computed(() => currentUserRole.value === "owner");
@@ -121,12 +104,6 @@ const panelOptions = computed(() => {
 
   return allPanelOptions.value;
 });
-
-const localSyncOptions = computed<Array<{ value: LocalRoomSyncStrategy; label: string }>>(() => [
-  { value: "adaptive-speed", label: t("room.settings.localSyncAdaptiveSpeed") },
-  { value: "auto-seek", label: t("room.settings.localSyncAutoSeek") },
-  { value: "manual-sync", label: t("room.settings.localSyncManual") },
-]);
 
 const roomMessagesState = computed(() => messagesStore.getRoomState(roomId.value));
 const roomChatMessages = computed(() => messagesStore.getRoomChatMessages(roomId.value));
@@ -179,15 +156,24 @@ const layout = useRoomWorkspaceLayout({
 const mainGridStyle = computed(() => layout.mainGridStyle.value);
 const workspaceCardStyle = computed(() => layout.workspaceCardStyle.value);
 const hasOlderMessages = computed(() => roomMessagesState.value.nextBeforeId != null);
-
-type RoomSettingsSavePayload = {
-  name: string;
-  visibility: RoomVisibility;
-  joinAuditMode: RoomJoinAuditMode;
-  syncPolicy: RoomSyncPolicy;
-  activeSyncPermission: RoomActiveSyncPermission;
-  localSyncStrategy: LocalRoomSyncStrategy;
-};
+const {
+  roomSettings,
+  roomSettingsLoading,
+  roomSettingsError,
+  roomSettingsSaving,
+  localSyncStrategy,
+  localSyncOptions,
+  loadLocalSyncStrategy,
+  resetRoomSettingsState,
+  fetchRoomSettings,
+  handleSaveRoomSettings,
+} = useRoomSettingsState({
+  roomId,
+  room,
+  currentUserRole,
+  canManageRoomSettings: canManageRoomRequests,
+  isOwner: currentUserIsOwner,
+});
 
 function togglePlayback() {
   isPlaying.value = !isPlaying.value;
@@ -226,7 +212,7 @@ async function fetchRoom() {
   try {
     room.value = await getRoomById(roomId.value);
     entitiesStore.upsertRoom(room.value);
-    localSyncStrategy.value = entitiesStore.loadRoomLocalSyncStrategy(roomId.value);
+    loadLocalSyncStrategy();
     syncCurrentUserRole();
   } catch (e: any) {
     room.value = null;
@@ -425,112 +411,6 @@ async function handleDisbandRoom() {
   }
 }
 
-async function fetchRoomSettings(options?: { force?: boolean }) {
-  if (!roomId.value || currentUserRole.value === "unknown") {
-    roomSettings.value = null;
-    roomSettingsError.value = "";
-    roomSettingsLoaded.value = false;
-    return;
-  }
-
-  if (roomSettingsLoading.value) return;
-  if (!options?.force && roomSettingsLoaded.value) return;
-
-  roomSettingsLoading.value = true;
-  roomSettingsError.value = "";
-
-  try {
-    roomSettings.value = await getRoomSettings(roomId.value);
-    entitiesStore.upsertRoomSettings(roomSettings.value);
-    roomSettingsLoaded.value = true;
-  } catch (e: any) {
-    roomSettingsError.value =
-      e?.response?.data?.detail ||
-      e?.message ||
-      t("room.settings.loadFailed");
-  } finally {
-    roomSettingsLoading.value = false;
-  }
-}
-
-async function handleSaveRoomSettings(payload: RoomSettingsSavePayload) {
-  if (!room.value || !roomId.value || roomSettingsSaving.value) return;
-
-  if (!payload.name) {
-    toasts.push({
-      message: t("room.settings.nameRequired"),
-      tone: "danger",
-    });
-    return;
-  }
-
-  roomSettingsSaving.value = true;
-
-  try {
-    const roomPatch: {
-      name?: string;
-      visibility?: RoomVisibility;
-      join_audit_mode?: RoomJoinAuditMode;
-    } = {};
-
-    if (canManageRoomRequests.value) {
-      if (payload.name !== room.value.name) roomPatch.name = payload.name;
-      if (payload.visibility !== room.value.visibility) roomPatch.visibility = payload.visibility;
-      if (payload.joinAuditMode !== (room.value.join_audit_mode ?? "manual_review")) {
-        roomPatch.join_audit_mode = payload.joinAuditMode;
-      }
-    }
-
-    if (Object.keys(roomPatch).length > 0) {
-      room.value = await patchRoom(roomId.value, roomPatch);
-      entitiesStore.upsertRoom(room.value);
-    }
-
-    const settingsPatch: {
-      sync_policy?: RoomSyncPolicy;
-      active_sync_permission?: RoomActiveSyncPermission;
-    } = {};
-
-    if (canManageRoomRequests.value) {
-      if (payload.syncPolicy !== (roomSettings.value?.sync_policy ?? "auto_sync")) {
-        settingsPatch.sync_policy = payload.syncPolicy;
-      }
-      if (
-        currentUserIsOwner.value &&
-        payload.activeSyncPermission !==
-          (roomSettings.value?.active_sync_permission ?? "owner_and_manager")
-      ) {
-        settingsPatch.active_sync_permission = payload.activeSyncPermission;
-      }
-    }
-
-    if (Object.keys(settingsPatch).length > 0) {
-      roomSettings.value = await patchRoomSettings(roomId.value, settingsPatch);
-      entitiesStore.upsertRoomSettings(roomSettings.value);
-    }
-
-    if (payload.localSyncStrategy !== localSyncStrategy.value) {
-      localSyncStrategy.value = payload.localSyncStrategy;
-      entitiesStore.setRoomLocalSyncStrategy(roomId.value, payload.localSyncStrategy);
-    }
-
-    toasts.push({
-      message: t("room.settings.saveSuccess"),
-      tone: "success",
-    });
-  } catch (e: any) {
-    toasts.push({
-      message:
-        e?.response?.data?.detail ||
-        e?.message ||
-        t("room.settings.saveFailed"),
-      tone: "danger",
-    });
-  } finally {
-    roomSettingsSaving.value = false;
-  }
-}
-
 function setMemberActionLoading(actionIds: Ref<number[]>, userId: number, loading: boolean) {
   actionIds.value = loading
     ? [...new Set([...actionIds.value, userId])]
@@ -625,10 +505,7 @@ watch(roomId, () => {
   roomJoinRequests.value = [];
   requestsLoaded.value = false;
   requestsError.value = "";
-  roomSettings.value = null;
-  roomSettingsError.value = "";
-  roomSettingsLoaded.value = false;
-  roomSettingsSaving.value = false;
+  resetRoomSettingsState();
   requestActionIds.value = [];
   settingManagerUserIds.value = [];
   removingMemberUserIds.value = [];
