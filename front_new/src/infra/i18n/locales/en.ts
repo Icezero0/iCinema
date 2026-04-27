@@ -340,6 +340,20 @@ export default {
       localSyncAutoSeek: "Auto seek",
       localSyncManual: "Manual sync",
     },
+    sourcePanel: {
+      typeLabel: "Source type",
+      externalUrl: "External URL",
+      localFile: "Local file",
+      externalUrlPlaceholder: "Enter video URL",
+      externalUrlRequired: "Enter a video URL",
+      externalUrlInvalid: "Enter a valid URL",
+      externalUrlInvalidProtocol: "Only http and https links are supported",
+      externalUrlUnsupported: "Enter a video resource URL, such as mp4, webm, or m3u8",
+      chooseFile: "Choose file",
+      noFileSelected: "No file selected",
+      apply: "Apply",
+      applying: "Applying…",
+    },
     mock: {
       tabs: {
         chat: "Chat",

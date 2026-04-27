@@ -340,6 +340,20 @@ export default {
       localSyncAutoSeek: "自动跳转",
       localSyncManual: "手动同步",
     },
+    sourcePanel: {
+      typeLabel: "播放源类型",
+      externalUrl: "外链",
+      localFile: "本地文件",
+      externalUrlPlaceholder: "输入视频 URL",
+      externalUrlRequired: "请输入视频 URL",
+      externalUrlInvalid: "请输入有效的 URL",
+      externalUrlInvalidProtocol: "仅支持 http 或 https 链接",
+      externalUrlUnsupported: "请输入视频资源链接，支持 mp4、webm、m3u8 等格式",
+      chooseFile: "选择文件",
+      noFileSelected: "未选择文件",
+      apply: "应用",
+      applying: "应用中…",
+    },
     mock: {
       tabs: {
         chat: "聊天",

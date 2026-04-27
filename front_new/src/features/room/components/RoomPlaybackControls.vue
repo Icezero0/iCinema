@@ -8,6 +8,8 @@ import {
 } from "@heroicons/vue/24/outline";
 import { PauseIcon, PlayIcon } from "@heroicons/vue/24/solid";
 import AppIcon from "@/ui/base/AppIcon.vue";
+import RoomSourcePanel from "@/features/room/components/RoomSourcePanel.vue";
+import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 
 defineProps<{
   isPlaying: boolean;
@@ -28,6 +30,9 @@ const emit = defineEmits<{
 
 const rootRef = ref<HTMLElement | null>(null);
 const sourceOpen = ref(false);
+const sourceType = ref<RoomVideoSourceType>("external_url");
+const sourceExternalUrl = ref("");
+const sourceLocalFileName = ref("");
 const volumeOpen = ref(false);
 const volumeValue = ref(68);
 const syncAnimating = ref(false);
@@ -35,6 +40,14 @@ const syncAnimating = ref(false);
 function onProgressInput(event: Event) {
   const target = event.target as HTMLInputElement;
   emit("update:progress", Number(target.value));
+}
+
+function handleLocalFileSelected(file: File | null) {
+  sourceLocalFileName.value = file?.name ?? "";
+}
+
+function handleApplySourceDraft() {
+  sourceOpen.value = false;
 }
 
 function toggleSourcePanel() {
@@ -108,8 +121,16 @@ onBeforeUnmount(() => {
 
         <Transition name="floating-fade">
           <div v-if="sourceOpen" class="sourcePanel">
-            <div class="sourcePanelTitle">{{ sourcePanelTitle }}</div>
-            <div class="sourcePanelBody" />
+            <RoomSourcePanel
+              :title="sourcePanelTitle"
+              :source-type="sourceType"
+              :external-url="sourceExternalUrl"
+              :local-file-name="sourceLocalFileName"
+              @update:source-type="sourceType = $event"
+              @update:external-url="sourceExternalUrl = $event"
+              @select-local-file="handleLocalFileSelected"
+              @apply="handleApplySourceDraft"
+            />
           </div>
         </Transition>
       </div>
@@ -288,7 +309,7 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   bottom: calc(100% + 12px);
-  width: 220px;
+  width: 340px;
   border: 1px solid var(--c-border);
   border-radius: 16px;
   background:
@@ -300,25 +321,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 18px 40px rgb(0 0 0 / 0.12);
   padding: 12px;
   z-index: 4;
-}
-
-.sourcePanelTitle {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--c-text-muted);
-}
-
-.sourcePanelBody {
-  margin-top: 10px;
-  height: 104px;
-  border-radius: 12px;
-  border: 1px dashed color-mix(in srgb, var(--c-border) 88%, white);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--c-surface) 82%, white),
-      color-mix(in srgb, var(--c-surface) 72%, var(--c-bg))
-    );
 }
 
 .volumeTrigger {
@@ -487,7 +489,7 @@ onBeforeUnmount(() => {
   }
 
   .sourcePanel {
-    width: min(220px, calc(100vw - 64px));
+    width: min(340px, calc(100vw - 64px));
   }
 
   .iconControlBtn {
