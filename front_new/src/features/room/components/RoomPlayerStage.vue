@@ -78,11 +78,12 @@ const player = useRoomVideoPlayer({
 
 const videoRef = player.videoRef;
 const showEmptyState = computed(() => !player.hasSource.value);
-const showWaitingState = computed(() => player.hasSource.value && player.isWaiting.value);
+const showWaitingState = computed(() =>
+  player.hasSource.value && player.playerStatus.value === "stalling");
 const showPausedState = computed(() =>
   player.hasSource.value &&
   player.hasLoadedMetadata.value &&
-  !player.isWaiting.value &&
+  player.playerStatus.value === "ready" &&
   !player.isPlaying.value &&
   !player.playerError.value);
 
@@ -181,7 +182,7 @@ defineExpose({
   >
     <div class="playerSurface">
       <video
-        v-show="player.hasSource.value && !player.playerError.value"
+        v-show="player.hasSource.value && player.playerStatus.value !== 'error'"
         :ref="setVideoRef"
         class="playerVideo"
         playsinline
@@ -195,7 +196,7 @@ defineExpose({
         @stalled="player.handleWaiting"
         @canplay="player.handleCanPlay"
         @playing="player.handleCanPlay"
-        @progress="player.handleCanPlay"
+        @progress="player.handleProgress"
         @seeking="player.handleSeeking"
         @seeked="player.handleSeeked"
         @ended="player.handleEnded"
@@ -211,7 +212,7 @@ defineExpose({
           <div class="emptyHint">{{ hint }}</div>
         </div>
       </div>
-      <div v-else-if="player.playerError.value" class="playerOverlay playerOverlayError">
+      <div v-else-if="player.playerStatus.value === 'error'" class="playerOverlay playerOverlayError">
         <div class="overlayIcon">
           <AppIcon :icon="ExclamationTriangleIcon" :size="30" />
         </div>

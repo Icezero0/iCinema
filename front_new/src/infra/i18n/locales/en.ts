@@ -316,6 +316,8 @@ export default {
       alreadyInRoom: "In room",
       applyPending: "Applying",
       invitePending: "Invited",
+      inviteSuccess: "Invitation sent.",
+      inviteFailed: "Failed to send invitation.",
       inviteSearchEmpty: "No inviteable users found.",
       inviteSearchFailed: "Failed to search users.",
       leaveConfirmTitle: "Leave this room",

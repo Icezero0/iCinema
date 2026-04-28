@@ -54,10 +54,7 @@ const progressValue = computed(() =>
   Math.min(100, Math.max(0, props.progress)));
 const bufferedValue = computed(() =>
   Math.max(progressValue.value, Math.min(100, Math.max(0, props.bufferedProgress))));
-const shouldShowBufferedSegments = computed(() => props.sourceType === "external_url");
 const bufferedSegments = computed(() => {
-  if (!shouldShowBufferedSegments.value) return [];
-
   if (props.bufferedRanges.length > 0) {
     return props.bufferedRanges
       .map((range) => {

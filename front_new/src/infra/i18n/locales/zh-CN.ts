@@ -316,6 +316,8 @@ export default {
       alreadyInRoom: "已在房间",
       applyPending: "申请中",
       invitePending: "邀请中",
+      inviteSuccess: "已发送邀请。",
+      inviteFailed: "发送邀请失败。",
       inviteSearchEmpty: "没有找到可邀请的用户。",
       inviteSearchFailed: "检索用户失败。",
       leaveConfirmTitle: "退出房间",
