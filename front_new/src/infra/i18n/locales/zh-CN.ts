@@ -288,6 +288,14 @@ export default {
       applyNote: "申请加入当前房间",
       inviteNote: "被邀请加入当前房间",
     },
+    realtime: {
+      sessionClosed: {
+        entered_elsewhere: "当前房间实时会话已在其他页面打开。",
+        left_room: "你已离开当前房间实时会话。",
+        removed_from_room: "你已被移出当前房间。",
+        room_deleted: "当前房间已被解散。",
+      },
+    },
     members: {
       searchPlaceholder: "搜索成员",
       invite: "邀请",

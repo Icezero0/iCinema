@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import RoomMembersPanel from "@/features/room/components/RoomMembersPanel.vue";
-import type { RoomRole } from "@/features/room/types";
+import type { MemberStatus, RoomRole } from "@/features/room/types";
 
 defineProps<{
   members: Array<{
@@ -9,7 +9,7 @@ defineProps<{
     email?: string | null;
     avatarUrl?: string | null;
     role: RoomRole;
-    status: "idle";
+    status: MemberStatus | "idle";
   }>;
   searchPlaceholder: string;
   inviteLabel: string;

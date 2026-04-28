@@ -288,6 +288,14 @@ export default {
       applyNote: "Requested to join this room",
       inviteNote: "Invited into this room",
     },
+    realtime: {
+      sessionClosed: {
+        entered_elsewhere: "This room realtime session was opened elsewhere.",
+        left_room: "You left this room realtime session.",
+        removed_from_room: "You were removed from this room.",
+        room_deleted: "This room has been disbanded.",
+      },
+    },
     members: {
       searchPlaceholder: "Search members",
       invite: "Invite",

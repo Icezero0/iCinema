@@ -32,6 +32,8 @@ import {
 } from "@/features/room/composables/useRoomPlaybackState";
 import { useRoomJoinRequests } from "@/features/room/composables/useRoomJoinRequests";
 import { useRoomMemberActions } from "@/features/room/composables/useRoomMemberActions";
+import { useRoomRealtimeSession } from "@/features/room/composables/useRoomRealtimeSession";
+import type { RoomRealtimeSessionClosed } from "@/infra/realtime/roomRealtime";
 import { useMessagesStore } from "@/stores/messages.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -162,21 +164,6 @@ const {
   optimisticInviteUserIds: invitingMemberUserIds,
   t,
 });
-const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
-  const user = entitiesStore.getUser(member.user_id);
-
-  return {
-    id: member.user_id,
-    name:
-      user?.username ||
-      user?.email ||
-      `User #${member.user_id}`,
-    email: user?.email ?? null,
-    avatarUrl: resolveMediaUrl(user?.avatar_url),
-    role: member.role,
-    status: "idle" as const,
-  };
-}));
 const layout = useRoomWorkspaceLayout({
   activePanel,
   roomId: computed(() => room.value?.id),
@@ -210,6 +197,34 @@ const {
   canManageRoomSettings: canManageRoomRequests,
   isOwner: currentUserIsOwner,
 });
+const realtime = useRoomRealtimeSession({
+  roomId,
+  refreshRoom: fetchRoom,
+  refreshRoomMembers: fetchRoomMembers,
+  refreshRoomRequests: () => fetchRoomRequests({ force: true }),
+  refreshRoomSettings: fetchRoomSettings,
+  onSessionClosed: handleRealtimeSessionClosed,
+});
+const presentUserIds = computed(() => new Set(realtime.presentUserIds.value));
+const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
+  const user = entitiesStore.getUser(member.user_id);
+  const memberStatus =
+    presentUserIds.value.size === 0 || presentUserIds.value.has(member.user_id)
+      ? "idle"
+      : "offline";
+
+  return {
+    id: member.user_id,
+    name:
+      user?.username ||
+      user?.email ||
+      `User #${member.user_id}`,
+    email: user?.email ?? null,
+    avatarUrl: resolveMediaUrl(user?.avatar_url),
+    role: member.role,
+    status: memberStatus,
+  };
+}));
 const syncPolicyStatusLabel = computed(() => {
   if (roomSettingsError.value && !roomSettings.value) {
     return t("room.playback.syncPolicyUnavailable");
@@ -378,6 +393,17 @@ async function handleSend(segments: ChatSegment[]) {
       tone: "danger",
     });
     throw error;
+  }
+}
+
+function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
+  toasts.push({
+    message: t(`room.realtime.sessionClosed.${payload.reason}`),
+    tone: "warning",
+  });
+
+  if (payload.reason === "removed_from_room" || payload.reason === "room_deleted") {
+    void router.push("/");
   }
 }
 
