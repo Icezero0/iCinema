@@ -64,7 +64,8 @@ const membersLoading = ref(false);
 const membersError = ref("");
 const mainGridRef = ref<HTMLElement | null>(null);
 const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
-let pendingRealtimeSeekTimer = 0;
+let lastReportedPlayerStatus: "idle" | "ready" | "stalling" | "error" | null = null;
+const localPlayerStatus = ref<"idle" | "ready" | "stalling" | "error">("idle");
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -218,13 +219,18 @@ const realtime = useRoomRealtimeSession({
   onSessionClosed: handleRealtimeSessionClosed,
 });
 const presentUserIds = computed(() => new Set(realtime.presentUserIds.value));
-const realtimePlayerStatusByUserId = computed(() =>
-  new Map(realtime.userPlayerStates.value.map((state) => [state.user_id, state.status])));
+const displayPlayerStatusByUserId = computed(() => {
+  const statuses = new Map(realtime.userPlayerStates.value.map((state) => [state.user_id, state.status]));
+  if (auth.me?.id && realtime.isRealtimeActive.value && presentUserIds.value.has(auth.me.id)) {
+    statuses.set(auth.me.id, localPlayerStatus.value);
+  }
+  return statuses;
+});
 const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
   const memberStatus =
     realtime.hasPresenceSnapshot.value && presentUserIds.value.has(member.user_id)
-      ? realtimePlayerStatusByUserId.value.get(member.user_id) ?? "idle"
+      ? displayPlayerStatusByUserId.value.get(member.user_id) ?? "idle"
       : "offline";
 
   return {
@@ -446,7 +452,7 @@ async function handleApplyPlaybackSource(payload: {
     if ("room_video_source" in response) {
       applyRealtimeVideoSource(response.room_video_source ?? null);
     }
-    await applyRealtimePlaybackState(response.playback ?? null);
+    await applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
   } catch {
     showRealtimePlaybackError();
   }
@@ -479,23 +485,19 @@ function handlePlaybackProgressChange(value: number) {
 
   const normalizedValue = Math.min(100, Math.max(0, value));
   const positionSeconds = playbackDuration.value * (normalizedValue / 100);
-  if (pendingRealtimeSeekTimer) {
-    window.clearTimeout(pendingRealtimeSeekTimer);
-  }
-  pendingRealtimeSeekTimer = window.setTimeout(() => {
-    pendingRealtimeSeekTimer = 0;
-    void sendRoomRealtimePlaybackSeek({
-      position_seconds: positionSeconds,
-      anchor_ts_ms: Date.now(),
-    }).then((response) => {
-      void applyRealtimePlaybackState(response.playback ?? null);
-    }).catch(showRealtimePlaybackError);
-  }, 120);
+  void sendRoomRealtimePlaybackSeek({
+    position_seconds: positionSeconds,
+    anchor_ts_ms: Date.now(),
+  }).then((response) => {
+    void applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
+  }).catch(showRealtimePlaybackError);
 }
 
-function handlePlayerStatusChange(status: "idle" | "ready" | "stalling" | "error") {
+function reportDisplayedPlayerStatus(status: "idle" | "ready" | "stalling" | "error") {
   if (!realtime.isRealtimeActive.value) return;
+  if (status === lastReportedPlayerStatus) return;
 
+  lastReportedPlayerStatus = status;
   void sendRoomRealtimeUserPlayerStatus({
     status,
     reported_at_ms: Date.now(),
@@ -503,6 +505,11 @@ function handlePlayerStatusChange(status: "idle" | "ready" | "stalling" | "error
   }).catch(() => {
     // Status reporting is opportunistic; playback commands surface their own errors.
   });
+}
+
+function handlePlayerStatusChange(status: "idle" | "ready" | "stalling" | "error") {
+  localPlayerStatus.value = status;
+  reportDisplayedPlayerStatus(status);
 }
 
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
@@ -525,13 +532,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", syncTheaterFullscreenState);
-  if (pendingRealtimeSeekTimer) {
-    window.clearTimeout(pendingRealtimeSeekTimer);
-    pendingRealtimeSeekTimer = 0;
-  }
 });
 watch(roomId, () => {
   currentUserRole.value = "unknown";
+  localPlayerStatus.value = "idle";
+  lastReportedPlayerStatus = null;
   resetRoomRequestsState();
   resetRoomSettingsState();
   resetMemberActionState();
@@ -567,9 +572,11 @@ watch(
   },
 );
 watch(
-  () => realtime.roomPlayback.value,
-  (state) => {
-    void applyRealtimePlaybackState(state);
+  () => realtime.roomPlaybackEvent.value,
+  (event) => {
+    void applyRealtimePlaybackState(event?.state ?? null, {
+      syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
+    });
   },
 );
 watch(
@@ -657,6 +664,8 @@ watch(
                 :source-type="playbackSourceType"
                 :source-url="playbackSourceUrl"
                 :source-file-name="playbackSourceFileName"
+                :current-time="playbackCurrentTime"
+                :duration="playbackDuration"
                 :timeline-label="playbackTimelineLabel"
                 :play-label="t('room.playback.controls.play')"
                 :pause-label="t('room.playback.controls.pause')"

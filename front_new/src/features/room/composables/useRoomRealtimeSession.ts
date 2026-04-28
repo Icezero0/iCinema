@@ -24,6 +24,17 @@ type UseRoomRealtimeSessionOptions = {
   onSessionClosed?: (payload: RoomRealtimeSessionClosed) => void;
 };
 
+type RoomRealtimePlaybackEventAction =
+  | "snapshot"
+  | "playback_play"
+  | "playback_pause"
+  | "playback_seek";
+
+type RoomRealtimePlaybackEvent = {
+  action: RoomRealtimePlaybackEventAction;
+  state: RoomRealtimePlaybackState;
+};
+
 function payloadRoomId(payload: unknown) {
   if (!payload || typeof payload !== "object") return null;
 
@@ -63,6 +74,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   const hasPresenceSnapshot = ref(false);
   const roomVideoSource = ref<RoomRealtimeVideoSourceState | null>(null);
   const roomPlayback = ref<RoomRealtimePlaybackState | null>(null);
+  const roomPlaybackEvent = ref<RoomRealtimePlaybackEvent | null>(null);
   const userPlayerStates = ref<RoomRealtimeUserPlayerState[]>([]);
   const isRealtimeActive = ref(false);
   const realtimeStatus = ref<WSConnectionStatus>(wsClient.connectionStatus);
@@ -104,6 +116,9 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       hasPresenceSnapshot.value = true;
       roomVideoSource.value = snapshot.room_video_source ?? null;
       roomPlayback.value = snapshot.playback ?? null;
+      roomPlaybackEvent.value = snapshot.playback
+        ? { action: "snapshot", state: snapshot.playback }
+        : null;
       userPlayerStates.value = normalizeUserPlayerStates(snapshot.user_player_states);
     } catch (error) {
       if (attempt !== enterAttempt) return;
@@ -127,6 +142,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     hasPresenceSnapshot.value = false;
     roomVideoSource.value = null;
     roomPlayback.value = null;
+    roomPlaybackEvent.value = null;
     userPlayerStates.value = [];
 
     if (wsClient.connectionStatus !== "ready") return;
@@ -162,9 +178,13 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     roomVideoSource.value = payload ?? null;
   }
 
-  function handlePlayback(payload: RoomRealtimePlaybackState) {
+  function handlePlayback(
+    action: Exclude<RoomRealtimePlaybackEventAction, "snapshot">,
+    payload: RoomRealtimePlaybackState,
+  ) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
     roomPlayback.value = payload ?? null;
+    roomPlaybackEvent.value = payload ? { action, state: payload } : null;
   }
 
   function handleUserPlayerStates(payload: RoomRealtimeUserPlayerStatesState) {
@@ -180,6 +200,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     hasPresenceSnapshot.value = true;
     roomVideoSource.value = null;
     roomPlayback.value = null;
+    roomPlaybackEvent.value = null;
     userPlayerStates.value = [];
     options.onSessionClosed?.(payload);
   }
@@ -201,9 +222,15 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       wsClient.onEvent<RoomRealtimePresenceState>("room_user_presence", handlePresence),
       wsClient.onEvent<MessageResponse>("message", handleMessage),
       wsClient.onEvent<RoomRealtimeVideoSourceState>("room_video_source_set", handleRoomVideoSource),
-      wsClient.onEvent<RoomRealtimePlaybackState>("playback_play", handlePlayback),
-      wsClient.onEvent<RoomRealtimePlaybackState>("playback_pause", handlePlayback),
-      wsClient.onEvent<RoomRealtimePlaybackState>("playback_seek", handlePlayback),
+      wsClient.onEvent<RoomRealtimePlaybackState>("playback_play", (payload) => {
+        handlePlayback("playback_play", payload);
+      }),
+      wsClient.onEvent<RoomRealtimePlaybackState>("playback_pause", (payload) => {
+        handlePlayback("playback_pause", payload);
+      }),
+      wsClient.onEvent<RoomRealtimePlaybackState>("playback_seek", (payload) => {
+        handlePlayback("playback_seek", payload);
+      }),
       wsClient.onEvent<RoomRealtimeUserPlayerStatesState>("user_player_states", handleUserPlayerStates),
       wsClient.onEvent<RoomRealtimeSessionClosed>("session_closed", handleSessionClosed),
     ];
@@ -262,6 +289,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     hasPresenceSnapshot,
     roomVideoSource,
     roomPlayback,
+    roomPlaybackEvent,
     userPlayerStates,
     isRealtimeActive,
     realtimeStatus,

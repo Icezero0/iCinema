@@ -10,6 +10,7 @@ const SEEK_END_EPSILON_SECONDS = 0.25;
 const HLS_BUFFER_STALLED_DETAIL = "bufferStalledError";
 const STALL_CONFIRM_DELAY_MS = 80;
 const PLAYBACK_ADVANCE_EPSILON_SECONDS = 0.04;
+const PLAYBACK_ADVANCE_STALE_MS = 700;
 const BUFFER_STALL_MARGIN_SECONDS = 0.45;
 const STATUS_CALIBRATION_INTERVAL_MS = 500;
 const HLS_RECOVERY_CHECK_INTERVAL_MS = 5_000;
@@ -71,6 +72,9 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   let hlsErrorStartedAt = 0;
   let hlsConsecutiveErrorCount = 0;
   let externalNoCorsRetryUrl = "";
+  let lastObservedPlaybackTime = 0;
+  let lastPlaybackAdvanceAt = 0;
+  let stallingStartedAt = 0;
 
   const normalizedVolume = computed(() =>
     Math.min(1, Math.max(0, Math.round(options.volume.value) / 100)));
@@ -110,7 +114,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     clearStallConfirmTimer();
     clearHlsRecoveryCheckTimer();
     playerError.value = message;
-    setPlayerStatus("error");
+    setPlayerStatus("error", "setPlayerError");
     options.emit.error(message);
   }
 
@@ -127,10 +131,10 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
       return;
     }
 
-    if (video && shouldConsiderStalling(video)) {
+    if (video && canTreatAsReady(video)) {
+      setReadyState("hlsRecoverableReady");
+    } else if (video && shouldConsiderStalling(video)) {
       scheduleStallConfirmation();
-    } else {
-      setPlayerStatus("stalling");
     }
     startHlsRecoveryCheck();
   }
@@ -175,6 +179,18 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
             return;
           }
 
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls?.startLoad();
+            handleRecoverableHlsIssue();
+            return;
+          }
+
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls?.recoverMediaError();
+            handleRecoverableHlsIssue();
+            return;
+          }
+
           setPlayerError(options.messages.hlsLoadFailed);
         });
         hls.on(Hls.Events.FRAG_LOADED, handleHlsRecoverySignal);
@@ -207,7 +223,8 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     resetHlsErrorTracking();
     isPlaying.value = false;
     hasLoadedMetadata.value = false;
-    setPlayerStatus(hasSource.value ? "stalling" : "idle");
+    resetPlaybackAdvanceTracking();
+    setPlayerStatus(hasSource.value ? "stalling" : "idle", "resetPlaybackSignals");
     options.emit.playStateChange(false);
     options.emit.durationChange(0);
     options.emit.timeChange(0);
@@ -244,7 +261,14 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     try {
       await video.play();
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (
+        error instanceof DOMException &&
+        (error.name === "AbortError" || error.name === "NotAllowedError")
+      ) {
+        clearStallConfirmTimer();
+        stopPlaybackFrameLoop();
+        isPlaying.value = false;
+        options.emit.playStateChange(false);
         return;
       }
       setPlayerError(error instanceof Error ? error.message : options.messages.playFailed);
@@ -292,7 +316,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     const video = videoRef.value;
     hasLoadedMetadata.value = true;
     if (video && canTreatAsReady(video)) {
-      setReadyState();
+      setReadyState("loadedMetadata");
     }
     options.emit.durationChange(
       video?.duration && Number.isFinite(video.duration) ? video.duration : 0,
@@ -301,8 +325,12 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   }
 
   function handleTimeUpdate() {
-    clearStallConfirmTimer();
-    setReadyState();
+    const video = videoRef.value;
+    const advanced = video ? notePlaybackAdvancement(video) : false;
+    if (advanced) {
+      clearStallConfirmTimer();
+      setReadyState("timeUpdateAdvance");
+    }
     syncPlaybackFrame();
   }
 
@@ -315,7 +343,6 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   function handlePlay() {
     isPlaying.value = true;
     clearStallConfirmTimer();
-    setReadyState();
     options.emit.playStateChange(true);
     startPlaybackFrameLoop();
   }
@@ -323,9 +350,6 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   function handlePause() {
     isPlaying.value = false;
     clearStallConfirmTimer();
-    if (hasSource.value && !playerError.value) {
-      setReadyState();
-    }
     options.emit.playStateChange(false);
     stopPlaybackFrameLoop();
     syncPlaybackFrame();
@@ -337,27 +361,29 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
 
   function handleCanPlay() {
     clearStallConfirmTimer();
-    setReadyState();
+    setReadyState("canPlay");
     emitBufferedProgress();
   }
 
   function handleProgress() {
     const video = videoRef.value;
     if (video && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-      setReadyState();
+      setReadyState("progressFutureData");
     }
     emitBufferedProgress();
   }
 
   function handleSeeking() {
-    setPlayerStatus("stalling");
+    if (hasSource.value && !playerError.value) {
+      setPlayerStatus("stalling", "seeking");
+    }
     emitBufferedProgress();
   }
 
   function handleSeeked() {
     const video = videoRef.value;
     if (video && canTreatAsReady(video)) {
-      setReadyState();
+      setReadyState("seeked");
     }
     syncPlaybackFrame();
   }
@@ -394,7 +420,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   }
 
   function clearWaitingState() {
-    setReadyState();
+    setReadyState("clearWaitingState");
   }
 
   function clearStallConfirmTimer() {
@@ -418,21 +444,13 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
       }
 
       const advanced =
-        latestVideo.currentTime > probeTime + PLAYBACK_ADVANCE_EPSILON_SECONDS;
+        latestVideo.currentTime > probeTime + PLAYBACK_ADVANCE_EPSILON_SECONDS ||
+        notePlaybackAdvancement(latestVideo);
       if (advanced) {
         clearWaitingState();
         return;
       }
-
-      const isStalled =
-        isNearBufferedEnd(latestVideo) ||
-        latestVideo.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
-
-      if (isStalled) {
-        setPlayerStatus("stalling");
-      } else {
-        setReadyState();
-      }
+      setPlayerStatus("stalling", "stallConfirmNoAdvance");
     }, STALL_CONFIRM_DELAY_MS);
   }
 
@@ -473,28 +491,83 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
       hasSource.value &&
       !playerError.value &&
       !video.seeking &&
-      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      (
+        video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA ||
+        hasBufferedFutureData(video) ||
+        video.ended
+      )
     );
   }
 
-  function setReadyState() {
+  function hasBufferedFutureData(video: HTMLVideoElement) {
+    const bufferedEnd = getBufferedEndForCurrentTime(video);
+    return bufferedEnd != null && bufferedEnd - video.currentTime > BUFFER_STALL_MARGIN_SECONDS;
+  }
+
+  function setReadyState(reason = "unknown") {
     if (!hasSource.value) {
-      setPlayerStatus("idle");
+      setPlayerStatus("idle", `${reason}:noSource`);
       return;
     }
 
     if (playerError.value) return;
+    const video = videoRef.value;
+    if (!video || !canTreatAsReady(video)) return;
+
+    if (
+      playerStatus.value === "stalling" &&
+      isPlaying.value &&
+      !hasRecentPlaybackAdvance(stallingStartedAt)
+    ) {
+      return;
+    }
+
     resetHlsErrorTracking();
-    setPlayerStatus("ready");
+    setPlayerStatus("ready", reason);
   }
 
-  function setPlayerStatus(status: RoomLocalPlayerStatus) {
+  function resetPlaybackAdvanceTracking() {
+    lastObservedPlaybackTime = videoRef.value?.currentTime ?? 0;
+    lastPlaybackAdvanceAt = 0;
+    stallingStartedAt = 0;
+  }
+
+  function notePlaybackAdvancement(video: HTMLVideoElement) {
+    const currentTime = video.currentTime;
+    const delta = currentTime - lastObservedPlaybackTime;
+    if (delta > PLAYBACK_ADVANCE_EPSILON_SECONDS) {
+      lastObservedPlaybackTime = currentTime;
+      lastPlaybackAdvanceAt = Date.now();
+      return true;
+    }
+
+    if (Math.abs(delta) > PLAYBACK_ADVANCE_EPSILON_SECONDS) {
+      lastObservedPlaybackTime = currentTime;
+    }
+    return false;
+  }
+
+  function hasRecentPlaybackAdvance(afterTimestamp = 0) {
+    return (
+      lastPlaybackAdvanceAt > afterTimestamp &&
+      Date.now() - lastPlaybackAdvanceAt <= PLAYBACK_ADVANCE_STALE_MS
+    );
+  }
+
+  function setPlayerStatus(status: RoomLocalPlayerStatus, _reason = "unknown") {
     if (playerStatus.value === status) return;
 
     const wasWaiting = playerStatus.value === "stalling";
+    const nextWaiting = status === "stalling";
+    if (nextWaiting && !wasWaiting) {
+      stallingStartedAt = Date.now();
+      lastObservedPlaybackTime = videoRef.value?.currentTime ?? lastObservedPlaybackTime;
+    } else if (!nextWaiting) {
+      stallingStartedAt = 0;
+    }
+
     playerStatus.value = status;
     options.emit.statusChange(status);
-    const nextWaiting = status === "stalling";
     if (wasWaiting !== nextWaiting) {
       options.emit.waitingChange(nextWaiting);
     }
@@ -503,7 +576,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   function handleHlsRecoverySignal() {
     const video = videoRef.value;
     if (video && canTreatAsReady(video)) {
-      setReadyState();
+      setReadyState("hlsRecoverySignal");
     }
   }
 
@@ -536,25 +609,29 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     const video = videoRef.value;
 
     if (!hasSource.value) {
-      setPlayerStatus("idle");
+      setPlayerStatus("idle", "calibrateNoSource");
       return;
     }
 
     if (playerError.value) {
-      setPlayerStatus("error");
+      setPlayerStatus("error", "calibratePlayerError");
       return;
     }
 
     if (!video) return;
+    notePlaybackAdvancement(video);
 
     if (canTreatAsReady(video) && playerStatus.value === "stalling") {
-      setReadyState();
+      setReadyState("calibrateReady");
       return;
     }
 
     if (
       shouldConsiderStalling(video) &&
-      video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+      (
+        video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA ||
+        !hasRecentPlaybackAdvance()
+      )
     ) {
       scheduleStallConfirmation();
     }
@@ -563,7 +640,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   function handleEnded() {
     isPlaying.value = false;
     clearStallConfirmTimer();
-    setReadyState();
+    setReadyState("ended");
     options.emit.playStateChange(false);
     stopPlaybackFrameLoop();
     syncPlaybackFrame();
@@ -585,7 +662,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
       externalNoCorsRetryUrl = currentUrl;
       playerError.value = "";
       clearStallConfirmTimer();
-      setPlayerStatus("stalling");
+      setPlayerStatus("stalling", "externalNoCorsRetry");
       video.pause();
       video.removeAttribute("crossorigin");
       video.removeAttribute("src");
@@ -640,7 +717,14 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   }
 
   function syncPlaybackFrame() {
-    options.emit.timeChange(videoRef.value?.currentTime ?? 0);
+    const video = videoRef.value;
+    if (video) {
+      const advanced = notePlaybackAdvancement(video);
+      if (advanced && playerStatus.value === "stalling") {
+        setReadyState("syncPlaybackFrameAdvance");
+      }
+    }
+    options.emit.timeChange(video?.currentTime ?? 0);
     emitBufferedProgress();
   }
 

@@ -25,6 +25,11 @@ type UseRoomPlaybackStateOptions = {
   t: (key: string) => string;
 };
 
+type PendingRealtimePlayback = {
+  state: RoomRealtimePlaybackState;
+  syncPosition: boolean;
+};
+
 function formatPlaybackTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) return "00:00";
 
@@ -58,7 +63,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   const playbackSourceFile = ref<File | null>(null);
   const playbackSourceFileName = ref("");
   const playbackSourceRevision = ref(0);
-  const pendingRealtimePlayback = ref<RoomRealtimePlaybackState | null>(null);
+  const pendingRealtimePlayback = ref<PendingRealtimePlayback | null>(null);
 
   const playbackTimelineLabel = computed(() =>
     `${formatPlaybackTime(playbackCurrentTime.value)} / ${formatPlaybackTime(playbackDuration.value)}`);
@@ -72,8 +77,14 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
         : 0;
   }
 
-  async function applyStateToPlayerElement(state: RoomRealtimePlaybackState) {
-    options.playerStageRef.value?.seekToSeconds(state.position_seconds);
+  async function applyStateToPlayerElement(
+    state: RoomRealtimePlaybackState,
+    syncPosition: boolean,
+  ) {
+    if (syncPosition) {
+      options.playerStageRef.value?.seekToSeconds(state.position_seconds);
+    }
+
     if (state.status === "playing") {
       await options.playerStageRef.value?.playVideo();
     } else {
@@ -98,9 +109,9 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackDuration.value = value;
     updatePlaybackProgress();
     if (value > 0 && pendingRealtimePlayback.value) {
-      const state = pendingRealtimePlayback.value;
+      const pending = pendingRealtimePlayback.value;
       pendingRealtimePlayback.value = null;
-      void applyStateToPlayerElement(state);
+      void applyStateToPlayerElement(pending.state, pending.syncPosition);
     }
   }
 
@@ -173,21 +184,28 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackSourceRevision.value += 1;
   }
 
-  async function applyRealtimePlaybackState(state: RoomRealtimePlaybackState | null) {
+  async function applyRealtimePlaybackState(
+    state: RoomRealtimePlaybackState | null,
+    options?: { syncPosition?: boolean },
+  ) {
     if (!state) return;
 
+    const syncPosition = options?.syncPosition ?? false;
     playbackIsPlaying.value = state.status === "playing";
-    playbackCurrentTime.value = state.position_seconds;
     pendingSeekProgress.value = null;
-    updatePlaybackProgress();
 
-    if (playbackDuration.value <= 0) {
-      pendingRealtimePlayback.value = state;
+    if (syncPosition) {
+      playbackCurrentTime.value = state.position_seconds;
+      updatePlaybackProgress();
+    }
+
+    if (syncPosition && playbackDuration.value <= 0) {
+      pendingRealtimePlayback.value = { state, syncPosition };
       return;
     }
 
     pendingRealtimePlayback.value = null;
-    await applyStateToPlayerElement(state);
+    await applyStateToPlayerElement(state, syncPosition);
   }
 
   async function handleCopyPlayerScreenshot() {
