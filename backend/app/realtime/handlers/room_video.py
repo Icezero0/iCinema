@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, ForbiddenError
+from app.core.logging import log_extra
 from app.modules.rooms.constants import (
     RoomActiveSyncPermission,
     RoomRole,
@@ -22,7 +23,7 @@ from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
 from app.realtime.room_video_runtime import RoomVideoRuntimeService
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.realtime.video")
 
 
 @dataclass
@@ -164,6 +165,11 @@ class RoomVideoCommandHandler:
             "room video source set: room_id=%s source_type=%s",
             room_id,
             source_type,
+            **log_extra(
+                "ws.video_source_set",
+                room_id=room_id,
+                source_type=source_type,
+            ),
         )
 
         await publisher.publish_room_video_source_set(room_video_source=room_video_source)
@@ -212,6 +218,12 @@ class RoomVideoCommandHandler:
             room_id,
             position_seconds,
             playback_rate,
+            **log_extra(
+                "ws.playback_play",
+                room_id=room_id,
+                position_seconds=position_seconds,
+                playback_rate=playback_rate,
+            ),
         )
 
         await publisher.publish_playback_play(playback=playback)
@@ -255,6 +267,12 @@ class RoomVideoCommandHandler:
             room_id,
             position_seconds,
             playback_rate,
+            **log_extra(
+                "ws.playback_pause",
+                room_id=room_id,
+                position_seconds=position_seconds,
+                playback_rate=playback_rate,
+            ),
         )
 
         await publisher.publish_playback_pause(playback=playback)
@@ -292,6 +310,11 @@ class RoomVideoCommandHandler:
             "playback seek: room_id=%s position_seconds=%s",
             room_id,
             position_seconds,
+            **log_extra(
+                "ws.playback_seek",
+                room_id=room_id,
+                position_seconds=position_seconds,
+            ),
         )
 
         await publisher.publish_playback_seek(playback=playback)
@@ -345,6 +368,13 @@ class RoomVideoCommandHandler:
             user_id,
             status,
             sync_policy,
+            **log_extra(
+                "ws.user_player_status",
+                user_id=user_id,
+                room_id=room_id,
+                status=status,
+                sync_policy=sync_policy,
+            ),
         )
 
         await publisher.publish_user_player_states(

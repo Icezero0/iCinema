@@ -1,5 +1,12 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+
+from app.core.logging import log_extra
+
+http_error_logger = logging.getLogger("app.http.error")
+security_logger = logging.getLogger("app.security")
 
 
 class AppError(Exception):
@@ -37,7 +44,24 @@ class ConflictError(AppError):
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
-    async def handle_app_error(_: Request, exc: AppError) -> JSONResponse:
+    async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
+        logger = security_logger if exc.status_code in {401, 403} else http_error_logger
+        log_method = logger.warning if exc.status_code in {401, 403} else logger.info
+        log_method(
+            "http app error method=%s path=%s status_code=%s code=%s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            exc.code,
+            **log_extra(
+                "http.app_error",
+                method=request.method,
+                path=request.url.path,
+                status_code=exc.status_code,
+                error_code=exc.code,
+                error_message=exc.message,
+            ),
+        )
         return JSONResponse(
             status_code=exc.status_code,
             content={

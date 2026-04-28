@@ -1,9 +1,10 @@
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.exceptions import UnauthorizedError
+from app.core.logging import set_log_context
 from app.core.security import decode_token
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
@@ -12,6 +13,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -41,4 +43,6 @@ async def get_current_user(
     if not user:
         raise UnauthorizedError("User not found")
 
+    request.state.user_id = user.id
+    set_log_context(user_id=user.id)
     return user
