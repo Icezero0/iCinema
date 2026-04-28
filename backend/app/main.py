@@ -7,6 +7,8 @@ from app.api.v1.router import api_router
 from app.api.public_resources import router as public_resources_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.core.logging import configure_logging
+from app.core.middleware import RequestLoggingMiddleware
 from app.core.startup import initialize_runtime
 from app.realtime.bootstrap import setup_realtime
 from app.realtime.ws_router import router as ws_router
@@ -21,6 +23,8 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    configure_logging(settings)
+
     app = FastAPI(
         title=settings.app_name,
         debug=settings.debug,
@@ -36,6 +40,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestLoggingMiddleware)
 
     register_exception_handlers(app)
 

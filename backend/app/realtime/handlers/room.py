@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, ForbiddenError
+from app.core.logging import log_extra
 from app.modules.rooms.constants import RoomSyncPolicy
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.room.service import RoomService
@@ -14,6 +17,8 @@ from app.realtime.publisher import RealtimePublisher
 from app.realtime.room_presence import RoomPresenceService
 from app.realtime.room_video_runtime import RoomVideoRuntimeService
 from app.realtime.state import RoomSnapshot
+
+logger = logging.getLogger("app.realtime")
 
 
 class RoomCommandHandler:
@@ -152,6 +157,20 @@ class RoomCommandHandler:
             presence=current_presence,
             exclude_connection_ids={connection.connection_id},
         )
+        logger.info(
+            "ws room enter room_id=%s user_id=%s connection_id=%s previous_room_id=%s",
+            room_id,
+            connection.user_id,
+            connection.connection_id,
+            previous_room_id,
+            **log_extra(
+                "ws.room_enter",
+                user_id=connection.user_id,
+                connection_id=connection.connection_id,
+                room_id=room_id,
+                previous_room_id=previous_room_id,
+            ),
+        )
 
         return snapshot.model_dump(mode="json")
 
@@ -197,6 +216,18 @@ class RoomCommandHandler:
         await publisher.publish_room_user_presence(
             presence=presence,
             exclude_connection_ids={connection.connection_id},
+        )
+        logger.info(
+            "ws room leave room_id=%s user_id=%s connection_id=%s",
+            room_id,
+            connection.user_id,
+            connection.connection_id,
+            **log_extra(
+                "ws.room_leave",
+                user_id=connection.user_id,
+                connection_id=connection.connection_id,
+                room_id=room_id,
+            ),
         )
 
     async def _get_room_sync_policy(
