@@ -8,9 +8,10 @@ from alembic import command
 from alembic.config import Config
 
 from app.core.config import get_settings
+from app.core.logging import log_extra
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.startup")
 
 
 async def ensure_runtime_paths() -> None:
@@ -39,9 +40,15 @@ def _upgrade_database_to_head() -> None:
 
 
 async def ensure_database_schema() -> None:
-    logger.info("running database migrations to head")
+    logger.info(
+        "running database migrations to head",
+        **log_extra("startup.migrations_start"),
+    )
     await asyncio.to_thread(_upgrade_database_to_head)
-    logger.info("database migrations complete")
+    logger.info(
+        "database migrations complete",
+        **log_extra("startup.migrations_complete"),
+    )
 
 
 async def initialize_runtime() -> None:

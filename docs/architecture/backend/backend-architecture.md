@@ -844,6 +844,75 @@ HTTP 返回格式：
 
 WS 错误格式见 `ws-protocol.md`。
 
+### 15.1 日志体系
+
+后端当前使用 Python 标准库 `logging`，由 `app.core.logging.configure_logging()` 在应用启动时统一初始化。
+
+当前日志配置项：
+
+- `LOG_LEVEL`
+  控制应用日志等级，默认 `INFO`
+- `LOG_SQL`
+  控制 SQLAlchemy SQL 明细日志，默认 `false`
+- `LOG_ACCESS_EXCLUDE_PATHS`
+  控制不记录 access log 的路径，默认包含 `/health`
+- `LOG_UVICORN_ACCESS`
+  控制是否保留 uvicorn 原生 access log，默认 `false`
+- `LOG_UVICORN_LEVEL`
+  控制 uvicorn error/asgi/logger 的日志等级，默认 `WARNING`
+
+SQL 日志与 `DEBUG` 解耦。开发环境即使 `DEBUG=true`，也不会默认输出每一条 SQL；只有显式设置 `LOG_SQL=true` 时才打开 SQL 明细日志。
+
+HTTP/WS 访问日志以应用侧 logger 为准。默认关闭 uvicorn 原生 access log，并将 uvicorn 连接生命周期 INFO 降噪到 `WARNING+`，避免控制台同时出现两套格式。
+
+日志格式当前保留顶层上下文：
+
+- `request_id`
+- `user_id`
+- `event`
+- `fields`
+
+业务字段统一进入 `fields`，避免和 Python `LogRecord` 保留字段冲突。
+
+当前主要 logger 分类：
+
+- `app.http.access`
+  HTTP 请求完成日志，记录 method、path、status_code、duration_ms、client_ip、request_id、user_id
+- `app.http.error`
+  HTTP 业务错误和未捕获异常
+- `app.security`
+  HTTP 鉴权失败、权限拒绝等安全相关事件
+- `app.realtime`
+  WebSocket 鉴权、连接、断开、入房、离房和协议错误
+- `app.realtime.video`
+  房间视频源、播放控制、播放器状态上报等实时播放事件
+- `app.startup`
+  启动初始化与数据库迁移
+
+HTTP 日志约定：
+
+- 每个 HTTP 请求都会生成或透传 `X-Request-ID`
+- 响应头会返回 `X-Request-ID`
+- 登录态接口会把当前 `user_id` 写入日志上下文
+- 默认不记录 `/health` access log，避免健康检查产生噪音
+- 4xx 业务异常不会作为系统错误处理；其中 401/403 记为 `WARNING`，普通 400/404 等可预期业务错误记为 `INFO`
+- 未捕获异常记为 `ERROR` 并带 traceback
+
+WebSocket 日志约定：
+
+- WS 握手成功后会立即记录 `ws.connected`
+- 鉴权成功、鉴权超时、连接断开、断开清理会记录到 `app.realtime`
+- `room_enter`、`room_leave` 会记录 `user_id`、`connection_id`、`room_id`
+- WS payload 校验失败和业务错误记为 `WARNING`
+- WS 未预期异常记为 `ERROR` 并带 traceback
+- 播放控制类事件记录到 `app.realtime.video`
+
+日志内容约束：
+
+- 不记录 JWT、refresh token、密码、Authorization header
+- 消息内容、完整 WS payload、完整请求 body 默认不记录
+- 业务日志优先记录资源 ID、动作、结果和耗时，而不是记录大对象全文
+
 ## 16. 测试策略
 
 当前测试主要分为三层：

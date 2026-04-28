@@ -52,6 +52,19 @@ async def test_authenticate_websocket_token_rejects_non_access_token(monkeypatch
     assert exc_info.value.message == "Invalid token type"
 
 
+# authenticate_websocket_token 会把 token 解码失败转换为 UnauthorizedError。
+async def test_authenticate_websocket_token_rejects_decode_errors(monkeypatch) -> None:
+    def fake_decode_token(token):  # noqa: ANN001
+        raise ValueError("expired")
+
+    monkeypatch.setattr("app.realtime.auth.decode_token", fake_decode_token)
+
+    with pytest.raises(UnauthorizedError) as exc_info:
+        await authenticate_websocket_token(db=object(), token="expired-token")
+
+    assert exc_info.value.message == "Invalid token"
+
+
 # AuthHandler 在连接已认证时会直接返回原连接并发送 ack
 async def test_auth_handler_returns_existing_connection_when_already_authenticated() -> None:
     websocket = FakeWebSocket()
