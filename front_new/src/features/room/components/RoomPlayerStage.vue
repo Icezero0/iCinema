@@ -34,6 +34,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "toggle-theater-mode"): void;
   (e: "play-state-change", value: boolean): void;
+  (e: "player-status-change", value: "idle" | "ready" | "stalling" | "error"): void;
   (e: "duration-change", value: number): void;
   (e: "time-change", value: number): void;
   (e: "buffered-progress-change", value: number): void;
@@ -67,6 +68,7 @@ const player = useRoomVideoPlayer({
   },
   emit: {
     playStateChange: (value) => emit("play-state-change", value),
+    statusChange: (value) => emit("player-status-change", value),
     durationChange: (value) => emit("duration-change", value),
     timeChange: (value) => emit("time-change", value),
     bufferedProgressChange: (value) => emit("buffered-progress-change", value),
@@ -165,6 +167,7 @@ defineExpose({
   pauseVideo: player.pauseVideo,
   togglePlayback: player.togglePlayback,
   seekToPercent: player.seekToPercent,
+  seekToSeconds: player.seekToSeconds,
   captureCurrentFrame: player.captureCurrentFrame,
 });
 </script>

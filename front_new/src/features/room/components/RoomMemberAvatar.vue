@@ -6,7 +6,7 @@ const props = withDefaults(
     name: string;
     src?: string | null;
     role: RoomRole;
-    status: MemberStatus | "idle";
+    status: MemberStatus;
     size?: number;
   }>(),
   {
@@ -78,24 +78,16 @@ function memberInitial(name: string) {
   border: 2px solid white;
 }
 
-.statusDot[data-status="playing"] {
+.statusDot[data-status="idle"],
+.statusDot[data-status="ready"] {
   background: #2fb46e;
 }
 
-.statusDot[data-status="paused"] {
-  background: #dfad3f;
-}
-
-.statusDot[data-status="buffering"] {
+.statusDot[data-status="stalling"] {
   background: #dfad3f;
 }
 
 .statusDot[data-status="offline"] {
-  background: transparent;
-  border-color: #9aa8b8;
-}
-
-.statusDot[data-status="idle"] {
   background: transparent;
   border-color: #9aa8b8;
 }

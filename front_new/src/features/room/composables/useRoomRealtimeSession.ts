@@ -3,9 +3,13 @@ import wsClient, { type WSConnectionStatus } from "@/infra/realtime/wsClient";
 import {
   enterRoomRealtime,
   leaveRoomRealtime,
+  type RoomRealtimePlaybackState,
   type RoomRealtimePresenceState,
   type RoomRealtimeSessionClosed,
   type RoomRealtimeSnapshot,
+  type RoomRealtimeUserPlayerState,
+  type RoomRealtimeUserPlayerStatesState,
+  type RoomRealtimeVideoSourceState,
 } from "@/infra/realtime/roomRealtime";
 import type { MessageResponse } from "@/infra/api/messages.api";
 import { useAuthStore } from "@/stores/auth.store";
@@ -38,10 +42,28 @@ function normalizePresentUserIds(snapshot: RoomRealtimeSnapshot) {
     : [];
 }
 
+function normalizeUserPlayerStates(state: RoomRealtimeUserPlayerStatesState | null | undefined) {
+  return Array.isArray(state?.user_player_states)
+    ? state.user_player_states.filter((item): item is RoomRealtimeUserPlayerState =>
+      typeof item?.room_id === "number" &&
+      typeof item?.user_id === "number" &&
+      (
+        item.status === "idle" ||
+        item.status === "ready" ||
+        item.status === "stalling" ||
+        item.status === "error"
+      ))
+    : [];
+}
+
 export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   const auth = useAuthStore();
   const messagesStore = useMessagesStore();
   const presentUserIds = ref<number[]>([]);
+  const hasPresenceSnapshot = ref(false);
+  const roomVideoSource = ref<RoomRealtimeVideoSourceState | null>(null);
+  const roomPlayback = ref<RoomRealtimePlaybackState | null>(null);
+  const userPlayerStates = ref<RoomRealtimeUserPlayerState[]>([]);
   const isRealtimeActive = ref(false);
   const realtimeStatus = ref<WSConnectionStatus>(wsClient.connectionStatus);
   const realtimeError = ref("");
@@ -79,6 +101,10 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       enteredRoomId = roomId;
       isRealtimeActive.value = true;
       presentUserIds.value = normalizePresentUserIds(snapshot);
+      hasPresenceSnapshot.value = true;
+      roomVideoSource.value = snapshot.room_video_source ?? null;
+      roomPlayback.value = snapshot.playback ?? null;
+      userPlayerStates.value = normalizeUserPlayerStates(snapshot.user_player_states);
     } catch (error) {
       if (attempt !== enterAttempt) return;
       isRealtimeActive.value = false;
@@ -98,6 +124,10 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     enteringRoomId = null;
     isRealtimeActive.value = false;
     presentUserIds.value = [];
+    hasPresenceSnapshot.value = false;
+    roomVideoSource.value = null;
+    roomPlayback.value = null;
+    userPlayerStates.value = [];
 
     if (wsClient.connectionStatus !== "ready") return;
 
@@ -119,6 +149,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     presentUserIds.value = Array.isArray(payload.present_user_ids)
       ? payload.present_user_ids.filter((id) => typeof id === "number")
       : [];
+    hasPresenceSnapshot.value = true;
   }
 
   function handleMessage(payload: MessageResponse) {
@@ -126,11 +157,30 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     messagesStore.appendRealtimeMessage(payload);
   }
 
+  function handleRoomVideoSource(payload: RoomRealtimeVideoSourceState) {
+    if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
+    roomVideoSource.value = payload ?? null;
+  }
+
+  function handlePlayback(payload: RoomRealtimePlaybackState) {
+    if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
+    roomPlayback.value = payload ?? null;
+  }
+
+  function handleUserPlayerStates(payload: RoomRealtimeUserPlayerStatesState) {
+    if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
+    userPlayerStates.value = normalizeUserPlayerStates(payload);
+  }
+
   function handleSessionClosed(payload: RoomRealtimeSessionClosed) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
     enteredRoomId = null;
     isRealtimeActive.value = false;
     presentUserIds.value = [];
+    hasPresenceSnapshot.value = true;
+    roomVideoSource.value = null;
+    roomPlayback.value = null;
+    userPlayerStates.value = [];
     options.onSessionClosed?.(payload);
   }
 
@@ -150,6 +200,11 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       }),
       wsClient.onEvent<RoomRealtimePresenceState>("room_user_presence", handlePresence),
       wsClient.onEvent<MessageResponse>("message", handleMessage),
+      wsClient.onEvent<RoomRealtimeVideoSourceState>("room_video_source_set", handleRoomVideoSource),
+      wsClient.onEvent<RoomRealtimePlaybackState>("playback_play", handlePlayback),
+      wsClient.onEvent<RoomRealtimePlaybackState>("playback_pause", handlePlayback),
+      wsClient.onEvent<RoomRealtimePlaybackState>("playback_seek", handlePlayback),
+      wsClient.onEvent<RoomRealtimeUserPlayerStatesState>("user_player_states", handleUserPlayerStates),
       wsClient.onEvent<RoomRealtimeSessionClosed>("session_closed", handleSessionClosed),
     ];
   }
@@ -204,6 +259,10 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
 
   return {
     presentUserIds,
+    hasPresenceSnapshot,
+    roomVideoSource,
+    roomPlayback,
+    userPlayerStates,
     isRealtimeActive,
     realtimeStatus,
     realtimeError,

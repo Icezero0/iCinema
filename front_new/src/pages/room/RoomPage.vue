@@ -33,7 +33,14 @@ import {
 import { useRoomJoinRequests } from "@/features/room/composables/useRoomJoinRequests";
 import { useRoomMemberActions } from "@/features/room/composables/useRoomMemberActions";
 import { useRoomRealtimeSession } from "@/features/room/composables/useRoomRealtimeSession";
-import type { RoomRealtimeSessionClosed } from "@/infra/realtime/roomRealtime";
+import {
+  sendRoomRealtimePlaybackPause,
+  sendRoomRealtimePlaybackPlay,
+  sendRoomRealtimePlaybackSeek,
+  sendRoomRealtimeUserPlayerStatus,
+  setRoomRealtimeVideoSource,
+  type RoomRealtimeSessionClosed,
+} from "@/infra/realtime/roomRealtime";
 import { useMessagesStore } from "@/stores/messages.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -57,6 +64,7 @@ const membersLoading = ref(false);
 const membersError = ref("");
 const mainGridRef = ref<HTMLElement | null>(null);
 const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
+let pendingRealtimeSeekTimer = 0;
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -109,17 +117,21 @@ const {
   playbackBufferedProgress,
   playbackBufferedRanges,
   playbackVolume,
+  playbackCurrentTime,
+  playbackDuration,
   playbackSourceType,
   playbackSourceUrl,
   playbackSourceFile,
   playbackSourceFileName,
   playbackSourceRevision,
   playbackTimelineLabel,
-  togglePlayback,
-  handlePlaybackProgressChange,
+  togglePlayback: toggleLocalPlayback,
+  handlePlaybackProgressChange: handleLocalPlaybackProgressChange,
   handlePlaybackDurationChange,
   handlePlaybackTimeChange,
-  handleApplyPlaybackSource,
+  handleApplyPlaybackSource: applyLocalPlaybackSource,
+  applyRealtimeVideoSource,
+  applyRealtimePlaybackState,
   handleCopyPlayerScreenshot,
   loadLocalPlaybackVolume,
   handlePlaybackVolumeChange,
@@ -206,11 +218,13 @@ const realtime = useRoomRealtimeSession({
   onSessionClosed: handleRealtimeSessionClosed,
 });
 const presentUserIds = computed(() => new Set(realtime.presentUserIds.value));
+const realtimePlayerStatusByUserId = computed(() =>
+  new Map(realtime.userPlayerStates.value.map((state) => [state.user_id, state.status])));
 const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
   const memberStatus =
-    presentUserIds.value.size === 0 || presentUserIds.value.has(member.user_id)
-      ? "idle"
+    realtime.hasPresenceSnapshot.value && presentUserIds.value.has(member.user_id)
+      ? realtimePlayerStatusByUserId.value.get(member.user_id) ?? "idle"
       : "offline";
 
   return {
@@ -225,6 +239,8 @@ const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
     status: memberStatus,
   };
 }));
+const roomMemberStatusByUserId = computed(() =>
+  new Map(roomMemberItems.value.map((member) => [member.id, member.status])));
 const syncPolicyStatusLabel = computed(() => {
   if (roomSettingsError.value && !roomSettings.value) {
     return t("room.playback.syncPolicyUnavailable");
@@ -396,6 +412,99 @@ async function handleSend(segments: ChatSegment[]) {
   }
 }
 
+function canUseRealtimePlaybackCommands() {
+  return (
+    realtime.isRealtimeActive.value &&
+    playbackSourceType.value === "external_url" &&
+    playbackSourceUrl.value.trim().length > 0
+  );
+}
+
+function showRealtimePlaybackError() {
+  toasts.push({
+    message: t("room.playback.errors.playFailed"),
+    tone: "danger",
+  });
+}
+
+async function handleApplyPlaybackSource(payload: {
+  sourceType: "external_url" | "local_file";
+  externalUrl: string;
+  localFile: File | null;
+}) {
+  if (!realtime.isRealtimeActive.value || payload.sourceType === "local_file") {
+    applyLocalPlaybackSource(payload);
+    return;
+  }
+
+  try {
+    const response = await setRoomRealtimeVideoSource({
+      source_type: "external_url",
+      external_url: payload.externalUrl.trim(),
+      anchor_ts_ms: Date.now(),
+    });
+    if ("room_video_source" in response) {
+      applyRealtimeVideoSource(response.room_video_source ?? null);
+    }
+    await applyRealtimePlaybackState(response.playback ?? null);
+  } catch {
+    showRealtimePlaybackError();
+  }
+}
+
+async function togglePlayback() {
+  if (!canUseRealtimePlaybackCommands()) {
+    toggleLocalPlayback();
+    return;
+  }
+
+  try {
+    const payload = {
+      position_seconds: playbackCurrentTime.value,
+      anchor_ts_ms: Date.now(),
+      playback_rate: 1,
+    };
+    const response = playbackIsPlaying.value
+      ? await sendRoomRealtimePlaybackPause(payload)
+      : await sendRoomRealtimePlaybackPlay(payload);
+    await applyRealtimePlaybackState(response.playback ?? null);
+  } catch {
+    showRealtimePlaybackError();
+  }
+}
+
+function handlePlaybackProgressChange(value: number) {
+  handleLocalPlaybackProgressChange(value);
+  if (!canUseRealtimePlaybackCommands() || playbackDuration.value <= 0) return;
+
+  const normalizedValue = Math.min(100, Math.max(0, value));
+  const positionSeconds = playbackDuration.value * (normalizedValue / 100);
+  if (pendingRealtimeSeekTimer) {
+    window.clearTimeout(pendingRealtimeSeekTimer);
+  }
+  pendingRealtimeSeekTimer = window.setTimeout(() => {
+    pendingRealtimeSeekTimer = 0;
+    void sendRoomRealtimePlaybackSeek({
+      position_seconds: positionSeconds,
+      anchor_ts_ms: Date.now(),
+    }).then((response) => {
+      void applyRealtimePlaybackState(response.playback ?? null);
+    }).catch(showRealtimePlaybackError);
+  }, 120);
+}
+
+function handlePlayerStatusChange(status: "idle" | "ready" | "stalling" | "error") {
+  if (!realtime.isRealtimeActive.value) return;
+
+  void sendRoomRealtimeUserPlayerStatus({
+    status,
+    reported_at_ms: Date.now(),
+    position_seconds: playbackCurrentTime.value,
+  }).catch(() => {
+    // Status reporting is opportunistic; playback commands surface their own errors.
+  });
+}
+
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
   toasts.push({
     message: t(`room.realtime.sessionClosed.${payload.reason}`),
@@ -416,6 +525,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", syncTheaterFullscreenState);
+  if (pendingRealtimeSeekTimer) {
+    window.clearTimeout(pendingRealtimeSeekTimer);
+    pendingRealtimeSeekTimer = 0;
+  }
 });
 watch(roomId, () => {
   currentUserRole.value = "unknown";
@@ -447,6 +560,18 @@ watch(activePanel, (panel) => {
   }
 });
 
+watch(
+  () => realtime.roomVideoSource.value,
+  (source) => {
+    applyRealtimeVideoSource(source);
+  },
+);
+watch(
+  () => realtime.roomPlayback.value,
+  (state) => {
+    void applyRealtimePlaybackState(state);
+  },
+);
 watch(
   () => theaterLayout.isTheaterMode.value,
   (active) => {
@@ -515,6 +640,7 @@ watch(
                 :theater-mode-available="theaterLayout.canUseTheaterMode.value"
                 @toggle-theater-mode="toggleTheaterMode"
                 @play-state-change="playbackIsPlaying = $event"
+                @player-status-change="handlePlayerStatusChange"
                 @duration-change="handlePlaybackDurationChange"
                 @time-change="handlePlaybackTimeChange"
                 @buffered-progress-change="playbackBufferedProgress = $event"
@@ -576,7 +702,9 @@ watch(
               <RoomChatTab
                 v-show="activePanel === 'chat'"
                 :room-key="roomId"
+                :active="activePanel === 'chat'"
                 :messages="roomChatMessages"
+                :member-status-by-user-id="roomMemberStatusByUserId"
                 :send-label="t('room.chat.send')"
                 :loading="roomMessagesState.isLoading"
                 :sending="roomMessagesState.isSending"

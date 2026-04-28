@@ -6,6 +6,7 @@ export default {
     backHome: "Back to Home",
   },
   chat: {
+    newMessagesBelow: "{count} new message(s)",
     toolbar: {
       emoji: "Insert emoji",
       screenshot: "Screenshot",

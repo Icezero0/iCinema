@@ -1,5 +1,9 @@
 import { computed, ref, type Ref } from "vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import type {
+  RoomRealtimePlaybackState,
+  RoomRealtimeVideoSourceState,
+} from "@/infra/realtime/roomRealtime";
 import {
   DEFAULT_LOCAL_ROOM_VOLUME,
   useEntitiesStore,
@@ -7,9 +11,11 @@ import {
 import { useToastsStore } from "@/stores/toasts.store";
 
 export type RoomPlayerStageHandle = {
+  playVideo: () => Promise<void>;
   togglePlayback: () => Promise<void>;
   pauseVideo: () => void;
   seekToPercent: (percent: number) => void;
+  seekToSeconds: (seconds: number) => void;
   captureCurrentFrame: () => Promise<Blob>;
 };
 
@@ -52,6 +58,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   const playbackSourceFile = ref<File | null>(null);
   const playbackSourceFileName = ref("");
   const playbackSourceRevision = ref(0);
+  const pendingRealtimePlayback = ref<RoomRealtimePlaybackState | null>(null);
 
   const playbackTimelineLabel = computed(() =>
     `${formatPlaybackTime(playbackCurrentTime.value)} / ${formatPlaybackTime(playbackDuration.value)}`);
@@ -63,6 +70,15 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       playbackDuration.value > 0
         ? Math.min(100, Math.max(0, (playbackCurrentTime.value / playbackDuration.value) * 100))
         : 0;
+  }
+
+  async function applyStateToPlayerElement(state: RoomRealtimePlaybackState) {
+    options.playerStageRef.value?.seekToSeconds(state.position_seconds);
+    if (state.status === "playing") {
+      await options.playerStageRef.value?.playVideo();
+    } else {
+      options.playerStageRef.value?.pauseVideo();
+    }
   }
 
   function togglePlayback() {
@@ -81,6 +97,11 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   function handlePlaybackDurationChange(value: number) {
     playbackDuration.value = value;
     updatePlaybackProgress();
+    if (value > 0 && pendingRealtimePlayback.value) {
+      const state = pendingRealtimePlayback.value;
+      pendingRealtimePlayback.value = null;
+      void applyStateToPlayerElement(state);
+    }
   }
 
   function handlePlaybackTimeChange(value: number) {
@@ -118,10 +139,55 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackDuration.value = 0;
     playbackProgress.value = 0;
     pendingSeekProgress.value = null;
+    pendingRealtimePlayback.value = null;
     playbackBufferedProgress.value = 0;
     playbackBufferedRanges.value = [];
     playbackIsPlaying.value = false;
     playbackSourceRevision.value += 1;
+  }
+
+  function applyRealtimeVideoSource(source: RoomRealtimeVideoSourceState | null) {
+    playbackSourceFile.value = null;
+    playbackSourceFileName.value = "";
+    playbackBufferedProgress.value = 0;
+    playbackBufferedRanges.value = [];
+    playbackCurrentTime.value = 0;
+    playbackDuration.value = 0;
+    playbackProgress.value = 0;
+    pendingSeekProgress.value = null;
+    pendingRealtimePlayback.value = null;
+    playbackIsPlaying.value = false;
+
+    if (!source) {
+      playbackSourceType.value = "external_url";
+      playbackSourceUrl.value = "";
+      playbackSourceRevision.value += 1;
+      return;
+    }
+
+    playbackSourceType.value = source.source_type;
+    playbackSourceUrl.value =
+      source.source_type === "external_url"
+        ? source.external_url ?? ""
+        : "";
+    playbackSourceRevision.value += 1;
+  }
+
+  async function applyRealtimePlaybackState(state: RoomRealtimePlaybackState | null) {
+    if (!state) return;
+
+    playbackIsPlaying.value = state.status === "playing";
+    playbackCurrentTime.value = state.position_seconds;
+    pendingSeekProgress.value = null;
+    updatePlaybackProgress();
+
+    if (playbackDuration.value <= 0) {
+      pendingRealtimePlayback.value = state;
+      return;
+    }
+
+    pendingRealtimePlayback.value = null;
+    await applyStateToPlayerElement(state);
   }
 
   async function handleCopyPlayerScreenshot() {
@@ -165,6 +231,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackIsPlaying.value = false;
     playbackProgress.value = 0;
     pendingSeekProgress.value = null;
+    pendingRealtimePlayback.value = null;
     playbackBufferedProgress.value = 0;
     playbackBufferedRanges.value = [];
     playbackCurrentTime.value = 0;
@@ -200,6 +267,8 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     handlePlaybackDurationChange,
     handlePlaybackTimeChange,
     handleApplyPlaybackSource,
+    applyRealtimeVideoSource,
+    applyRealtimePlaybackState,
     handleCopyPlayerScreenshot,
     loadLocalPlaybackVolume,
     handlePlaybackVolumeChange,

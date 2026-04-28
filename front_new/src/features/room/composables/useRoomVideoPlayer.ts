@@ -40,6 +40,7 @@ type UseRoomVideoPlayerOptions = {
   };
   emit: {
     playStateChange: (value: boolean) => void;
+    statusChange: (value: RoomLocalPlayerStatus) => void;
     durationChange: (value: number) => void;
     timeChange: (value: number) => void;
     bufferedProgressChange: (value: number) => void;
@@ -276,6 +277,17 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     emitBufferedProgress();
   }
 
+  function seekToSeconds(seconds: number) {
+    const video = videoRef.value;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+
+    video.currentTime = Math.min(
+      Math.max(0, seconds),
+      Math.max(0, video.duration - SEEK_END_EPSILON_SECONDS),
+    );
+    emitBufferedProgress();
+  }
+
   function handleLoadedMetadata() {
     const video = videoRef.value;
     hasLoadedMetadata.value = true;
@@ -481,6 +493,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
 
     const wasWaiting = playerStatus.value === "stalling";
     playerStatus.value = status;
+    options.emit.statusChange(status);
     const nextWaiting = status === "stalling";
     if (wasWaiting !== nextWaiting) {
       options.emit.waitingChange(nextWaiting);
@@ -705,6 +718,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     pauseVideo,
     togglePlayback,
     seekToPercent,
+    seekToSeconds,
     captureCurrentFrame,
     handleLoadedMetadata,
     handleTimeUpdate,

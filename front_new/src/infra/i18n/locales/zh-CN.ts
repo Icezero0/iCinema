@@ -7,6 +7,7 @@ export default {
     backHome: "返回首页",
   },
   chat: {
+    newMessagesBelow: "{count} 条新消息",
     toolbar: {
       emoji: "插入表情",
       screenshot: "截图",
