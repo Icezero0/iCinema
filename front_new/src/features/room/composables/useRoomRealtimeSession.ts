@@ -87,6 +87,8 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   let enterAttempt = 0;
 
   async function ensureConnectionReady() {
+    auth.syncTokensFromStorage();
+
     if (!auth.isLoggedIn || !auth.accessToken) {
       throw new Error("Realtime connection requires an authenticated user");
     }
@@ -96,6 +98,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
 
   async function enterCurrentRoom() {
     const roomId = options.roomId.value;
+    auth.syncTokensFromStorage();
     if (!roomId || !auth.isLoggedIn || !auth.accessToken) return;
     if (enteredRoomId === roomId || enteringRoomId === roomId) return;
 
@@ -183,12 +186,25 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     payload: RoomRealtimePlaybackState,
   ) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
+    console.info("[iCinema realtime playback debug]", {
+      event: "playbackEventReceived",
+      action,
+      roomId: options.roomId.value,
+      payload,
+      previousRoomPlayback: roomPlayback.value,
+      previousRoomPlaybackEvent: roomPlaybackEvent.value,
+    });
     roomPlayback.value = payload ?? null;
     roomPlaybackEvent.value = payload ? { action, state: payload } : null;
   }
 
   function handleUserPlayerStates(payload: RoomRealtimeUserPlayerStatesState) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
+    console.info("[iCinema realtime playback debug]", {
+      event: "userPlayerStatesReceived",
+      roomId: options.roomId.value,
+      payload,
+    });
     userPlayerStates.value = normalizeUserPlayerStates(payload);
   }
 

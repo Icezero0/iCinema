@@ -12,6 +12,7 @@ const STALL_CONFIRM_DELAY_MS = 80;
 const PLAYBACK_ADVANCE_EPSILON_SECONDS = 0.04;
 const PLAYBACK_ADVANCE_STALE_MS = 700;
 const BUFFER_STALL_MARGIN_SECONDS = 0.45;
+const STALL_RECOVERY_BUFFER_SECONDS = 5;
 const STATUS_CALIBRATION_INTERVAL_MS = 500;
 const HLS_RECOVERY_CHECK_INTERVAL_MS = 5_000;
 const MAX_HLS_RECOVERABLE_ERROR_MS = 30_000;
@@ -75,6 +76,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   let lastObservedPlaybackTime = 0;
   let lastPlaybackAdvanceAt = 0;
   let stallingStartedAt = 0;
+  let stallingRequiresRecovery = false;
 
   const normalizedVolume = computed(() =>
     Math.min(1, Math.max(0, Math.round(options.volume.value) / 100)));
@@ -256,11 +258,17 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
 
   async function playVideo() {
     const video = videoRef.value;
+    logPlaybackDebug("playVideoCalled");
     if (!video || !hasSource.value || playerError.value) return;
 
     try {
       await video.play();
+      logPlaybackDebug("playVideoResolved");
     } catch (error) {
+      logPlaybackDebug("playVideoRejected", {
+        errorName: error instanceof DOMException || error instanceof Error ? error.name : null,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       if (
         error instanceof DOMException &&
         (error.name === "AbortError" || error.name === "NotAllowedError")
@@ -276,10 +284,12 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
   }
 
   function pauseVideo() {
+    logPlaybackDebug("pauseVideoCalled");
     videoRef.value?.pause();
   }
 
   async function togglePlayback() {
+    logPlaybackDebug("togglePlaybackCalled");
     if (isPlaying.value) {
       pauseVideo();
       return;
@@ -345,6 +355,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     clearStallConfirmTimer();
     options.emit.playStateChange(true);
     startPlaybackFrameLoop();
+    logPlaybackDebug("nativePlayEvent");
   }
 
   function handlePause() {
@@ -353,6 +364,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     options.emit.playStateChange(false);
     stopPlaybackFrameLoop();
     syncPlaybackFrame();
+    logPlaybackDebug("nativePauseEvent");
   }
 
   function handleWaiting() {
@@ -514,11 +526,7 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     const video = videoRef.value;
     if (!video || !canTreatAsReady(video)) return;
 
-    if (
-      playerStatus.value === "stalling" &&
-      isPlaying.value &&
-      !hasRecentPlaybackAdvance(stallingStartedAt)
-    ) {
+    if (playerStatus.value === "stalling" && !hasRecoveredFromStalling(video)) {
       return;
     }
 
@@ -554,19 +562,88 @@ export function useRoomVideoPlayer(options: UseRoomVideoPlayerOptions) {
     );
   }
 
-  function setPlayerStatus(status: RoomLocalPlayerStatus, _reason = "unknown") {
-    if (playerStatus.value === status) return;
+  function getBufferAhead(video: HTMLVideoElement) {
+    const bufferedEnd = getBufferedEndForCurrentTime(video);
+    return bufferedEnd == null ? 0 : Math.max(0, bufferedEnd - video.currentTime);
+  }
 
+  function hasRecoveredFromStalling(video: HTMLVideoElement) {
+    if (!stallingRequiresRecovery) return true;
+    if (video.ended) return true;
+    if (hasRecentPlaybackAdvance(stallingStartedAt)) return true;
+    if (!isPlaying.value && video.paused) {
+      return getBufferAhead(video) >= STALL_RECOVERY_BUFFER_SECONDS;
+    }
+    return false;
+  }
+
+  function getPlaybackDebugMetrics(video: HTMLVideoElement | null) {
+    const bufferedEnd = video ? getBufferedEndForCurrentTime(video) : null;
+
+    return {
+      hasSource: hasSource.value,
+      playerStatus: playerStatus.value,
+      isPlaying: isPlaying.value,
+      playerError: playerError.value,
+      hasLoadedMetadata: hasLoadedMetadata.value,
+      readyState: video?.readyState ?? null,
+      networkState: video?.networkState ?? null,
+      paused: video?.paused ?? null,
+      ended: video?.ended ?? null,
+      seeking: video?.seeking ?? null,
+      currentTime: video?.currentTime ?? null,
+      duration: video?.duration ?? null,
+      bufferedEndForCurrentTime: bufferedEnd,
+      bufferAhead:
+        video && bufferedEnd != null
+          ? bufferedEnd - video.currentTime
+          : null,
+      canTreatAsReady: video ? canTreatAsReady(video) : false,
+      shouldConsiderStalling: video ? shouldConsiderStalling(video) : false,
+      stallingRequiresRecovery,
+      stallingRecoveryBufferSeconds: STALL_RECOVERY_BUFFER_SECONDS,
+      hasRecoveredFromStalling: video ? hasRecoveredFromStalling(video) : false,
+      hasRecentPlaybackAdvance: hasRecentPlaybackAdvance(),
+      hasPlaybackAdvanceAfterStalling: hasRecentPlaybackAdvance(stallingStartedAt),
+      lastPlaybackAdvanceAgeMs:
+        lastPlaybackAdvanceAt > 0 ? Date.now() - lastPlaybackAdvanceAt : null,
+    };
+  }
+
+  function logPlaybackDebug(event: string, extra: Record<string, unknown> = {}) {
+    console.info("[iCinema playback debug]", {
+      event,
+      ...extra,
+      metrics: getPlaybackDebugMetrics(videoRef.value),
+    });
+  }
+
+  function setPlayerStatus(status: RoomLocalPlayerStatus, reason = "unknown") {
+    if (playerStatus.value === status) {
+      if (status === "stalling" && reason === "stallConfirmNoAdvance") {
+        stallingRequiresRecovery = true;
+      }
+      return;
+    }
+
+    const previousStatus = playerStatus.value;
     const wasWaiting = playerStatus.value === "stalling";
     const nextWaiting = status === "stalling";
     if (nextWaiting && !wasWaiting) {
       stallingStartedAt = Date.now();
       lastObservedPlaybackTime = videoRef.value?.currentTime ?? lastObservedPlaybackTime;
+      stallingRequiresRecovery = reason === "stallConfirmNoAdvance";
     } else if (!nextWaiting) {
       stallingStartedAt = 0;
+      stallingRequiresRecovery = false;
     }
 
     playerStatus.value = status;
+    logPlaybackDebug("playerStatusTransition", {
+      reason,
+      from: previousStatus,
+      to: status,
+    });
     options.emit.statusChange(status);
     if (wasWaiting !== nextWaiting) {
       options.emit.waitingChange(nextWaiting);

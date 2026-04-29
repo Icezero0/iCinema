@@ -433,6 +433,29 @@ function showRealtimePlaybackError() {
   });
 }
 
+function logPlaybackDebug(event: string, extra: Record<string, unknown> = {}) {
+  console.info("[iCinema room playback debug]", {
+    event,
+    roomId: roomId.value,
+    realtimeActive: realtime.isRealtimeActive.value,
+    realtimeStatus: realtime.realtimeStatus.value,
+    playbackIsPlaying: playbackIsPlaying.value,
+    playbackCurrentTime: playbackCurrentTime.value,
+    playbackDuration: playbackDuration.value,
+    playbackSourceType: playbackSourceType.value,
+    hasExternalSource: playbackSourceUrl.value.trim().length > 0,
+    localPlayerStatus: localPlayerStatus.value,
+    roomPlayback: realtime.roomPlayback.value,
+    roomPlaybackEvent: realtime.roomPlaybackEvent.value,
+    ...extra,
+  });
+}
+
+function handlePlaybackPlayStateChange(value: boolean) {
+  logPlaybackDebug("localPlayStateChange", { value });
+  playbackIsPlaying.value = value;
+}
+
 async function handleApplyPlaybackSource(payload: {
   sourceType: "external_url" | "local_file";
   externalUrl: string;
@@ -459,6 +482,10 @@ async function handleApplyPlaybackSource(payload: {
 }
 
 async function togglePlayback() {
+  logPlaybackDebug("togglePlaybackRequested", {
+    commandMode: canUseRealtimePlaybackCommands() ? "realtime" : "local",
+  });
+
   if (!canUseRealtimePlaybackCommands()) {
     toggleLocalPlayback();
     return;
@@ -470,11 +497,24 @@ async function togglePlayback() {
       anchor_ts_ms: Date.now(),
       playback_rate: 1,
     };
+    const action = playbackIsPlaying.value ? "playback_pause" : "playback_play";
+    logPlaybackDebug("sendPlaybackCommand", {
+      action,
+      payload,
+    });
     const response = playbackIsPlaying.value
       ? await sendRoomRealtimePlaybackPause(payload)
       : await sendRoomRealtimePlaybackPlay(payload);
+    logPlaybackDebug("playbackCommandAck", {
+      action,
+      response,
+    });
     await applyRealtimePlaybackState(response.playback ?? null);
-  } catch {
+  } catch (error) {
+    logPlaybackDebug("playbackCommandFailed", {
+      errorName: error instanceof Error ? error.name : null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     showRealtimePlaybackError();
   }
 }
@@ -574,6 +614,11 @@ watch(
 watch(
   () => realtime.roomPlaybackEvent.value,
   (event) => {
+    logPlaybackDebug("applyRealtimePlaybackEvent", {
+      action: event?.action ?? null,
+      state: event?.state ?? null,
+      syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
+    });
     void applyRealtimePlaybackState(event?.state ?? null, {
       syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
     });
@@ -646,7 +691,7 @@ watch(
                 :is-theater-mode="theaterLayout.isTheaterMode.value"
                 :theater-mode-available="theaterLayout.canUseTheaterMode.value"
                 @toggle-theater-mode="toggleTheaterMode"
-                @play-state-change="playbackIsPlaying = $event"
+                @play-state-change="handlePlaybackPlayStateChange"
                 @player-status-change="handlePlayerStatusChange"
                 @duration-change="handlePlaybackDurationChange"
                 @time-change="handlePlaybackTimeChange"

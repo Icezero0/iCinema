@@ -81,13 +81,24 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     state: RoomRealtimePlaybackState,
     syncPosition: boolean,
   ) {
+    logRealtimePlaybackApply("applyStateToPlayerElement", {
+      state,
+      syncPosition,
+      hasPlayer: Boolean(options.playerStageRef.value),
+    });
+
     if (syncPosition) {
+      logRealtimePlaybackApply("seekForRealtimeState", {
+        positionSeconds: state.position_seconds,
+      });
       options.playerStageRef.value?.seekToSeconds(state.position_seconds);
     }
 
     if (state.status === "playing") {
+      logRealtimePlaybackApply("playForRealtimeState", { state });
       await options.playerStageRef.value?.playVideo();
     } else {
+      logRealtimePlaybackApply("pauseForRealtimeState", { state });
       options.playerStageRef.value?.pauseVideo();
     }
   }
@@ -188,6 +199,15 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     state: RoomRealtimePlaybackState | null,
     options?: { syncPosition?: boolean },
   ) {
+    logRealtimePlaybackApply("applyRealtimePlaybackState", {
+      state,
+      syncPosition: options?.syncPosition ?? false,
+      playbackIsPlaying: playbackIsPlaying.value,
+      playbackCurrentTime: playbackCurrentTime.value,
+      playbackDuration: playbackDuration.value,
+      pendingRealtimePlayback: pendingRealtimePlayback.value,
+    });
+
     if (!state) return;
 
     const syncPosition = options?.syncPosition ?? false;
@@ -201,11 +221,28 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
 
     if (syncPosition && playbackDuration.value <= 0) {
       pendingRealtimePlayback.value = { state, syncPosition };
+      logRealtimePlaybackApply("deferRealtimePlaybackUntilDuration", {
+        state,
+        syncPosition,
+      });
       return;
     }
 
     pendingRealtimePlayback.value = null;
     await applyStateToPlayerElement(state, syncPosition);
+  }
+
+  function logRealtimePlaybackApply(event: string, extra: Record<string, unknown> = {}) {
+    console.info("[iCinema playback apply debug]", {
+      event,
+      roomId: options.roomId.value,
+      playbackIsPlaying: playbackIsPlaying.value,
+      playbackCurrentTime: playbackCurrentTime.value,
+      playbackDuration: playbackDuration.value,
+      playbackProgress: playbackProgress.value,
+      pendingSeekProgress: pendingSeekProgress.value,
+      ...extra,
+    });
   }
 
   async function handleCopyPlayerScreenshot() {
