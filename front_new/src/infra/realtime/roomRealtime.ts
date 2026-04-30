@@ -1,7 +1,7 @@
 import wsClient from "@/infra/realtime/wsClient";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 
-export type RoomRealtimePlayerStatus = "idle" | "ready" | "stalling" | "error";
+export type RoomRealtimePlayerStatus = "ready" | "stalling" | "error";
 export type RoomRealtimePlaybackStatus = "playing" | "paused";
 
 export type RoomRealtimeVideoSourceState = {

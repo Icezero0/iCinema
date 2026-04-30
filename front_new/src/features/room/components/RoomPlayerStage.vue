@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, toRef } from "vue";
-import { useI18n } from "vue-i18n";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
@@ -11,9 +10,9 @@ import {
 } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
-import { useRoomVideoPlayer } from "@/features/room/composables/useRoomVideoPlayer";
-
-const { t } = useI18n();
+import { toMediaEngineLoadInput } from "@/features/room/video/mediaEngineTypes";
+import { useRoomMediaEngine } from "@/features/room/video/useRoomMediaEngine";
+import type { MediaHealthState } from "@/features/room/video/types";
 
 const props = defineProps<{
   title: string;
@@ -39,6 +38,7 @@ const emit = defineEmits<{
   (e: "time-change", value: number): void;
   (e: "buffered-progress-change", value: number): void;
   (e: "buffered-ranges-change", value: Array<{ startPercent: number; endPercent: number }>): void;
+  (e: "seek-capability-change", value: boolean): void;
   (e: "waiting-change", value: boolean): void;
   (e: "error", value: string): void;
 }>();
@@ -48,49 +48,109 @@ const isVideoFullscreen = ref(false);
 const controlsVisible = ref(false);
 const pointerIdle = ref(false);
 let controlsHideTimer = 0;
+
+const player = useRoomMediaEngine({
+  writeLog: () => {},
+});
+const videoRef = player.videoRef;
+const hasSource = computed(() => Boolean(player.appliedUrl.value));
+const playerStatus = computed(() => toRoomPlayerStatus(player.mediaHealthState.value, hasSource.value));
+const showEmptyState = computed(() => !hasSource.value);
+const showWaitingState = computed(() => hasSource.value && player.mediaHealthState.value === "stalling");
+const showPausedState = computed(() =>
+  hasSource.value &&
+  player.mediaHealthState.value === "ready" &&
+  player.playerState.value === "paused" &&
+  !player.errorMessage.value);
 const shouldAutoHideActions = computed(() =>
   isVideoFullscreen.value || Boolean(props.isTheaterMode));
 
-const player = useRoomVideoPlayer({
-  sourceType: toRef(props, "sourceType"),
-  sourceUrl: toRef(props, "sourceUrl"),
-  sourceFile: toRef(props, "sourceFile"),
-  sourceRevision: toRef(props, "sourceRevision"),
-  volume: toRef(props, "volume"),
-  messages: {
-    hlsLoadFailed: t("room.playback.errors.hlsLoadFailed"),
-    hlsUnsupported: t("room.playback.errors.hlsUnsupported"),
-    sourceLoadFailed: t("room.playback.errors.sourceLoadFailed"),
-    playFailed: t("room.playback.errors.playFailed"),
-    playFailedWithSource: t("room.playback.errors.playFailedWithSource"),
-    screenshotNoFrame: t("room.playback.screenshotNoFrame"),
-    screenshotFailed: t("room.playback.screenshotFailed"),
-  },
-  emit: {
-    playStateChange: (value) => emit("play-state-change", value),
-    statusChange: (value) => emit("player-status-change", value),
-    durationChange: (value) => emit("duration-change", value),
-    timeChange: (value) => emit("time-change", value),
-    bufferedProgressChange: (value) => emit("buffered-progress-change", value),
-    bufferedRangesChange: (value) => emit("buffered-ranges-change", value),
-    waitingChange: (value) => emit("waiting-change", value),
-    error: (value) => emit("error", value),
-  },
-});
-
-const videoRef = player.videoRef;
-const showEmptyState = computed(() => !player.hasSource.value);
-const showWaitingState = computed(() =>
-  player.hasSource.value && player.playerStatus.value === "stalling");
-const showPausedState = computed(() =>
-  player.hasSource.value &&
-  player.hasLoadedMetadata.value &&
-  player.playerStatus.value === "ready" &&
-  !player.isPlaying.value &&
-  !player.playerError.value);
+function toRoomPlayerStatus(status: MediaHealthState, sourceAvailable: boolean) {
+  if (!sourceAvailable) return "idle";
+  if (status === "unknown") return "stalling";
+  return status;
+}
 
 function setVideoRef(el: unknown) {
   videoRef.value = el instanceof HTMLVideoElement ? el : null;
+}
+
+async function loadCurrentSource() {
+  if (!videoRef.value) return;
+
+  const input = toMediaEngineLoadInput(props.sourceType, props.sourceUrl, props.sourceFile);
+  await player.loadSource(input ?? "");
+}
+
+async function playVideo() {
+  const video = videoRef.value;
+  await player.applyPlayback({
+    status: "playing",
+    position_seconds: player.currentTime.value,
+    playback_rate: video?.playbackRate || 1,
+  }, { syncPosition: false });
+}
+
+function pauseVideo() {
+  const video = videoRef.value;
+  void player.applyPlayback({
+    status: "paused",
+    position_seconds: player.currentTime.value,
+    playback_rate: video?.playbackRate || 1,
+  }, { syncPosition: false });
+}
+
+async function togglePlayback() {
+  if (player.playerState.value === "playing") {
+    pauseVideo();
+    return;
+  }
+
+  await playVideo();
+}
+
+function seekToPercent(percent: number) {
+  const nextTime = player.seekToPercent(percent);
+  if (nextTime === null) return;
+
+  const video = videoRef.value;
+  void player.applyPlayback({
+    status: "paused",
+    position_seconds: nextTime,
+    playback_rate: video?.playbackRate || 1,
+  }, { syncPosition: false });
+}
+
+async function seekToSeconds(seconds: number) {
+  const video = videoRef.value;
+  await player.applyPlayback({
+    status: "paused",
+    position_seconds: Math.max(0, seconds),
+    playback_rate: video?.playbackRate || 1,
+  }, { syncPosition: true });
+}
+
+async function captureCurrentFrame() {
+  const video = videoRef.value;
+  if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    throw new Error("screenshotNoFrame");
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("screenshotFailed");
+  }
+
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) {
+    throw new Error("screenshotFailed");
+  }
+
+  return blob;
 }
 
 function showPlayerActions() {
@@ -149,6 +209,34 @@ async function toggleVideoFullscreen() {
   }
 }
 
+watch(
+  () => [props.sourceType, props.sourceUrl, props.sourceFile, props.sourceRevision, videoRef.value] as const,
+  () => {
+    void loadCurrentSource();
+  },
+  { immediate: true },
+);
+watch(
+  () => props.volume,
+  (value) => player.setVolume(value),
+  { immediate: true },
+);
+watch(player.playerState, (value) => {
+  emit("play-state-change", value === "playing");
+}, { immediate: true });
+watch(playerStatus, (value) => {
+  emit("player-status-change", value);
+  emit("waiting-change", value === "stalling");
+}, { immediate: true });
+watch(player.duration, (value) => emit("duration-change", value), { immediate: true });
+watch(player.currentTime, (value) => emit("time-change", value), { immediate: true });
+watch(player.bufferedProgressPercent, (value) => emit("buffered-progress-change", value), { immediate: true });
+watch(player.bufferedRangePercents, (value) => emit("buffered-ranges-change", value), { immediate: true });
+watch(player.canSeek, (value) => emit("seek-capability-change", value), { immediate: true });
+watch(player.errorMessage, (value) => {
+  if (value) emit("error", value);
+});
+
 onMounted(() => {
   document.addEventListener("fullscreenchange", syncFullscreenState);
   document.addEventListener("pointerdown", hidePlayerActionsFromOutside);
@@ -163,12 +251,12 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-  playVideo: player.playVideo,
-  pauseVideo: player.pauseVideo,
-  togglePlayback: player.togglePlayback,
-  seekToPercent: player.seekToPercent,
-  seekToSeconds: player.seekToSeconds,
-  captureCurrentFrame: player.captureCurrentFrame,
+  playVideo,
+  pauseVideo,
+  togglePlayback,
+  seekToPercent,
+  seekToSeconds,
+  captureCurrentFrame,
 });
 </script>
 
@@ -185,24 +273,26 @@ defineExpose({
   >
     <div class="playerSurface">
       <video
-        v-show="player.hasSource.value && player.playerStatus.value !== 'error'"
+        v-show="hasSource && player.mediaHealthState.value !== 'error'"
         :ref="setVideoRef"
         class="playerVideo"
         playsinline
         preload="auto"
-        @loadedmetadata="player.handleLoadedMetadata"
-        @durationchange="player.handleDurationChange"
+        @loadstart="player.handleVideoEvent('loadstart')"
+        @loadedmetadata="player.handleVideoEvent('loadedmetadata')"
+        @durationchange="player.handleVideoEvent('durationchange')"
         @timeupdate="player.handleTimeUpdate"
-        @play="player.handlePlay"
-        @pause="player.handlePause"
-        @waiting="player.handleWaiting"
-        @stalled="player.handleWaiting"
-        @canplay="player.handleCanPlay"
-        @playing="player.handleCanPlay"
+        @play="player.handleVideoEvent('play')"
+        @playing="player.handleVideoEvent('playing')"
+        @pause="player.handleVideoEvent('pause')"
+        @waiting="player.handleVideoEvent('waiting')"
+        @stalled="player.handleVideoEvent('stalled')"
+        @canplay="player.handleVideoEvent('canplay')"
+        @canplaythrough="player.handleVideoEvent('canplaythrough')"
         @progress="player.handleProgress"
-        @seeking="player.handleSeeking"
-        @seeked="player.handleSeeked"
-        @ended="player.handleEnded"
+        @seeking="player.handleVideoEvent('seeking')"
+        @seeked="player.handleVideoEvent('seeked')"
+        @ended="player.handleVideoEvent('ended')"
         @error="player.handleVideoError"
       />
 
@@ -215,11 +305,11 @@ defineExpose({
           <div class="emptyHint">{{ hint }}</div>
         </div>
       </div>
-      <div v-else-if="player.playerStatus.value === 'error'" class="playerOverlay playerOverlayError">
+      <div v-else-if="player.mediaHealthState.value === 'error'" class="playerOverlay playerOverlayError">
         <div class="overlayIcon">
           <AppIcon :icon="ExclamationTriangleIcon" :size="30" />
         </div>
-        <div class="overlayText">{{ player.playerError.value }}</div>
+        <div class="overlayText">{{ player.errorMessage.value }}</div>
       </div>
       <div v-else-if="showWaitingState" class="playerOverlay">
         <div class="loadingSpinner" aria-hidden="true" />
@@ -325,6 +415,7 @@ defineExpose({
 .playerOverlay {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: grid;
   place-items: center;
   background: rgb(3 7 12 / 0.32);
@@ -399,6 +490,7 @@ defineExpose({
 
 .playerQuickActions {
   position: absolute;
+  z-index: 4;
   right: 14px;
   bottom: 14px;
   display: inline-flex;

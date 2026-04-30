@@ -7,6 +7,7 @@ import {
   type RoomRealtimePresenceState,
   type RoomRealtimeSessionClosed,
   type RoomRealtimeSnapshot,
+  type RoomRealtimePlayerStatus,
   type RoomRealtimeUserPlayerState,
   type RoomRealtimeUserPlayerStatesState,
   type RoomRealtimeVideoSourceState,
@@ -35,6 +36,17 @@ type RoomRealtimePlaybackEvent = {
   state: RoomRealtimePlaybackState;
 };
 
+type RoomRealtimeVideoSourceEventAction =
+  | "snapshot"
+  | "room_video_source_set";
+
+type RoomRealtimeVideoSourceEvent = {
+  action: RoomRealtimeVideoSourceEventAction;
+  state: RoomRealtimeVideoSourceState | null;
+};
+
+const ROOM_REALTIME_DEBUG = false;
+
 function payloadRoomId(payload: unknown) {
   if (!payload || typeof payload !== "object") return null;
 
@@ -53,18 +65,27 @@ function normalizePresentUserIds(snapshot: RoomRealtimeSnapshot) {
     : [];
 }
 
+function normalizeRealtimePlayerStatus(status: unknown): RoomRealtimePlayerStatus | null {
+  if (status === "idle") return "ready";
+  if (status === "ready" || status === "stalling" || status === "error") return status;
+  return null;
+}
+
 function normalizeUserPlayerStates(state: RoomRealtimeUserPlayerStatesState | null | undefined) {
-  return Array.isArray(state?.user_player_states)
-    ? state.user_player_states.filter((item): item is RoomRealtimeUserPlayerState =>
-      typeof item?.room_id === "number" &&
-      typeof item?.user_id === "number" &&
-      (
-        item.status === "idle" ||
-        item.status === "ready" ||
-        item.status === "stalling" ||
-        item.status === "error"
-      ))
-    : [];
+  if (!Array.isArray(state?.user_player_states)) return [];
+
+  return state.user_player_states.flatMap((item): RoomRealtimeUserPlayerState[] => {
+    const status = normalizeRealtimePlayerStatus(item?.status);
+    if (
+      typeof item?.room_id !== "number" ||
+      typeof item?.user_id !== "number" ||
+      !status
+    ) {
+      return [];
+    }
+
+    return [{ ...item, status }];
+  });
 }
 
 export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
@@ -73,6 +94,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   const presentUserIds = ref<number[]>([]);
   const hasPresenceSnapshot = ref(false);
   const roomVideoSource = ref<RoomRealtimeVideoSourceState | null>(null);
+  const roomVideoSourceEvent = ref<RoomRealtimeVideoSourceEvent | null>(null);
   const roomPlayback = ref<RoomRealtimePlaybackState | null>(null);
   const roomPlaybackEvent = ref<RoomRealtimePlaybackEvent | null>(null);
   const userPlayerStates = ref<RoomRealtimeUserPlayerState[]>([]);
@@ -118,6 +140,10 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       presentUserIds.value = normalizePresentUserIds(snapshot);
       hasPresenceSnapshot.value = true;
       roomVideoSource.value = snapshot.room_video_source ?? null;
+      roomVideoSourceEvent.value = {
+        action: "snapshot",
+        state: snapshot.room_video_source ?? null,
+      };
       roomPlayback.value = snapshot.playback ?? null;
       roomPlaybackEvent.value = snapshot.playback
         ? { action: "snapshot", state: snapshot.playback }
@@ -144,6 +170,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     presentUserIds.value = [];
     hasPresenceSnapshot.value = false;
     roomVideoSource.value = null;
+    roomVideoSourceEvent.value = null;
     roomPlayback.value = null;
     roomPlaybackEvent.value = null;
     userPlayerStates.value = [];
@@ -179,6 +206,10 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   function handleRoomVideoSource(payload: RoomRealtimeVideoSourceState) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
     roomVideoSource.value = payload ?? null;
+    roomVideoSourceEvent.value = {
+      action: "room_video_source_set",
+      state: payload ?? null,
+    };
   }
 
   function handlePlayback(
@@ -186,25 +217,29 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     payload: RoomRealtimePlaybackState,
   ) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
-    console.info("[iCinema realtime playback debug]", {
-      event: "playbackEventReceived",
-      action,
-      roomId: options.roomId.value,
-      payload,
-      previousRoomPlayback: roomPlayback.value,
-      previousRoomPlaybackEvent: roomPlaybackEvent.value,
-    });
+    if (ROOM_REALTIME_DEBUG) {
+      console.info("[iCinema realtime playback debug]", {
+        event: "playbackEventReceived",
+        action,
+        roomId: options.roomId.value,
+        payload,
+        previousRoomPlayback: roomPlayback.value,
+        previousRoomPlaybackEvent: roomPlaybackEvent.value,
+      });
+    }
     roomPlayback.value = payload ?? null;
     roomPlaybackEvent.value = payload ? { action, state: payload } : null;
   }
 
   function handleUserPlayerStates(payload: RoomRealtimeUserPlayerStatesState) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
-    console.info("[iCinema realtime playback debug]", {
-      event: "userPlayerStatesReceived",
-      roomId: options.roomId.value,
-      payload,
-    });
+    if (ROOM_REALTIME_DEBUG) {
+      console.info("[iCinema realtime playback debug]", {
+        event: "userPlayerStatesReceived",
+        roomId: options.roomId.value,
+        payload,
+      });
+    }
     userPlayerStates.value = normalizeUserPlayerStates(payload);
   }
 
@@ -215,6 +250,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     presentUserIds.value = [];
     hasPresenceSnapshot.value = true;
     roomVideoSource.value = null;
+    roomVideoSourceEvent.value = null;
     roomPlayback.value = null;
     roomPlaybackEvent.value = null;
     userPlayerStates.value = [];
@@ -304,6 +340,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     presentUserIds,
     hasPresenceSnapshot,
     roomVideoSource,
+    roomVideoSourceEvent,
     roomPlayback,
     roomPlaybackEvent,
     userPlayerStates,

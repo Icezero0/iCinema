@@ -39,6 +39,7 @@ import {
   sendRoomRealtimePlaybackSeek,
   sendRoomRealtimeUserPlayerStatus,
   setRoomRealtimeVideoSource,
+  type RoomRealtimePlayerStatus,
   type RoomRealtimeSessionClosed,
 } from "@/infra/realtime/roomRealtime";
 import { useMessagesStore } from "@/stores/messages.store";
@@ -56,6 +57,9 @@ const messagesStore = useMessagesStore();
 const toasts = useToastsStore();
 
 type RoomRoleState = RoomRole | "unknown";
+type DisplayPlayerStatus = "idle" | RoomRealtimePlayerStatus;
+type SyncGateState = "locked" | "unlocked";
+const ROOM_PLAYBACK_DEBUG = false;
 
 const room = ref<Room | null>(null);
 const isLoading = ref(false);
@@ -64,8 +68,10 @@ const membersLoading = ref(false);
 const membersError = ref("");
 const mainGridRef = ref<HTMLElement | null>(null);
 const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
-let lastReportedPlayerStatus: "idle" | "ready" | "stalling" | "error" | null = null;
-const localPlayerStatus = ref<"idle" | "ready" | "stalling" | "error">("idle");
+let lastReportedPlayerStatus: RoomRealtimePlayerStatus | null = null;
+const localPlayerStatus = ref<DisplayPlayerStatus>("idle");
+const latestPlayerStatus = ref<DisplayPlayerStatus>("idle");
+const syncGateState = ref<SyncGateState>(getInitialSyncGateState());
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -117,6 +123,7 @@ const {
   playbackDisplayProgress,
   playbackBufferedProgress,
   playbackBufferedRanges,
+  playbackCanSeek,
   playbackVolume,
   playbackCurrentTime,
   playbackDuration,
@@ -136,6 +143,7 @@ const {
   handleCopyPlayerScreenshot,
   loadLocalPlaybackVolume,
   handlePlaybackVolumeChange,
+  handlePlaybackCanSeekChange,
   resetPlaybackState,
   resetPlaybackVolume,
 } = playback;
@@ -220,7 +228,9 @@ const realtime = useRoomRealtimeSession({
 });
 const presentUserIds = computed(() => new Set(realtime.presentUserIds.value));
 const displayPlayerStatusByUserId = computed(() => {
-  const statuses = new Map(realtime.userPlayerStates.value.map((state) => [state.user_id, state.status]));
+  const statuses = new Map<number, DisplayPlayerStatus>(
+    realtime.userPlayerStates.value.map((state) => [state.user_id, state.status]),
+  );
   if (auth.me?.id && realtime.isRealtimeActive.value && presentUserIds.value.has(auth.me.id)) {
     statuses.set(auth.me.id, localPlayerStatus.value);
   }
@@ -434,6 +444,8 @@ function showRealtimePlaybackError() {
 }
 
 function logPlaybackDebug(event: string, extra: Record<string, unknown> = {}) {
+  if (!ROOM_PLAYBACK_DEBUG) return;
+
   console.info("[iCinema room playback debug]", {
     event,
     roomId: roomId.value,
@@ -449,6 +461,48 @@ function logPlaybackDebug(event: string, extra: Record<string, unknown> = {}) {
     roomPlaybackEvent: realtime.roomPlaybackEvent.value,
     ...extra,
   });
+}
+
+function isSyncGateUnlocked() {
+  return syncGateState.value === "unlocked";
+}
+
+function getInitialSyncGateState(): SyncGateState {
+  return route.meta.requiresSyncGate === true ? "locked" : "unlocked";
+}
+
+async function syncRoomRuntimeAfterUnlock() {
+  // TODO: call the backend runtime snapshot command once it is available.
+  const currentVideoSource = realtime.roomVideoSource.value;
+  const currentPlayback = realtime.roomPlayback.value;
+
+  applyRealtimeVideoSource(currentVideoSource);
+
+  if (currentPlayback) {
+    await applyRealtimePlaybackState(currentPlayback, { syncPosition: true });
+    return;
+  }
+
+  if (!currentVideoSource) return;
+
+  await applyRealtimePlaybackState({
+    room_id: currentVideoSource.room_id,
+    status: "paused",
+    position_seconds: 0,
+    anchor_ts_ms: Date.now(),
+    playback_rate: 1,
+  }, {
+    syncPosition: true,
+  });
+}
+
+function unlockSyncGate() {
+  if (isSyncGateUnlocked()) return;
+
+  syncGateState.value = "unlocked";
+  localPlayerStatus.value = latestPlayerStatus.value;
+  reportDisplayedPlayerStatus(latestPlayerStatus.value);
+  void syncRoomRuntimeAfterUnlock();
 }
 
 function handlePlaybackPlayStateChange(value: boolean) {
@@ -486,6 +540,11 @@ async function togglePlayback() {
     commandMode: canUseRealtimePlaybackCommands() ? "realtime" : "local",
   });
 
+  if (!isSyncGateUnlocked()) {
+    unlockSyncGate();
+    return;
+  }
+
   if (!canUseRealtimePlaybackCommands()) {
     toggleLocalPlayback();
     return;
@@ -520,6 +579,11 @@ async function togglePlayback() {
 }
 
 function handlePlaybackProgressChange(value: number) {
+  if (!isSyncGateUnlocked()) {
+    unlockSyncGate();
+    return;
+  }
+
   handleLocalPlaybackProgressChange(value);
   if (!canUseRealtimePlaybackCommands() || playbackDuration.value <= 0) return;
 
@@ -533,13 +597,18 @@ function handlePlaybackProgressChange(value: number) {
   }).catch(showRealtimePlaybackError);
 }
 
-function reportDisplayedPlayerStatus(status: "idle" | "ready" | "stalling" | "error") {
-  if (!realtime.isRealtimeActive.value) return;
-  if (status === lastReportedPlayerStatus) return;
+function toRealtimePlayerStatus(status: DisplayPlayerStatus): RoomRealtimePlayerStatus {
+  return status === "idle" ? "ready" : status;
+}
 
-  lastReportedPlayerStatus = status;
+function reportDisplayedPlayerStatus(status: DisplayPlayerStatus) {
+  if (!realtime.isRealtimeActive.value) return;
+  const realtimeStatus = toRealtimePlayerStatus(status);
+  if (realtimeStatus === lastReportedPlayerStatus) return;
+
+  lastReportedPlayerStatus = realtimeStatus;
   void sendRoomRealtimeUserPlayerStatus({
-    status,
+    status: realtimeStatus,
     reported_at_ms: Date.now(),
     position_seconds: playbackCurrentTime.value,
   }).catch(() => {
@@ -547,7 +616,13 @@ function reportDisplayedPlayerStatus(status: "idle" | "ready" | "stalling" | "er
   });
 }
 
-function handlePlayerStatusChange(status: "idle" | "ready" | "stalling" | "error") {
+function handlePlayerStatusChange(status: DisplayPlayerStatus) {
+  latestPlayerStatus.value = status;
+  if (!isSyncGateUnlocked()) {
+    localPlayerStatus.value = "idle";
+    return;
+  }
+
   localPlayerStatus.value = status;
   reportDisplayedPlayerStatus(status);
 }
@@ -576,7 +651,9 @@ onBeforeUnmount(() => {
 watch(roomId, () => {
   currentUserRole.value = "unknown";
   localPlayerStatus.value = "idle";
+  latestPlayerStatus.value = "idle";
   lastReportedPlayerStatus = null;
+  syncGateState.value = getInitialSyncGateState();
   resetRoomRequestsState();
   resetRoomSettingsState();
   resetMemberActionState();
@@ -606,9 +683,23 @@ watch(activePanel, (panel) => {
 });
 
 watch(
-  () => realtime.roomVideoSource.value,
-  (source) => {
-    applyRealtimeVideoSource(source);
+  () => realtime.roomVideoSourceEvent.value,
+  (event) => {
+    if (!event) return;
+    if (!isSyncGateUnlocked()) return;
+
+    applyRealtimeVideoSource(event.state);
+    if (event.action !== "room_video_source_set" || !event.state) return;
+
+    void applyRealtimePlaybackState({
+      room_id: event.state.room_id,
+      status: "paused",
+      position_seconds: 0,
+      anchor_ts_ms: Date.now(),
+      playback_rate: 1,
+    }, {
+      syncPosition: true,
+    });
   },
 );
 watch(
@@ -619,6 +710,8 @@ watch(
       state: event?.state ?? null,
       syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
     });
+    if (!isSyncGateUnlocked()) return;
+
     void applyRealtimePlaybackState(event?.state ?? null, {
       syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
     });
@@ -674,55 +767,73 @@ watch(
             class="stageColumn"
           >
             <BaseCard class="stageCard">
-              <RoomPlayerStage
-                ref="playerStageRef"
-                class="playerStage"
-                :title="t('room.playback.emptyTitle')"
-                :hint="t('room.playback.emptyHint')"
-                :source-type="playbackSourceType"
-                :source-url="playbackSourceUrl"
-                :source-file="playbackSourceFile"
-                :source-revision="playbackSourceRevision"
-                :volume="playbackVolume"
-                :video-fullscreen-label="t('room.playback.controls.videoFullscreen')"
-                :exit-video-fullscreen-label="t('room.playback.controls.exitVideoFullscreen')"
-                :theater-mode-label="t('room.playback.controls.theaterMode')"
-                :exit-theater-mode-label="t('room.playback.controls.exitTheaterMode')"
-                :is-theater-mode="theaterLayout.isTheaterMode.value"
-                :theater-mode-available="theaterLayout.canUseTheaterMode.value"
-                @toggle-theater-mode="toggleTheaterMode"
-                @play-state-change="handlePlaybackPlayStateChange"
-                @player-status-change="handlePlayerStatusChange"
-                @duration-change="handlePlaybackDurationChange"
-                @time-change="handlePlaybackTimeChange"
-                @buffered-progress-change="playbackBufferedProgress = $event"
-                @buffered-ranges-change="playbackBufferedRanges = $event"
-              />
+              <div
+                class="stageContent"
+                :inert="syncGateState === 'locked'"
+              >
+                <RoomPlayerStage
+                  ref="playerStageRef"
+                  class="playerStage"
+                  :title="t('room.playback.emptyTitle')"
+                  :hint="t('room.playback.emptyHint')"
+                  :source-type="playbackSourceType"
+                  :source-url="playbackSourceUrl"
+                  :source-file="playbackSourceFile"
+                  :source-revision="playbackSourceRevision"
+                  :volume="playbackVolume"
+                  :video-fullscreen-label="t('room.playback.controls.videoFullscreen')"
+                  :exit-video-fullscreen-label="t('room.playback.controls.exitVideoFullscreen')"
+                  :theater-mode-label="t('room.playback.controls.theaterMode')"
+                  :exit-theater-mode-label="t('room.playback.controls.exitTheaterMode')"
+                  :is-theater-mode="theaterLayout.isTheaterMode.value"
+                  :theater-mode-available="theaterLayout.canUseTheaterMode.value"
+                  @toggle-theater-mode="toggleTheaterMode"
+                  @play-state-change="handlePlaybackPlayStateChange"
+                  @player-status-change="handlePlayerStatusChange"
+                  @duration-change="handlePlaybackDurationChange"
+                  @time-change="handlePlaybackTimeChange"
+                  @buffered-progress-change="playbackBufferedProgress = $event"
+                  @buffered-ranges-change="playbackBufferedRanges = $event"
+                  @seek-capability-change="handlePlaybackCanSeekChange"
+                />
 
-              <RoomPlaybackControls
-                class="playbackControls"
-                :is-playing="playbackIsPlaying"
-                :progress="playbackDisplayProgress"
-                :buffered-progress="playbackBufferedProgress"
-                :buffered-ranges="playbackBufferedRanges"
-                :volume="playbackVolume"
-                :source-type="playbackSourceType"
-                :source-url="playbackSourceUrl"
-                :source-file-name="playbackSourceFileName"
-                :current-time="playbackCurrentTime"
-                :duration="playbackDuration"
-                :timeline-label="playbackTimelineLabel"
-                :play-label="t('room.playback.controls.play')"
-                :pause-label="t('room.playback.controls.pause')"
-                :sync-label="t('room.playback.controls.syncNow')"
-                :source-label="t('room.playback.controls.source')"
-                :source-panel-title="t('room.sourcePanel.title')"
-                :volume-label="t('room.playback.controls.volume')"
-                @toggle-play="togglePlayback"
-                @update:progress="handlePlaybackProgressChange"
-                @update:volume="handlePlaybackVolumeChange"
-                @apply-source="handleApplyPlaybackSource"
-              />
+                <RoomPlaybackControls
+                  class="playbackControls"
+                  :is-playing="playbackIsPlaying"
+                  :progress="playbackDisplayProgress"
+                  :buffered-progress="playbackBufferedProgress"
+                  :buffered-ranges="playbackBufferedRanges"
+                  :seek-disabled="!playbackCanSeek"
+                  :volume="playbackVolume"
+                  :source-type="playbackSourceType"
+                  :source-url="playbackSourceUrl"
+                  :source-file-name="playbackSourceFileName"
+                  :current-time="playbackCurrentTime"
+                  :duration="playbackDuration"
+                  :timeline-label="playbackTimelineLabel"
+                  :play-label="t('room.playback.controls.play')"
+                  :pause-label="t('room.playback.controls.pause')"
+                  :sync-label="t('room.playback.controls.syncNow')"
+                  :source-label="t('room.playback.controls.source')"
+                  :source-panel-title="t('room.sourcePanel.title')"
+                  :volume-label="t('room.playback.controls.volume')"
+                  @toggle-play="togglePlayback"
+                  @update:progress="handlePlaybackProgressChange"
+                  @update:volume="handlePlaybackVolumeChange"
+                  @apply-source="handleApplyPlaybackSource"
+                />
+              </div>
+
+              <button
+                v-if="syncGateState === 'locked'"
+                class="stageSyncGateOverlay"
+                type="button"
+                @click="unlockSyncGate"
+              >
+                <span class="stageSyncGatePrompt">
+                  <span class="stageSyncGateTitle">{{ t('room.playback.syncGateStart') }}</span>
+                </span>
+              </button>
             </BaseCard>
           </section>
 
@@ -937,11 +1048,16 @@ watch(
 }
 
 .stageCard {
+  position: relative;
   padding: 16px;
-  display: grid;
-  gap: 14px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--c-surface) 92%, white), color-mix(in srgb, var(--c-surface) 86%, var(--c-bg)));
+  overflow: hidden;
+}
+
+.stageContent {
+  display: grid;
+  gap: 14px;
 }
 
 .mainGrid.theaterMode .stageCard {
@@ -951,6 +1067,11 @@ watch(
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.mainGrid.theaterMode .stageContent {
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
@@ -969,6 +1090,72 @@ watch(
 
 .mainGrid.theaterMode .playbackControls {
   width: 100%;
+}
+
+.stageSyncGateOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  border: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--c-primary) 14%, transparent), transparent 44%),
+    color-mix(in srgb, var(--c-surface) 70%, transparent);
+  color: var(--c-text);
+  cursor: pointer;
+  transition: background-color 160ms ease;
+  backdrop-filter: blur(3px);
+}
+
+.stageSyncGateOverlay:hover {
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--c-primary) 18%, transparent), transparent 46%),
+    color-mix(in srgb, var(--c-surface) 64%, transparent);
+}
+
+:global([data-theme="dark"]) .stageSyncGateOverlay {
+  background:
+    radial-gradient(circle at center, rgb(98 165 255 / 0.16), transparent 42%),
+    rgb(3 7 12 / 0.68);
+  color: rgb(245 248 252 / 0.96);
+}
+
+:global([data-theme="dark"]) .stageSyncGateOverlay:hover {
+  background:
+    radial-gradient(circle at center, rgb(98 165 255 / 0.22), transparent 44%),
+    rgb(3 7 12 / 0.62);
+}
+
+.stageSyncGatePrompt {
+  min-width: min(220px, 100%);
+  min-height: 52px;
+  padding: 12px 20px;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 18%, var(--c-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--c-surface) 86%, white);
+  box-shadow:
+    0 18px 42px rgb(20 31 45 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:global([data-theme="dark"]) .stageSyncGatePrompt {
+  border-color: rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 0.1);
+  box-shadow:
+    0 18px 42px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.stageSyncGateTitle {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .theaterDivider {

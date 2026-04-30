@@ -1,21 +1,20 @@
 import { computed, onBeforeUnmount, ref } from "vue";
-import Hls from "hls.js";
-import { formatTime, isHlsUrl, readBufferedRanges, readSeekableRanges } from "./mediaUtils";
+import { formatTime, readBufferedRanges, readSeekableRanges } from "./mediaUtils";
 import type { MediaEngineKind } from "./mediaEngineTypes";
-import { HLS_POC_PLAYER_CONFIG, type HlsPocPlayerConfig } from "./playerConfig";
+import { ROOM_PLAYER_CONFIG, type RoomPlayerConfig } from "./playerConfig";
 import type {
   BufferedRange,
   MediaHealthState,
   PlaybackStateInput,
   PlayerState,
-  PocLogger,
+  MediaEngineLogger,
 } from "./types";
 
-export function useHlsPocMediaEngine(options: {
-  writeLog: PocLogger;
-  config?: HlsPocPlayerConfig;
+export function useNativeVideoCore(options: {
+  writeLog: MediaEngineLogger;
+  config?: RoomPlayerConfig;
 }) {
-  const config = options.config ?? HLS_POC_PLAYER_CONFIG;
+  const config = options.config ?? ROOM_PLAYER_CONFIG;
   const videoRef = ref<HTMLVideoElement | null>(null);
   const sourceUrl = ref("");
   const appliedUrl = ref("");
@@ -30,11 +29,11 @@ export function useHlsPocMediaEngine(options: {
   const volume = ref(100);
   const activeEngineKind = ref<MediaEngineKind | "none">("none");
 
-  let hls: Hls | null = null;
   let lastBufferedSignature = "";
   let pendingPlayback: PlaybackStateInput | null = null;
   let readyConfirmTimer: number | null = null;
   let stallingErrorTimer: number | null = null;
+  let bufferedSeekSettleTimer: number | null = null;
   let pendingBufferedSeek = false;
 
   const timelineLabel = computed(() =>
@@ -129,10 +128,8 @@ export function useHlsPocMediaEngine(options: {
   function cleanupPlayer() {
     clearReadyConfirmation();
     clearStallingErrorTimer();
-    hls?.destroy();
-    hls = null;
     lastBufferedSignature = "";
-    pendingBufferedSeek = false;
+    clearBufferedSeekSettle();
     activeEngineKind.value = "none";
 
     const video = videoRef.value;
@@ -146,7 +143,8 @@ export function useHlsPocMediaEngine(options: {
   async function loadSource(
     url: string,
     playback: PlaybackStateInput | null = null,
-    engineKind: MediaEngineKind = isHlsUrl(url) ? "hls" : "direct_video",
+    engineKind: MediaEngineKind,
+    loadOptions: { attachMediaSource?: boolean } = {},
   ) {
     cleanupPlayer();
     updateMediaMetrics();
@@ -172,32 +170,9 @@ export function useHlsPocMediaEngine(options: {
       url,
       playback,
       engineKind,
-      hlsSupported: Hls.isSupported(),
-      nativeHlsSupported: Boolean(video.canPlayType("application/vnd.apple.mpegurl")),
     });
 
-    if (engineKind === "hls" && Hls.isSupported()) {
-      hls = new Hls({
-        enableWorker: config.hls.enableWorker,
-        lowLatencyMode: config.hls.lowLatencyMode,
-        maxBufferLength: config.hls.maxBufferLength,
-        maxMaxBufferLength: config.hls.maxMaxBufferLength,
-        backBufferLength: config.hls.backBufferLength,
-        maxBufferSize: config.hls.maxBufferSize,
-      });
-
-      bindHlsEvents(hls);
-      hls.attachMedia(video);
-      hls.loadSource(url);
-      return;
-    }
-
-    if (
-      engineKind === "hls" &&
-      !video.canPlayType("application/vnd.apple.mpegurl")
-    ) {
-      errorMessage.value = "HLS is not supported in this browser";
-      setMediaHealthState("error", "hlsUnsupported");
+    if (loadOptions.attachMediaSource === false) {
       return;
     }
 
@@ -299,60 +274,6 @@ export function useHlsPocMediaEngine(options: {
     }
 
     options.writeLog("volumeChanged", { volume: normalized });
-  }
-
-  function bindHlsEvents(instance: Hls) {
-    instance.on(Hls.Events.MEDIA_ATTACHED, () => {
-      options.writeLog("hls:mediaAttached");
-    });
-
-    instance.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-      options.writeLog("hls:manifestParsed", {
-        levels: data.levels.length,
-        firstLevel: data.firstLevel,
-      });
-    });
-
-    instance.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
-      options.writeLog("hls:levelLoaded", {
-        level: data.level,
-        live: data.details.live,
-        targetduration: data.details.targetduration,
-        fragments: data.details.fragments.length,
-      });
-    });
-
-    instance.on(Hls.Events.FRAG_LOADED, (_event, data) => {
-      options.writeLog("hls:fragLoaded", {
-        level: data.frag.level,
-        sn: data.frag.sn,
-        start: Number(data.frag.start.toFixed(3)),
-        duration: Number(data.frag.duration.toFixed(3)),
-      });
-    });
-
-    instance.on(Hls.Events.BUFFER_APPENDED, () => {
-      updateMediaMetrics();
-      logProgressIfChanged("hls:bufferAppended");
-      scheduleReadyConfirmation("hls:bufferAppended");
-    });
-
-    instance.on(Hls.Events.ERROR, (_event, data) => {
-      options.writeLog("hls:error", {
-        type: data.type,
-        details: data.details,
-        fatal: data.fatal,
-        error: data.error?.message ?? null,
-      });
-
-      if (data.fatal) {
-        clearReadyConfirmation();
-        setMediaHealthState("error", "hlsFatalError", {
-          details: data.details,
-        });
-        errorMessage.value = data.error?.message ?? data.details;
-      }
-    });
   }
 
   function logProgressIfChanged(event: string) {
@@ -497,6 +418,37 @@ export function useHlsPocMediaEngine(options: {
     stallingErrorTimer = null;
   }
 
+  function clearBufferedSeekSettle() {
+    if (bufferedSeekSettleTimer != null) {
+      window.clearTimeout(bufferedSeekSettleTimer);
+      bufferedSeekSettleTimer = null;
+    }
+    pendingBufferedSeek = false;
+  }
+
+  function startBufferedSeekSettle(reason: string) {
+    if (!appliedUrl.value) return;
+
+    pendingBufferedSeek = true;
+    if (bufferedSeekSettleTimer != null) {
+      window.clearTimeout(bufferedSeekSettleTimer);
+    }
+
+    bufferedSeekSettleTimer = window.setTimeout(() => {
+      bufferedSeekSettleTimer = null;
+      pendingBufferedSeek = false;
+      updateMediaMetrics();
+
+      const evaluation = evaluateReadyCandidate();
+      if (evaluation.ready) {
+        scheduleReadyConfirmation(`${reason}:bufferedSeekSettled`);
+        return;
+      }
+
+      setMediaHealthStalling(`${reason}:bufferedSeekSettleExpired`);
+    }, config.bufferedSeekSettleMs);
+  }
+
   function armStallingErrorTimer(reason: string) {
     clearStallingErrorTimer();
     if (!appliedUrl.value || config.stallingToErrorMs <= 0) return;
@@ -563,9 +515,11 @@ export function useHlsPocMediaEngine(options: {
 
     if (evaluation.ready) {
       clearReadyConfirmation();
+      startBufferedSeekSettle(reason);
       return;
     }
 
+    clearBufferedSeekSettle();
     setMediaHealthStalling(`${reason}:targetNotReady`);
   }
 
@@ -630,14 +584,17 @@ export function useHlsPocMediaEngine(options: {
     } else if (eventName === "waiting" || eventName === "stalled") {
       if (!pendingBufferedSeek) {
         setMediaHealthStalling(`video:${eventName}`);
+      } else {
+        scheduleReadyConfirmation(`video:${eventName}:bufferedSeek`);
       }
       setPlayerState(videoRef.value?.paused ? "paused" : "playing", `video:${eventName}`);
     } else if (eventName === "seeking") {
       if (!pendingBufferedSeek) {
         setMediaHealthStalling("video:seeking");
+      } else {
+        scheduleReadyConfirmation("video:seeking:bufferedSeek");
       }
     } else if (eventName === "seeked") {
-      pendingBufferedSeek = false;
       scheduleReadyConfirmation(eventName);
     } else if (eventName === "ended") {
       setPlayerState("paused", "video:ended");
@@ -689,6 +646,26 @@ export function useHlsPocMediaEngine(options: {
     void applyPlayback(playback, { syncPosition: true });
   }
 
+  function handleBufferAppended(reason: string) {
+    updateMediaMetrics();
+    logProgressIfChanged(reason);
+    scheduleReadyConfirmation(reason);
+  }
+
+  function setFatalMediaError(
+    reason: string,
+    message: string,
+    data: Record<string, unknown> = {},
+  ) {
+    clearReadyConfirmation();
+    setMediaHealthState("error", reason, data);
+    errorMessage.value = message;
+  }
+
+  function canPlayNativeHls() {
+    return Boolean(videoRef.value?.canPlayType("application/vnd.apple.mpegurl"));
+  }
+
   onBeforeUnmount(() => {
     cleanupPlayer();
   });
@@ -721,5 +698,10 @@ export function useHlsPocMediaEngine(options: {
     handleVideoError,
     handleTimeUpdate,
     handleProgress,
+    handleBufferAppended,
+    setFatalMediaError,
+    canPlayNativeHls,
   };
 }
+
+export type NativeVideoCore = ReturnType<typeof useNativeVideoCore>;

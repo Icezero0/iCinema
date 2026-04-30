@@ -372,6 +372,7 @@ export default {
       syncPolicyUnavailable: "同步策略暂不可用",
       syncPolicyAuto: "同步策略：自动同步",
       syncPolicyManual: "同步策略：手动同步",
+      syncGateStart: "点击以开始同步",
       emptyTitle: "未设置播放源",
       emptyHint: "通过下方播放源按钮选择外链或本地文件后即可开始播放。",
       timelineUnavailable: "00:00 / 00:00",

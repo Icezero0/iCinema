@@ -15,7 +15,7 @@ export type RoomPlayerStageHandle = {
   togglePlayback: () => Promise<void>;
   pauseVideo: () => void;
   seekToPercent: (percent: number) => void;
-  seekToSeconds: (seconds: number) => void;
+  seekToSeconds: (seconds: number) => Promise<void>;
   captureCurrentFrame: () => Promise<Blob>;
 };
 
@@ -45,6 +45,7 @@ function formatPlaybackTime(seconds: number) {
 }
 
 const PENDING_SEEK_EPSILON_SECONDS = 0.5;
+const ROOM_PLAYBACK_APPLY_DEBUG = false;
 
 export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   const entitiesStore = useEntitiesStore();
@@ -54,6 +55,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   const playbackProgress = ref(0);
   const playbackBufferedProgress = ref(0);
   const playbackBufferedRanges = ref<Array<{ startPercent: number; endPercent: number }>>([]);
+  const playbackCanSeek = ref(false);
   const pendingSeekProgress = ref<number | null>(null);
   const playbackVolume = ref(DEFAULT_LOCAL_ROOM_VOLUME);
   const playbackCurrentTime = ref(0);
@@ -91,7 +93,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       logRealtimePlaybackApply("seekForRealtimeState", {
         positionSeconds: state.position_seconds,
       });
-      options.playerStageRef.value?.seekToSeconds(state.position_seconds);
+      await options.playerStageRef.value?.seekToSeconds(state.position_seconds);
     }
 
     if (state.status === "playing") {
@@ -108,6 +110,8 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   }
 
   function handlePlaybackProgressChange(value: number) {
+    if (!playbackCanSeek.value) return;
+
     options.playerStageRef.value?.pauseVideo();
     playbackIsPlaying.value = false;
     const normalizedValue = Math.min(100, Math.max(0, value));
@@ -164,15 +168,35 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     pendingRealtimePlayback.value = null;
     playbackBufferedProgress.value = 0;
     playbackBufferedRanges.value = [];
+    playbackCanSeek.value = false;
     playbackIsPlaying.value = false;
     playbackSourceRevision.value += 1;
   }
 
   function applyRealtimeVideoSource(source: RoomRealtimeVideoSourceState | null) {
+    const nextSourceUrl = source?.source_type === "external_url"
+      ? source.external_url?.trim() ?? ""
+      : "";
+    const isSameExternalSource =
+      Boolean(source) &&
+      source.source_type === "external_url" &&
+      playbackSourceType.value === "external_url" &&
+      playbackSourceUrl.value === nextSourceUrl;
+
+    if (isSameExternalSource) {
+      pendingSeekProgress.value = null;
+      pendingRealtimePlayback.value = null;
+      playbackIsPlaying.value = false;
+      playbackCurrentTime.value = 0;
+      playbackProgress.value = 0;
+      return "soft-reset" as const;
+    }
+
     playbackSourceFile.value = null;
     playbackSourceFileName.value = "";
     playbackBufferedProgress.value = 0;
     playbackBufferedRanges.value = [];
+    playbackCanSeek.value = false;
     playbackCurrentTime.value = 0;
     playbackDuration.value = 0;
     playbackProgress.value = 0;
@@ -184,15 +208,16 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       playbackSourceType.value = "external_url";
       playbackSourceUrl.value = "";
       playbackSourceRevision.value += 1;
-      return;
+      return "cleared" as const;
     }
 
     playbackSourceType.value = source.source_type;
     playbackSourceUrl.value =
       source.source_type === "external_url"
-        ? source.external_url ?? ""
+        ? source.external_url?.trim() ?? ""
         : "";
     playbackSourceRevision.value += 1;
+    return "reloaded" as const;
   }
 
   async function applyRealtimePlaybackState(
@@ -233,6 +258,8 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   }
 
   function logRealtimePlaybackApply(event: string, extra: Record<string, unknown> = {}) {
+    if (!ROOM_PLAYBACK_APPLY_DEBUG) return;
+
     console.info("[iCinema playback apply debug]", {
       event,
       roomId: options.roomId.value,
@@ -248,12 +275,10 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   async function handleCopyPlayerScreenshot() {
     try {
       const blob = await options.playerStageRef.value?.captureCurrentFrame();
-      if (!blob) {
-        throw new Error(options.t("room.playback.screenshotNoFrame"));
-      }
+      if (!blob) throw new Error("screenshotNoFrame");
 
       if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-        throw new Error(options.t("room.playback.screenshotClipboardUnsupported"));
+        throw new Error("screenshotClipboardUnsupported");
       }
 
       await navigator.clipboard.write([
@@ -264,11 +289,16 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
         tone: "success",
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "";
+      const knownErrorKeys = new Set([
+        "screenshotNoFrame",
+        "screenshotClipboardUnsupported",
+        "screenshotFailed",
+      ]);
       toasts.push({
-        message:
-          error instanceof Error && error.message
-            ? error.message
-            : options.t("room.playback.screenshotFailed"),
+        message: knownErrorKeys.has(errorMessage)
+          ? options.t(`room.playback.${errorMessage}`)
+          : options.t("room.playback.screenshotFailed"),
         tone: "danger",
       });
     }
@@ -282,6 +312,10 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackVolume.value = entitiesStore.setRoomLocalVolume(options.roomId.value, value);
   }
 
+  function handlePlaybackCanSeekChange(value: boolean) {
+    playbackCanSeek.value = value;
+  }
+
   function resetPlaybackState() {
     playbackIsPlaying.value = false;
     playbackProgress.value = 0;
@@ -289,6 +323,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     pendingRealtimePlayback.value = null;
     playbackBufferedProgress.value = 0;
     playbackBufferedRanges.value = [];
+    playbackCanSeek.value = false;
     playbackCurrentTime.value = 0;
     playbackDuration.value = 0;
     playbackSourceType.value = "external_url";
@@ -308,6 +343,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackDisplayProgress,
     playbackBufferedProgress,
     playbackBufferedRanges,
+    playbackCanSeek,
     playbackVolume,
     playbackCurrentTime,
     playbackDuration,
@@ -327,6 +363,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     handleCopyPlayerScreenshot,
     loadLocalPlaybackVolume,
     handlePlaybackVolumeChange,
+    handlePlaybackCanSeekChange,
     resetPlaybackState,
     resetPlaybackVolume,
   };

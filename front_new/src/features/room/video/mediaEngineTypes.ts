@@ -1,5 +1,6 @@
 import type { ComputedRef, Ref } from "vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import { isHlsUrl } from "./mediaUtils";
 import type {
   BufferedRange,
   MediaHealthState,
@@ -19,7 +20,6 @@ export type MediaEngineSource =
       sourceType: "local_file";
       engineKind: Extract<MediaEngineKind, "local_video">;
       file: File;
-      objectUrl: string;
     };
 
 export type MediaEngineLoadInput =
@@ -83,7 +83,6 @@ export function classifyMediaEngineSource(
       sourceType: "local_file",
       engineKind: "local_video",
       file: input.localFile,
-      objectUrl: URL.createObjectURL(input.localFile),
     };
   }
 
@@ -92,13 +91,9 @@ export function classifyMediaEngineSource(
 
   return {
     sourceType: "external_url",
-    engineKind: isHlsLikeUrl(url) ? "hls" : "direct_video",
+    engineKind: isHlsUrl(url) ? "hls" : "direct_video",
     url,
   };
-}
-
-function isHlsLikeUrl(url: string) {
-  return url.split(/[?#]/, 1)[0]?.toLowerCase().endsWith(".m3u8") ?? false;
 }
 
 export function toMediaEngineLoadInput(

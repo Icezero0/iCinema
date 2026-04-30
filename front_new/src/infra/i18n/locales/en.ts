@@ -372,6 +372,7 @@ export default {
       syncPolicyUnavailable: "Sync policy unavailable",
       syncPolicyAuto: "Sync policy: auto sync",
       syncPolicyManual: "Sync policy: manual sync",
+      syncGateStart: "Click to start sync",
       emptyTitle: "No playback source selected",
       emptyHint: "Choose an external URL or local file from the source control below to start playback.",
       timelineUnavailable: "00:00 / 00:00",
