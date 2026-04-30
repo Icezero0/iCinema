@@ -1,28 +1,23 @@
-/* ===== Dark Theme ===== */
+:root[data-theme="dark"] {
+  --c-bg: rgb(12, 15, 22);
 
-[data-theme="dark"] {
-  /* Background Colors */
-  --color-background: var(--vt-c-black);
-  --color-background-soft: var(--vt-c-black-soft);
-  --color-background-mute: var(--vt-c-black-mute);
+  --c-surface: rgb(18, 22, 32);
 
-  /* Border Colors */
-  --color-border: var(--vt-c-divider-dark-2);
-  --color-border-hover: var(--vt-c-divider-dark-1);
+  --c-border: rgba(255, 255, 255, 0.10);
 
-  /* Text Colors */
-  --color-heading: var(--vt-c-text-dark-1);
-  --color-text: var(--vt-c-text-dark-2);
-  --color-text-secondary: rgba(235, 235, 235, 0.44);
+  --c-text: rgba(255, 255, 255, 0.90);
+  --c-text-muted: rgba(255, 255, 255, 0.62);
 
-  /* Component Specific Dark Theme Colors */
-  --video-gradient: linear-gradient(120deg, #23283a 0%, #181c24 100%);
-  --control-bg: rgba(35, 40, 58, 0.98);
-  --modal-bg: rgba(0, 0, 0, 0.8);
+  --c-danger: rgb(248, 113, 113);
+  --c-danger-hover: rgb(239, 68, 68);
 
-  /* Dark theme specific overrides */
-  --primary-color-dark: #90caf9;
-  --success-color-dark: #66bb6a;
-  --danger-color-dark: #ef5350;
-  --warning-color-dark: #ffca28;
+  --c-hover: rgba(255, 255, 255, 0.08);
+
+  --c-primary: rgb(96, 165, 250);
+  --c-primary-hover: rgb(59, 130, 246);
+  --c-primary-text: rgb(10, 12, 14);
+
+  --auth-tint-1: rgba(120, 220, 240, 0.12);
+  --auth-tint-2: rgba(120, 220, 240, 0.08);
+  --auth-tint-3: rgba(120, 220, 240, 0.05);
 }
