@@ -33,13 +33,13 @@ def create_room_settings_table(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             room_id INTEGER NOT NULL UNIQUE,
             selected_room_video_source_type VARCHAR(32) NOT NULL DEFAULT 'external_url',
-            sync_policy VARCHAR(32) NOT NULL DEFAULT 'auto_pause',
+            sync_policy VARCHAR(32) NOT NULL DEFAULT 'auto_sync',
             active_sync_permission VARCHAR(32) NOT NULL DEFAULT 'owner_and_manager',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
             CHECK (selected_room_video_source_type IN ('external_url', 'local_file')),
-            CHECK (sync_policy IN ('auto_pause', 'disabled')),
+            CHECK (sync_policy IN ('auto_sync', 'disabled')),
             CHECK (active_sync_permission IN ('owner_only', 'owner_and_manager', 'all_members'))
         )
         """
@@ -53,7 +53,7 @@ def migrate_room_settings_table(conn: sqlite3.Connection) -> None:
     """
     将旧版 room_settings 迁移到新版结构：
     - media_source_type -> selected_room_video_source_type
-    - sync_policy 收敛为 auto_pause / disabled
+    - sync_policy 收敛为 auto_sync / disabled
     """
     cur = conn.cursor()
 
@@ -97,9 +97,9 @@ def migrate_room_settings_table(conn: sqlite3.Connection) -> None:
                 ELSE 'external_url'
             END,
             CASE
-                WHEN sync_policy = 'auto_pause' THEN 'auto_pause'
+                WHEN sync_policy IN ('auto_sync', 'auto_pause') THEN 'auto_sync'
                 WHEN sync_policy IN ('auto_seek', 'auto_speed', 'disabled') THEN 'disabled'
-                ELSE 'auto_pause'
+                ELSE 'auto_sync'
             END,
             CASE
                 WHEN active_sync_permission IN ('owner_only', 'owner_and_manager', 'all_members')
@@ -143,7 +143,7 @@ def backfill_room_settings(conn: sqlite3.Connection) -> None:
         SELECT
             r.id,
             'external_url',
-            'auto_pause',
+            'auto_sync',
             'owner_and_manager',
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP
