@@ -8,9 +8,31 @@
 
 所有迁移脚本位于 `scripts/migrates/` 目录。
 
+## 推荐执行方式
+
+Windows：
+
+```bat
+scripts\migrates\migrate.bat
+```
+
+macOS / Linux：
+
+```sh
+sh scripts/migrates/migrate.sh
+```
+
+上述 wrapper 会优先使用项目 `venv` 中的 Python，先调用 `migrate.py` 完成主体迁移，再执行 Alembic baseline stamp。
+
 ## 迁移脚本
 
 - 入口脚本 `migrate.py`，用于串联执行各个迁移脚本
+  - 只负责主体迁移，不直接执行 Alembic stamp
+
+- wrapper 脚本 `migrate.bat` / `migrate.sh`
+  - 主体迁移成功后，会执行 Alembic baseline stamp
+  - 当前 baseline revision 为 Alembic `head`
+  - stamp 只记录当前数据库已经完成初始结构迁移，不会执行 Alembic 建表 SQL
   - `migrate_user_domain.py`
     - 为 `users` 表新增 `avatar_key` 字段
     - 将原 `avatar_path` 中的文件名提取出来写入 `avatar_key`
@@ -26,6 +48,8 @@
   - `migrate_room_settings.py`
     - 创建或重建 `room_settings` 表
     - 回填每个房间的默认房间设置
+    - 将旧版同步策略 `auto_pause` 迁移为新版 `auto_sync`
+    - 当前有效同步策略为 `auto_sync` / `disabled`
 
   - `migrate_room_join_request.py`
     - 创建 `room_join_requests` 表及其索引/触发器
@@ -49,6 +73,7 @@
   
 - 迁移清理脚本 `migrate_cleanup_legacy_fields.py`
   - 上述迁移脚本执行后，确认系统运行没有问题后，再执行该脚本清理剩余内容
+  - cleanup 是可选的后续清理步骤，不负责 Alembic stamp
   - 删除以下字段
     - users.avatar_path
     - room_members.user_type

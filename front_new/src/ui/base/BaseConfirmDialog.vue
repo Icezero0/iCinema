@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BaseCard from "@/ui/base/BaseCard.vue";
 import BaseButton from "@/ui/base/BaseButton.vue";
 
@@ -37,6 +37,13 @@ const emit = defineEmits<{
 }>();
 
 const open = computed(() => props.modelValue);
+const dialogTeleportTarget = ref<HTMLElement | "body">("body");
+
+function syncDialogTeleportTarget() {
+  dialogTeleportTarget.value = document.fullscreenElement instanceof HTMLElement
+    ? document.fullscreenElement
+    : "body";
+}
 
 function close() {
   emit("update:modelValue", false);
@@ -75,15 +82,20 @@ watch(
   }
 );
 
-onMounted(() => window.addEventListener("keydown", onKeydown));
+onMounted(() => {
+  syncDialogTeleportTarget();
+  window.addEventListener("keydown", onKeydown);
+  document.addEventListener("fullscreenchange", syncDialogTeleportTarget);
+});
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  document.removeEventListener("fullscreenchange", syncDialogTeleportTarget);
   document.documentElement.style.overflow = "";
 });
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="dialogTeleportTarget">
     <Transition name="fade">
       <div v-if="open" class="overlay" role="presentation" @click="onOverlayClick">
         <Transition name="pop">

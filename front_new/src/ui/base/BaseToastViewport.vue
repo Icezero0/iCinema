@@ -1,13 +1,30 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { useToastsStore } from "@/stores/toasts.store";
 
 const toasts = useToastsStore();
 const { items } = storeToRefs(toasts);
+const toastTeleportTarget = ref<HTMLElement | "body">("body");
+
+function syncToastTeleportTarget() {
+  toastTeleportTarget.value = document.fullscreenElement instanceof HTMLElement
+    ? document.fullscreenElement
+    : "body";
+}
+
+onMounted(() => {
+  syncToastTeleportTarget();
+  document.addEventListener("fullscreenchange", syncToastTeleportTarget);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", syncToastTeleportTarget);
+});
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="toastTeleportTarget">
     <div class="toastViewport" aria-live="polite" aria-atomic="true">
       <TransitionGroup name="toast">
         <div
@@ -30,7 +47,7 @@ const { items } = storeToRefs(toasts);
   top: 68px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 120;
+  z-index: 300;
   display: grid;
   gap: 10px;
   width: min(420px, calc(100vw - 24px));

@@ -27,5 +27,5 @@ export type ChatMessage = {
   self?: boolean;
   avatarVariant?: "default" | "room";
   role?: RoomRole;
-  status?: MemberStatus | "idle";
+  status?: MemberStatus;
 };

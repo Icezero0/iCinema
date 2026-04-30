@@ -44,6 +44,7 @@ const measuredBlockWidth = ref<number | null>(null);
 const contextMenuOpen = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
+const contextMenuTeleportTarget = ref<HTMLElement | "body">("body");
 let imageResizeObserver: ResizeObserver | null = null;
 let contentResizeObserver: ResizeObserver | null = null;
 
@@ -145,6 +146,12 @@ function closeContextMenu() {
   contextMenuOpen.value = false;
 }
 
+function syncContextMenuTeleportTarget() {
+  contextMenuTeleportTarget.value = document.fullscreenElement instanceof HTMLElement
+    ? document.fullscreenElement
+    : "body";
+}
+
 const {
   openMediaViewer,
   copyMedia,
@@ -179,6 +186,7 @@ function positionContextMenu() {
 }
 
 async function openContextMenuAt(x: number, y: number) {
+  syncContextMenuTeleportTarget();
   contextMenuX.value = x;
   contextMenuY.value = y;
   contextMenuOpen.value = true;
@@ -251,6 +259,8 @@ function handleContextMenu(event: MouseEvent) {
 onMounted(() => {
   if (props.context !== "message") return;
 
+  syncContextMenuTeleportTarget();
+  document.addEventListener("fullscreenchange", syncContextMenuTeleportTarget);
   syncMediaNaturalSize();
   syncMediaAvailableWidth();
 
@@ -274,6 +284,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (props.context !== "message") return;
+  document.removeEventListener("fullscreenchange", syncContextMenuTeleportTarget);
   imageResizeObserver?.disconnect();
   imageResizeObserver = null;
   contentResizeObserver?.disconnect();
@@ -380,7 +391,7 @@ watch(contextMenuOpen, (isOpen) => {
     </span>
   </span>
 
-  <Teleport to="body">
+  <Teleport :to="contextMenuTeleportTarget">
     <Transition name="contextMenuFade">
       <div
         v-if="contextMenuOpen"
@@ -539,7 +550,7 @@ watch(contextMenuOpen, (isOpen) => {
   border-radius: 14px;
   background: color-mix(in srgb, var(--c-surface) 94%, var(--c-bg));
   box-shadow: 0 18px 50px rgb(0 0 0 / 0.14);
-  z-index: 130;
+  z-index: 240;
 }
 
 .contextMenuFade-enter-active,

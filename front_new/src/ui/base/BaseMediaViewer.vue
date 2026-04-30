@@ -14,6 +14,7 @@ const offsetX = ref(0);
 const offsetY = ref(0);
 const isDragging = ref(false);
 const suppressCloseUntil = ref(0);
+const viewerTeleportTarget = ref<HTMLElement | "body">("body");
 let dragPointerId: number | null = null;
 let dragStartX = 0;
 let dragStartY = 0;
@@ -61,6 +62,12 @@ const imageStyle = computed(() => ({
 
 function closeViewer() {
   viewer.closeViewer();
+}
+
+function syncViewerTeleportTarget() {
+  viewerTeleportTarget.value = document.fullscreenElement instanceof HTMLElement
+    ? document.fullscreenElement
+    : "body";
 }
 
 function resetViewerState() {
@@ -164,10 +171,12 @@ function handlePointerUp(event: PointerEvent) {
 }
 
 onMounted(() => {
+  syncViewerTeleportTarget();
   window.addEventListener("keydown", handleKeydown);
   window.addEventListener("pointermove", handlePointerMove, { passive: true });
   window.addEventListener("pointerup", handlePointerUp, { passive: true });
   window.addEventListener("pointercancel", handlePointerUp, { passive: true });
+  document.addEventListener("fullscreenchange", syncViewerTeleportTarget);
 });
 
 onBeforeUnmount(() => {
@@ -175,6 +184,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("pointermove", handlePointerMove);
   window.removeEventListener("pointerup", handlePointerUp);
   window.removeEventListener("pointercancel", handlePointerUp);
+  document.removeEventListener("fullscreenchange", syncViewerTeleportTarget);
   stageResizeObserver?.disconnect();
   stageResizeObserver = null;
 });
@@ -187,6 +197,7 @@ watch(open, (isOpen) => {
     return;
   }
 
+  syncViewerTeleportTarget();
   void nextTick(() => {
     syncStageSize();
     attachStageObserver();
@@ -207,7 +218,7 @@ watch(
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="viewerTeleportTarget">
     <Transition name="viewer-fade">
       <div
         v-if="open"
@@ -239,7 +250,7 @@ watch(
 .viewerOverlay {
   position: fixed;
   inset: 0;
-  z-index: 140;
+  z-index: 260;
   display: grid;
   place-items: center;
   background: rgb(0 0 0 / 0.84);

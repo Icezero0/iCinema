@@ -203,6 +203,20 @@ export async function getMyRooms(params?: {
   } satisfies RoomListResponse;
 }
 
+export async function getMyOwnedRooms(params?: {
+  page?: number;
+  page_size?: number;
+}) {
+  const { data } = await http.get<UserRoomSummaryListResponse>("/users/me/owned-rooms", {
+    params,
+  });
+
+  return {
+    ...data,
+    items: data.items.map(mapUserRoomSummary),
+  } satisfies RoomListResponse;
+}
+
 export async function createRoom(payload: RoomCreatePayload) {
   const { data } = await http.post<RoomResponse>("/rooms", payload);
   return mapRoomResponse(data);
@@ -258,6 +272,24 @@ export async function inviteRoomJoinRequest(
 
 export async function removeRoomMember(roomId: number, targetUserId: number) {
   await http.delete(`/rooms/${roomId}/members/${targetUserId}`);
+}
+
+export async function leaveRoom(roomId: number) {
+  await http.delete(`/rooms/${roomId}/members/me`);
+}
+
+export async function setRoomMemberManager(roomId: number, targetUserId: number) {
+  const { data } = await http.put<RoomMember>(
+    `/rooms/${roomId}/members/${targetUserId}/manager`,
+  );
+  return data;
+}
+
+export async function unsetRoomMemberManager(roomId: number, targetUserId: number) {
+  const { data } = await http.delete<RoomMember>(
+    `/rooms/${roomId}/members/${targetUserId}/manager`,
+  );
+  return data;
 }
 
 export async function getRoomSettings(roomId: number) {

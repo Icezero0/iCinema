@@ -4,6 +4,7 @@ import RoomMemberAvatar from "@/features/room/components/RoomMemberAvatar.vue";
 import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
 import ChatInlineMedia from "./ChatInlineMedia.vue";
 import type { ChatSegment } from "@/features/chat/types";
+import type { MemberStatus } from "@/features/room/types";
 
 const props = defineProps<{
   author: string;
@@ -14,7 +15,7 @@ const props = defineProps<{
   showAuthor?: boolean;
   avatarVariant?: "default" | "room";
   role?: "owner" | "manager" | "member";
-  status?: "playing" | "paused" | "buffering" | "offline" | "error" | "idle";
+  status?: MemberStatus;
 }>();
 
 const firstSegment = computed(() => props.segments[0] ?? null);

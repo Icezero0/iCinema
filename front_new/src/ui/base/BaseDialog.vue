@@ -36,6 +36,13 @@ const emit = defineEmits<{
 
 const open = computed(() => props.modelValue);
 const pointerDownOnOverlay = ref(false);
+const dialogTeleportTarget = ref<HTMLElement | "body">("body");
+
+function syncDialogTeleportTarget() {
+  dialogTeleportTarget.value = document.fullscreenElement instanceof HTMLElement
+    ? document.fullscreenElement
+    : "body";
+}
 
 function close() {
   emit("update:modelValue", false);
@@ -78,9 +85,14 @@ watch(
   }
 );
 
-onMounted(() => window.addEventListener("keydown", onKeydown));
+onMounted(() => {
+  syncDialogTeleportTarget();
+  window.addEventListener("keydown", onKeydown);
+  document.addEventListener("fullscreenchange", syncDialogTeleportTarget);
+});
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  document.removeEventListener("fullscreenchange", syncDialogTeleportTarget);
   if (props.lockScroll) document.documentElement.style.overflow = "";
 });
 
@@ -89,7 +101,7 @@ const dialogStyle = computed(() => ({ maxWidth: `${props.maxWidth}px` }));
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="dialogTeleportTarget">
     <Transition name="fade">
       <div
         v-if="open"

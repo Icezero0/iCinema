@@ -6,7 +6,7 @@ const props = withDefaults(
     name: string;
     src?: string | null;
     role: RoomRole;
-    status: MemberStatus | "idle";
+    status: MemberStatus;
     size?: number;
   }>(),
   {
@@ -35,7 +35,7 @@ function memberInitial(name: string) {
       :style="{ width: `${props.size}px`, height: `${props.size}px` }"
     >
       <template #fallback>
-        <span class="fallbackText">{{ memberInitial(name) }}</span>
+        <span>{{ memberInitial(name) }}</span>
       </template>
     </BaseAvatar>
     <span class="statusDot" :data-status="status" />
@@ -52,14 +52,8 @@ function memberInitial(name: string) {
 .avatarInner {
   border-radius: 999px;
   font-size: 13px;
-  font-weight: 700;
-  background: color-mix(in srgb, var(--c-surface) 74%, white);
   border: 2px solid var(--c-border);
   user-select: none;
-}
-
-.avatarInner:deep(.mask) {
-  background: color-mix(in srgb, var(--c-surface) 74%, white);
 }
 
 .avatar[data-role="owner"] .avatarInner {
@@ -74,12 +68,6 @@ function memberInitial(name: string) {
   border-color: color-mix(in srgb, var(--c-border) 75%, white);
 }
 
-.fallbackText {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--c-text);
-}
-
 .statusDot {
   position: absolute;
   right: -1px;
@@ -90,24 +78,16 @@ function memberInitial(name: string) {
   border: 2px solid white;
 }
 
-.statusDot[data-status="playing"] {
+.statusDot[data-status="idle"],
+.statusDot[data-status="ready"] {
   background: #2fb46e;
 }
 
-.statusDot[data-status="paused"] {
-  background: #dfad3f;
-}
-
-.statusDot[data-status="buffering"] {
+.statusDot[data-status="stalling"] {
   background: #dfad3f;
 }
 
 .statusDot[data-status="offline"] {
-  background: transparent;
-  border-color: #9aa8b8;
-}
-
-.statusDot[data-status="idle"] {
   background: transparent;
   border-color: #9aa8b8;
 }

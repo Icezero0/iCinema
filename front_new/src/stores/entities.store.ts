@@ -6,9 +6,46 @@ import {
   type RoomBrief,
   type RoomJoinRequest,
   type RoomMember,
+  type RoomSettings,
   type RoomUserBrief,
 } from "@/infra/api/rooms.api";
 import type { UserBrief as NotificationUserBrief } from "@/infra/api/notifications.api";
+import {
+  readPersistedState,
+  writePersistedState,
+} from "@/stores/persistence";
+
+export type LocalRoomSyncStrategy =
+  | "adaptive-speed"
+  | "auto-seek"
+  | "manual-sync";
+
+export const DEFAULT_LOCAL_ROOM_SYNC_STRATEGY: LocalRoomSyncStrategy = "adaptive-speed";
+export const DEFAULT_LOCAL_ROOM_VOLUME = 50;
+
+function isLocalRoomSyncStrategy(value: unknown): value is LocalRoomSyncStrategy {
+  return (
+    value === "adaptive-speed" ||
+    value === "auto-seek" ||
+    value === "manual-sync"
+  );
+}
+
+function roomLocalSyncStrategyStorageKey(roomId: number) {
+  return `icinema:room:${roomId}:localSyncStrategy`;
+}
+
+function roomLocalVolumeStorageKey(roomId: number) {
+  return `icinema:room:${roomId}:volume`;
+}
+
+function normalizeLocalRoomVolume(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_LOCAL_ROOM_VOLUME;
+  }
+
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
 
 type EntityUser = {
   id: number;
@@ -27,6 +64,11 @@ type EntityRoom = {
   visibility?: Room["visibility"];
   my_role?: Room["my_role"];
   join_audit_mode?: Room["join_audit_mode"];
+  selected_room_video_source_type?: RoomSettings["selected_room_video_source_type"];
+  sync_policy?: RoomSettings["sync_policy"];
+  active_sync_permission?: RoomSettings["active_sync_permission"];
+  local_sync_strategy?: LocalRoomSyncStrategy;
+  local_volume?: number;
 };
 
 type EntityRoomMember = {
@@ -92,6 +134,15 @@ function normalizeRoom(room: RoomSummaryInput): EntityRoom {
   };
 }
 
+function normalizeRoomMember(member: RoomMember): EntityRoomMember {
+  return {
+    room_id: member.room_id,
+    user_id: member.user_id,
+    joined_at: member.joined_at,
+    role: member.role,
+  };
+}
+
 export const useEntitiesStore = defineStore("entities", {
   state: (): State => ({
     usersById: {},
@@ -145,6 +196,76 @@ export const useEntitiesStore = defineStore("entities", {
       rooms.forEach((room) => this.upsertRoom(room));
     },
 
+    upsertRoomSettings(settings: RoomSettings | null | undefined) {
+      if (!settings?.room_id) return;
+
+      this.roomsById[settings.room_id] = mergeDefined(this.roomsById[settings.room_id], {
+        id: settings.room_id,
+        selected_room_video_source_type: settings.selected_room_video_source_type,
+        sync_policy: settings.sync_policy,
+        active_sync_permission: settings.active_sync_permission,
+      });
+    },
+
+    setRoomLocalSyncStrategy(roomId: number, strategy: LocalRoomSyncStrategy) {
+      if (!roomId) return;
+
+      this.roomsById[roomId] = mergeDefined(this.roomsById[roomId], {
+        id: roomId,
+        local_sync_strategy: strategy,
+      });
+      writePersistedState(roomLocalSyncStrategyStorageKey(roomId), strategy);
+    },
+
+    loadRoomLocalSyncStrategy(roomId: number) {
+      if (!roomId) return DEFAULT_LOCAL_ROOM_SYNC_STRATEGY;
+
+      const persisted = readPersistedState<unknown>(
+        roomLocalSyncStrategyStorageKey(roomId),
+        DEFAULT_LOCAL_ROOM_SYNC_STRATEGY,
+      );
+      const strategy = isLocalRoomSyncStrategy(persisted)
+        ? persisted
+        : DEFAULT_LOCAL_ROOM_SYNC_STRATEGY;
+
+      this.roomsById[roomId] = mergeDefined(this.roomsById[roomId], {
+        id: roomId,
+        local_sync_strategy: strategy,
+      });
+
+      return strategy;
+    },
+
+    setRoomLocalVolume(roomId: number, volume: number) {
+      const normalizedVolume = normalizeLocalRoomVolume(volume);
+      if (!roomId) return normalizedVolume;
+
+      this.roomsById[roomId] = mergeDefined(this.roomsById[roomId], {
+        id: roomId,
+        local_volume: normalizedVolume,
+      });
+      writePersistedState(roomLocalVolumeStorageKey(roomId), normalizedVolume);
+
+      return normalizedVolume;
+    },
+
+    loadRoomLocalVolume(roomId: number) {
+      if (!roomId) return DEFAULT_LOCAL_ROOM_VOLUME;
+
+      const persisted = readPersistedState<unknown>(
+        roomLocalVolumeStorageKey(roomId),
+        DEFAULT_LOCAL_ROOM_VOLUME,
+      );
+      const volume = normalizeLocalRoomVolume(persisted);
+
+      this.roomsById[roomId] = mergeDefined(this.roomsById[roomId], {
+        id: roomId,
+        local_volume: volume,
+      });
+
+      return volume;
+    },
+
     upsertRoomMembers(members: Array<RoomMember | null | undefined>) {
       const groupedMembers: Record<number, EntityRoomMember[]> = {};
 
@@ -153,18 +274,43 @@ export const useEntitiesStore = defineStore("entities", {
         this.upsertUser(member.user);
         const roomMembers = groupedMembers[member.room_id] ?? [];
         groupedMembers[member.room_id] = roomMembers;
-        roomMembers.push({
-          room_id: member.room_id,
-          user_id: member.user_id,
-          joined_at: member.joined_at,
-          role: member.role,
-        });
+        roomMembers.push(normalizeRoomMember(member));
       });
 
       Object.entries(groupedMembers).forEach(([roomId, roomMembers]) => {
         const numericRoomId = Number(roomId);
         this.roomMembersByRoomId[numericRoomId] = roomMembers;
       });
+    },
+
+    upsertRoomMember(member: RoomMember | null | undefined) {
+      if (!member) return;
+
+      this.upsertUser(member.user);
+
+      const existingMembers = this.roomMembersByRoomId[member.room_id] ?? [];
+      const nextMember = normalizeRoomMember(member);
+      const existingIndex = existingMembers.findIndex(
+        (item) => item.user_id === member.user_id,
+      );
+
+      if (existingIndex === -1) {
+        this.roomMembersByRoomId[member.room_id] = [...existingMembers, nextMember];
+        return;
+      }
+
+      this.roomMembersByRoomId[member.room_id] = existingMembers.map((item, index) =>
+        index === existingIndex ? nextMember : item,
+      );
+    },
+
+    removeRoomMember(roomId: number, userId: number) {
+      const roomMembers = this.roomMembersByRoomId[roomId];
+      if (!roomMembers) return;
+
+      this.roomMembersByRoomId[roomId] = roomMembers.filter(
+        (member) => member.user_id !== userId,
+      );
     },
 
     upsertJoinRequests(requests: Array<RoomJoinRequest | null | undefined>) {

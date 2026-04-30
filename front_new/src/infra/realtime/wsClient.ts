@@ -3,11 +3,13 @@ type WSMessageType = "auth" | "heartbeat" | "command" | "event" | "error" | "ack
 export type WSCommandAction =
   | "room_enter"
   | "room_leave"
+  | "room_presence_get"
+  | "room_video_runtime_get"
   | "playback_pause"
   | "playback_play"
   | "playback_seek"
   | "room_video_source_set"
-  | "user_player_status";
+  | "user_resource_status";
 
 export type WSEventName =
   | "notification"
@@ -21,7 +23,7 @@ export type WSEventName =
   | "playback_play"
   | "playback_seek"
   | "room_video_source_set"
-  | "user_player_states";
+  | "user_resource_states";
 
 export type WSErrorCode =
   | "unauthorized"
@@ -68,7 +70,9 @@ type AckPayload<T = unknown> = {
 type ErrorPayload = {
   request_id?: string | null;
   code: WSErrorCode;
+  reason?: string | null;
   message: string;
+  details?: unknown;
 };
 
 type EventPayload<T = unknown> = {
@@ -138,13 +142,23 @@ function createRequestId(prefix: string) {
 
 class WSProtocolError extends Error {
   code?: WSErrorCode;
+  reason?: string | null;
   requestId?: string | null;
+  details?: unknown;
 
-  constructor(message: string, code?: WSErrorCode, requestId?: string | null) {
+  constructor(
+    message: string,
+    code?: WSErrorCode,
+    requestId?: string | null,
+    reason?: string | null,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "WSProtocolError";
     this.code = code;
     this.requestId = requestId;
+    this.reason = reason;
+    this.details = details;
   }
 }
 
@@ -440,10 +454,13 @@ class WSClient {
 
   private handleErrorEnvelope(envelope: WSErrorEnvelope) {
     const requestId = envelope.payload.request_id ?? this.authRequestId;
+    const isUnauthorized = envelope.payload.code === "unauthorized";
     const error = new WSProtocolError(
       envelope.payload.message,
       envelope.payload.code,
       requestId,
+      envelope.payload.reason,
+      envelope.payload.details,
     );
 
     if (requestId) {
@@ -452,11 +469,14 @@ class WSClient {
         window.clearTimeout(pending.timeoutId);
         this.pendingRequests.delete(requestId);
         pending.reject(error);
+        if (isUnauthorized) {
+          this.disconnect();
+        }
         return;
       }
     }
 
-    if (envelope.payload.code === "unauthorized") {
+    if (isUnauthorized) {
       this.disconnect();
     }
   }
@@ -531,9 +551,10 @@ class WSClient {
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
 
-      if (!this.token || !this.shouldReconnect) return;
+      const token = localStorage.getItem("access_token") || this.token;
+      if (!token || !this.shouldReconnect) return;
 
-      void this.connect(this.token).catch(() => {
+      void this.connect(token).catch(() => {
         // reconnect 失败时，close handler 会继续安排下一次重连
       });
     }, delay);

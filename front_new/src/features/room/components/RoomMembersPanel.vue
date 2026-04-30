@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import {
   ArrowRightStartOnRectangleIcon,
   MagnifyingGlassIcon,
+  UserIcon,
   TrashIcon,
   UserPlusIcon,
 } from "@heroicons/vue/24/outline";
@@ -15,9 +16,10 @@ import type { MemberStatus, RoomRole } from "@/features/room/types";
 type RoomMemberPanelItem = {
   id: number;
   name: string;
+  email?: string | null;
   avatarUrl?: string | null;
   role: RoomRole;
-  status: MemberStatus | "idle";
+  status: MemberStatus;
 };
 
 type PendingJoinRequestState = {
@@ -32,10 +34,13 @@ const props = defineProps<{
   leaveRoomLabel: string;
   disbandRoomLabel: string;
   isOwner?: boolean;
+  canRemoveMembers?: boolean;
   actionDisabled?: boolean;
   leaving?: boolean;
   disbanding?: boolean;
   pendingJoinRequests?: PendingJoinRequestState[];
+  settingManagerUserIds?: number[];
+  removingMemberUserIds?: number[];
   loading?: boolean;
   loadingLabel?: string;
   emptyLabel?: string;
@@ -45,6 +50,9 @@ const emit = defineEmits<{
   inviteUser: [user: UserResponse];
   leaveRoom: [];
   disbandRoom: [];
+  setManager: [userId: number];
+  unsetManager: [userId: number];
+  removeMember: [userId: number];
 }>();
 
 const { t } = useI18n();
@@ -57,6 +65,8 @@ const inviteError = ref("");
 const hasSearchedInviteUsers = ref(false);
 const leaveConfirmOpen = ref(false);
 const disbandConfirmOpen = ref(false);
+const selectedMember = ref<RoomMemberPanelItem | null>(null);
+const removeMemberConfirmOpen = ref(false);
 const disbandCountdown = ref(5);
 let disbandCountdownTimer = 0;
 
@@ -85,9 +95,48 @@ const disbandConfirmText = computed(() =>
   disbandCountdown.value > 0
     ? t("room.members.disbandConfirmWait", { seconds: disbandCountdown.value })
     : props.disbandRoomLabel);
+const selectedMemberIsOwner = computed(() => selectedMember.value?.role === "owner");
+const selectedMemberIsManager = computed(() => selectedMember.value?.role === "manager");
+const showSetSelectedMemberManager = computed(() =>
+  !!selectedMember.value &&
+  props.isOwner &&
+  !selectedMemberIsOwner.value);
+const canSetSelectedMemberManager = computed(() =>
+  showSetSelectedMemberManager.value &&
+  !selectedMemberIsManager.value);
+const canRemoveSelectedMember = computed(() =>
+  !!selectedMember.value &&
+  props.canRemoveMembers &&
+  (props.isOwner || selectedMember.value.role !== "manager") &&
+  !selectedMemberIsOwner.value);
+const showProfileActions = computed(() =>
+  showSetSelectedMemberManager.value || canRemoveSelectedMember.value);
+const selectedMemberSettingManager = computed(() =>
+  !!selectedMember.value &&
+  !!props.settingManagerUserIds?.includes(selectedMember.value.id));
+const selectedMemberRemoving = computed(() =>
+  !!selectedMember.value &&
+  !!props.removingMemberUserIds?.includes(selectedMember.value.id));
+const profileActionCount = computed(() =>
+  Number(showSetSelectedMemberManager.value) + Number(canRemoveSelectedMember.value));
 
 function userDisplayName(user: UserResponse) {
   return user.username || user.email || `User #${user.id}`;
+}
+
+function openMemberProfile(member: RoomMemberPanelItem) {
+  selectedMember.value = member;
+}
+
+function closeMemberProfile() {
+  selectedMember.value = null;
+  removeMemberConfirmOpen.value = false;
+}
+
+function handleMemberProfileOpenChange(open: boolean) {
+  if (!open) {
+    closeMemberProfile();
+  }
 }
 
 function openInviteDialog() {
@@ -123,6 +172,26 @@ function inviteActionDisabled(user: UserResponse) {
 function handleInviteUser(user: UserResponse) {
   if (inviteActionDisabled(user)) return;
   emit("inviteUser", user);
+}
+
+function openRemoveMemberConfirm() {
+  if (!canRemoveSelectedMember.value) return;
+  removeMemberConfirmOpen.value = true;
+}
+
+function handleSetSelectedMemberManager() {
+  if (!selectedMember.value || !canSetSelectedMemberManager.value) return;
+  emit("setManager", selectedMember.value.id);
+}
+
+function handleUnsetSelectedMemberManager() {
+  if (!selectedMember.value || !selectedMemberIsManager.value) return;
+  emit("unsetManager", selectedMember.value.id);
+}
+
+function handleRemoveSelectedMember() {
+  if (!selectedMember.value || !canRemoveSelectedMember.value) return;
+  emit("removeMember", selectedMember.value.id);
 }
 
 async function searchInviteUsers() {
@@ -198,6 +267,21 @@ watch(disbandConfirmOpen, (open) => {
   }, 1000);
 });
 
+watch(
+  () => props.members,
+  (members) => {
+    if (!selectedMember.value) return;
+
+    const updatedMember = members.find((member) => member.id === selectedMember.value?.id);
+    if (!updatedMember) {
+      closeMemberProfile();
+      return;
+    }
+
+    selectedMember.value = updatedMember;
+  },
+);
+
 onBeforeUnmount(() => {
   clearDisbandCountdownTimer();
 });
@@ -223,12 +307,19 @@ onBeforeUnmount(() => {
           :key="member.id"
           class="memberItem"
         >
-          <RoomMemberAvatar
-            :name="member.name"
-            :src="member.avatarUrl"
-            :role="member.role"
-            :status="member.status"
-          />
+          <button
+            class="memberAvatarButton"
+            type="button"
+            :aria-label="t('room.members.viewProfile', { user: member.name })"
+            @click="openMemberProfile(member)"
+          >
+            <RoomMemberAvatar
+              :name="member.name"
+              :src="member.avatarUrl"
+              :role="member.role"
+              :status="member.status"
+            />
+          </button>
           <div class="memberMeta">
             <div class="memberName">{{ member.name }}</div>
           </div>
@@ -295,10 +386,12 @@ onBeforeUnmount(() => {
             :key="user.id"
             class="inviteUserItem"
           >
-            <BaseAvatar
-              size="sm"
+            <RoomMemberAvatar
+              :size="32"
               :src="resolveMediaUrl(user.avatar_url)"
               :name="userDisplayName(user)"
+              role="member"
+              status="idle"
             />
             <div class="inviteUserMeta">
               <div class="inviteUserName">{{ userDisplayName(user) }}</div>
@@ -316,6 +409,83 @@ onBeforeUnmount(() => {
         </div>
       </BaseCard>
     </BaseDialog>
+
+    <BaseDialog
+      :model-value="!!selectedMember"
+      :aria-label="selectedMember ? t('room.members.profileDialogTitle', { user: selectedMember.name }) : t('room.members.profileDialogFallbackTitle')"
+      :max-width="328"
+      @update:model-value="handleMemberProfileOpenChange"
+      @close="closeMemberProfile"
+    >
+      <BaseCard v-if="selectedMember" class="memberProfileCard">
+        <div class="memberProfileTitle">{{ t("room.members.profileTitle") }}</div>
+        <div class="memberProfileAvatar" aria-hidden="true">
+          <img
+            v-if="selectedMember.avatarUrl"
+            class="memberProfileAvatarImage"
+            :src="selectedMember.avatarUrl"
+            :alt="selectedMember.name"
+          >
+          <AppIcon
+            v-else
+            class="memberProfileAvatarFallback"
+            :icon="UserIcon"
+            :size="54"
+          />
+        </div>
+        <div class="memberProfileText">
+          <div class="memberProfileName">{{ selectedMember.name }}</div>
+          <div class="memberProfileEmail">
+            {{ selectedMember.email || t("room.members.profileNoEmail") }}
+          </div>
+        </div>
+        <div
+          v-if="showProfileActions"
+          class="memberProfileActions"
+          :class="{ single: profileActionCount === 1 }"
+        >
+          <BaseButton
+            v-if="showSetSelectedMemberManager"
+            class="managerActionButton"
+            variant="primary"
+            :loading="selectedMemberSettingManager"
+            :disabled="selectedMemberRemoving"
+            @click="selectedMemberIsManager ? handleUnsetSelectedMemberManager() : handleSetSelectedMemberManager()"
+          >
+            <span class="managerActionLabelWrap">
+              <Transition name="memberActionLabel">
+                <span
+                  :key="selectedMemberIsManager ? 'unset' : 'set'"
+                  class="managerActionLabelText"
+                >
+                  {{ selectedMemberIsManager ? t("room.members.unsetManager") : t("room.members.setManager") }}
+                </span>
+              </Transition>
+            </span>
+          </BaseButton>
+          <BaseButton
+            v-if="canRemoveSelectedMember"
+            variant="danger"
+            :loading="selectedMemberRemoving"
+            :disabled="selectedMemberSettingManager"
+            @click="openRemoveMemberConfirm"
+          >
+            {{ t("room.members.removeFromRoom") }}
+          </BaseButton>
+        </div>
+      </BaseCard>
+    </BaseDialog>
+
+    <BaseConfirmDialog
+      v-model="removeMemberConfirmOpen"
+      :title="t('room.members.removeConfirmTitle')"
+      :message="selectedMember ? t('room.members.removeConfirmMessage', { user: selectedMember.name }) : ''"
+      :confirm-text="t('room.members.removeFromRoom')"
+      :cancel-text="t('common.cancel')"
+      variant="danger"
+      :loading="selectedMemberRemoving"
+      @confirm="handleRemoveSelectedMember"
+    />
 
     <BaseConfirmDialog
       v-model="leaveConfirmOpen"
@@ -388,6 +558,26 @@ onBeforeUnmount(() => {
   justify-items: center;
   align-content: start;
   gap: 6px;
+}
+
+.memberAvatarButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.memberAvatarButton:hover {
+  background: color-mix(in srgb, var(--c-hover) 80%, transparent);
+}
+
+.memberAvatarButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--c-primary) 60%, transparent);
+  outline-offset: 3px;
 }
 
 .memberMeta {
@@ -517,6 +707,126 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.memberProfileCard {
+  padding: 20px;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+}
+
+.memberProfileTitle {
+  justify-self: center;
+  color: var(--c-text);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.memberProfileAvatar {
+  width: 152px;
+  height: 152px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--c-border) 78%, white);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--c-surface) 88%, white),
+      color-mix(in srgb, var(--c-bg) 82%, var(--c-surface))
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.32),
+    0 18px 42px rgb(0 0 0 / 0.12);
+}
+
+.memberProfileAvatarImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.memberProfileAvatarFallback {
+  color: var(--c-text-muted);
+}
+
+.memberProfileText {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.memberProfileName {
+  min-width: 0;
+  color: var(--c-text);
+  font-size: 20px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberProfileEmail {
+  min-width: 0;
+  color: var(--c-text-muted);
+  font-size: 13px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberProfileActions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.memberProfileActions.single {
+  grid-template-columns: minmax(128px, 176px);
+  justify-content: center;
+}
+
+.memberProfileActions :deep(button) {
+  width: 100%;
+  justify-content: center;
+}
+
+.managerActionLabelWrap {
+  min-width: 6em;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+}
+
+.managerActionLabelText {
+  grid-area: 1 / 1;
+}
+
+.memberActionLabel-enter-active,
+.memberActionLabel-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.memberActionLabel-leave-active {
+  position: absolute;
+}
+
+.memberActionLabel-enter-from {
+  opacity: 0;
+  transform: translateY(3px);
+}
+
+.memberActionLabel-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
 }
 
 @media (max-width: 800px) {

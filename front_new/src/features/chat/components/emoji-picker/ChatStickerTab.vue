@@ -21,6 +21,7 @@ const previewOpen = ref(false);
 const previewX = ref(0);
 const previewY = ref(0);
 const previewEnabled = ref(true);
+const floatingTeleportTarget = ref<HTMLElement | "body">("body");
 let previewOpenTimer: number | null = null;
 let pointerMediaQuery: MediaQueryList | null = null;
 let removePointerListener: (() => void) | null = null;
@@ -124,16 +125,25 @@ function updatePreviewPosition(event: MouseEvent) {
   clampPreviewPosition();
 }
 
+function syncFloatingTeleportTarget() {
+  floatingTeleportTarget.value = document.fullscreenElement instanceof HTMLElement
+    ? document.fullscreenElement
+    : "body";
+}
+
 onBeforeUnmount(() => {
   if (previewOpenTimer != null) {
     window.clearTimeout(previewOpenTimer);
     previewOpenTimer = null;
   }
   removePointerListener?.();
+  document.removeEventListener("fullscreenchange", syncFloatingTeleportTarget);
 });
 
 onMounted(() => {
   if (typeof window === "undefined") return;
+  syncFloatingTeleportTarget();
+  document.addEventListener("fullscreenchange", syncFloatingTeleportTarget);
 
   pointerMediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
   const syncPreviewCapability = (event?: MediaQueryList | MediaQueryListEvent) => {
@@ -232,7 +242,7 @@ function handleStickerClick(stickerId: number) {
           <img
             v-if="draggingStickerId !== sticker.id"
             class="stickerOptionImage"
-            :src="resolveMediaUrl(sticker.url)"
+            :src="sticker.display_url || resolveMediaUrl(sticker.url)"
             :alt="`Sticker ${sticker.id}`"
           >
           <span
@@ -245,7 +255,7 @@ function handleStickerClick(stickerId: number) {
     </section>
   </div>
 
-  <Teleport to="body">
+  <Teleport :to="floatingTeleportTarget">
     <div
       v-if="pointerDragState && draggedSticker"
       :ref="setDragOverlayRef"
@@ -255,7 +265,7 @@ function handleStickerClick(stickerId: number) {
     >
       <img
         class="stickerOptionImage"
-        :src="resolveMediaUrl(draggedSticker.url)"
+        :src="draggedSticker.display_url || resolveMediaUrl(draggedSticker.url)"
         :alt="`Sticker ${draggedSticker.id}`"
       >
     </div>
@@ -272,7 +282,7 @@ function handleStickerClick(stickerId: number) {
     >
       <img
         class="stickerHoverPreviewImage"
-        :src="resolveMediaUrl(hoveredSticker.url)"
+        :src="hoveredSticker.display_url || resolveMediaUrl(hoveredSticker.url)"
         :alt="`Sticker ${hoveredSticker.id}`"
       >
     </div>
@@ -361,7 +371,7 @@ function handleStickerClick(stickerId: number) {
 
 .stickerDragOverlay {
   position: fixed;
-  z-index: 160;
+  z-index: 220;
   display: grid;
   place-items: center;
   min-height: 58px;

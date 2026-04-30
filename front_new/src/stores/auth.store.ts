@@ -36,6 +36,11 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    syncTokensFromStorage() {
+      this.accessToken = localStorage.getItem('access_token') || ''
+      this.refreshToken = localStorage.getItem('refresh_token') || ''
+    },
+
     clearTokens() {
       this.accessToken = ''
       this.refreshToken = ''
@@ -56,8 +61,7 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async init() {
-      this.accessToken = localStorage.getItem('access_token') || ''
-      this.refreshToken = localStorage.getItem('refresh_token') || ''
+      this.syncTokensFromStorage()
 
       if (!this.accessToken && !this.refreshToken) {
         this.status = 'anonymous'
@@ -67,6 +71,7 @@ export const useAuthStore = defineStore('auth', {
       if (this.accessToken) {
         try {
           await this.fetchMe()
+          this.syncTokensFromStorage()
           return
         } catch {
           // 这里 fetchMe 失败时，client.ts 很可能已经尝试过自动 refresh

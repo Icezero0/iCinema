@@ -55,6 +55,10 @@ const stickerEditDraftLibrary = computed(() => (
   stickerEditDraftIds.value
     .map((id) => stickersStore.getSticker(id))
     .filter((sticker): sticker is NonNullable<ReturnType<typeof stickersStore.getSticker>> => Boolean(sticker))
+    .map((sticker) => ({
+      ...sticker,
+      display_url: stickersStore.getStickerDisplayUrl(sticker.id) ?? undefined,
+    }))
 ));
 const displayedStickerLibrary = computed(() => (
   stickerEditMode.value ? stickerEditDraftLibrary.value : stickerLibrary.value
@@ -202,7 +206,7 @@ function selectSticker(stickerId: number) {
   emit("selectEmoji", {
     kind: "sticker",
     stickerId,
-    url: resolveMediaUrl(sticker.url),
+    url: stickersStore.getStickerDisplayUrl(stickerId) || resolveMediaUrl(sticker.url),
     alt: `Sticker ${stickerId}`,
   });
 }

@@ -5,7 +5,7 @@ import {
   type ComponentPublicInstance,
   type CSSProperties,
 } from "vue";
-import type { StickerResponse } from "@/infra/api/media.api";
+import type { StickerWithDisplayUrl } from "@/stores/stickers.store";
 import { STICKER_DRAG_ACTIVE_ATTR } from "./stickerDrag.constants";
 
 type ReadableRef<T> = {
@@ -29,7 +29,7 @@ type StickerPointerDragState = {
 };
 
 type StickerPointerDragOptions = {
-  stickerLibrary: ReadableRef<StickerResponse[]>;
+  stickerLibrary: ReadableRef<StickerWithDisplayUrl[]>;
   isEditing: ReadableRef<boolean | undefined>;
   closePreview: () => void;
   reorder: (stickerIds: number[]) => void;

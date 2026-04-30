@@ -135,7 +135,7 @@ function onImgError() {
   display: grid;
   place-items: center;
 
-  background: var(--c-bg);
+  background: color-mix(in srgb, var(--c-surface) 74%, white);
   color: var(--c-text);
 }
 
@@ -173,9 +173,9 @@ function onImgError() {
 /* fallback */
 .fallback {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
-  color: var(--c-muted);
+  color: var(--c-text);
 }
 
 /* 可选交互态 */

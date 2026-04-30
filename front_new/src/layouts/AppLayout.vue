@@ -27,6 +27,8 @@ function closeSidebar() {
 }
 
 async function syncRealtimeConnection() {
+  auth.syncTokensFromStorage();
+
   if (auth.isLoggedIn && auth.accessToken) {
     try {
       await wsClient.connect(auth.accessToken);
