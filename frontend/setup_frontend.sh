@@ -1,14 +1,37 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "[INFO] 正在检查 Node.js 是否已安装..."
-if ! command -v node &> /dev/null; then
-  echo "[ERROR] Node.js 未安装。请先手动安装：https://nodejs.org"
+# iCinema frontend setup (Linux/macOS)
+# - Check Node.js exists + version >= 18
+# - Install dependencies
+# - Leave dev server startup to run_frontend.sh
+
+info() { echo "[INFO] $*"; }
+error() { echo "[ERROR] $*"; }
+
+info "Checking Node.js..."
+if ! command -v node >/dev/null 2>&1; then
+  error "Node.js not found. Please install from https://nodejs.org"
   exit 1
 fi
 
-echo "[INFO] 安装前端依赖..."
-npm install
+# Node major version (>= 18)
+NODE_VERSION="$(node -v)"          # e.g. v20.11.1
+NODE_MAJOR="${NODE_VERSION#v}"     # 20.11.1
+NODE_MAJOR="${NODE_MAJOR%%.*}"     # 20
 
-echo "[INFO] 启动 Vite 开发服务器（npm run dev）..."
-npm run dev
+if [ "${NODE_MAJOR}" -lt 18 ]; then
+  error "Node.js >= 18 is required. Current: ${NODE_VERSION}"
+  exit 1
+fi
+
+# deps install
+info "Installing dependencies..."
+if [ -f "package-lock.json" ]; then
+  npm ci
+else
+  npm install
+fi
+
+info "Frontend dependencies are ready."
+info "Run ./run_frontend.sh to start the Vite dev server."

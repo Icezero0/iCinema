@@ -1,0 +1,39 @@
+:root {
+  --bp-compact: 640px;
+
+  /* typography */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+
+  /* spacing */
+  --s-1: 8px;
+  --s-2: 12px;
+  --s-3: 16px;
+  --s-4: 24px;
+
+  /* radius */
+  --r-1: 8px;
+  --r-2: 12px;
+
+  /* semantic colors (由 theme 文件赋值) */
+  --c-bg: rgb(248, 249, 251);
+  --c-surface: rgb(255, 255, 255);
+  --c-text: rgba(0, 0, 0, 0.88);
+  --c-muted: rgba(0, 0, 0, 0.6);
+  --c-border: rgba(0, 0, 0, 0.14);
+  --c-danger: #b00020;
+  --c-danger-hover: #8f001a;
+  --c-primary: rgb(59, 130, 246); /* 蓝，但不偏紫 */
+  --c-primary-hover: rgb(37, 99, 235);
+  --c-primary-text: #fff;
+
+  --c-hover: rgba(0, 0, 0, 0.06);
+
+  --auth-tint-1: rgba(80, 180, 200, 0.1);
+  --auth-tint-2: rgba(80, 180, 200, 0.06);
+  --auth-tint-3: rgba(80, 180, 200, 0.04);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
