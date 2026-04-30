@@ -33,6 +33,7 @@ import {
 import { useRoomJoinRequests } from "@/features/room/composables/useRoomJoinRequests";
 import { useRoomMemberActions } from "@/features/room/composables/useRoomMemberActions";
 import { useRoomRealtimeSession } from "@/features/room/composables/useRoomRealtimeSession";
+import { computeFileSha256 } from "@/features/room/video/fileHash";
 import {
   sendRoomRealtimePlaybackPause,
   sendRoomRealtimePlaybackPlay,
@@ -60,7 +61,9 @@ const toasts = useToastsStore();
 type RoomRoleState = RoomRole | "unknown";
 type DisplayResourceStatus = "idle" | RoomRealtimeResourceStatus;
 type SyncGateState = "locked" | "unlocked";
+type LocalFileSourceIssue = "none" | "select_required" | "hash_mismatch" | "hash_failed";
 const ROOM_PLAYBACK_DEBUG = false;
+const MIN_HASH_PROGRESS_VISIBLE_MS = 450;
 
 const room = ref<Room | null>(null);
 const isLoading = ref(false);
@@ -73,6 +76,11 @@ let lastReportedResourceStatus: RoomRealtimeResourceStatus | null = null;
 const localResourceStatus = ref<DisplayResourceStatus>("idle");
 const latestResourceStatus = ref<DisplayResourceStatus>("idle");
 const syncGateState = ref<SyncGateState>(getInitialSyncGateState());
+const localFileSourceIssue = ref<LocalFileSourceIssue>("none");
+const sourcePanelOpenKey = ref(0);
+const sourcePanelCloseKey = ref(0);
+const sourceApplying = ref(false);
+const sourceHashProgress = ref<number | null>(null);
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -132,6 +140,7 @@ const {
   playbackSourceUrl,
   playbackSourceFile,
   playbackSourceFileName,
+  playbackSourceFileHash,
   playbackSourceRevision,
   playbackTimelineLabel,
   togglePlayback: toggleLocalPlayback,
@@ -221,7 +230,7 @@ const {
 });
 const realtime = useRoomRealtimeSession({
   roomId,
-  refreshRoom: fetchRoom,
+  refreshRoom: () => fetchRoom({ silent: true }),
   refreshRoomMembers: fetchRoomMembers,
   refreshRoomRequests: () => fetchRoomRequests({ force: true }),
   refreshRoomSettings: fetchRoomSettings,
@@ -273,6 +282,50 @@ const syncPolicyStatusLabel = computed(() => {
 
   return t("room.playback.syncPolicyAuto");
 });
+const canControlRealtimePlayback = computed(() => {
+  const permission = roomSettings.value?.active_sync_permission;
+  if (!permission) return true;
+  if (permission === "all_members") return true;
+  if (permission === "owner_and_manager") {
+    return currentUserRole.value === "owner" || currentUserRole.value === "manager";
+  }
+  return currentUserRole.value === "owner";
+});
+const roomRuntimeLocalFileHash = computed(() => {
+  const source = realtime.roomVideoSource.value;
+  return source?.source_type === "local_file"
+    ? source.file_hash?.trim() || null
+    : null;
+});
+const hasMatchingRoomLocalFile = computed(() =>
+  Boolean(
+    roomRuntimeLocalFileHash.value &&
+      playbackSourceType.value === "local_file" &&
+      playbackSourceFile.value &&
+      playbackSourceFileHash.value === roomRuntimeLocalFileHash.value,
+  ));
+const needsRoomLocalFileSelection = computed(() =>
+  isSyncGateUnlocked() &&
+  Boolean(roomRuntimeLocalFileHash.value) &&
+  !hasMatchingRoomLocalFile.value);
+const sourcePanelMessage = computed(() => {
+  if (sourceApplying.value) return t("room.sourcePanel.hashingFile");
+  if (localFileSourceIssue.value === "hash_mismatch") {
+    return t("room.sourcePanel.localFileMismatch");
+  }
+  if (localFileSourceIssue.value === "hash_failed") {
+    return t("room.sourcePanel.localFileHashFailed");
+  }
+  if (needsRoomLocalFileSelection.value) {
+    return t("room.sourcePanel.localFileRequiredForSync");
+  }
+  return "";
+});
+const sourcePanelMessageTone = computed<"muted" | "error">(() =>
+  localFileSourceIssue.value === "hash_mismatch" ||
+  localFileSourceIssue.value === "hash_failed"
+    ? "error"
+    : "muted");
 
 function isTheaterFullscreenActive() {
   return Boolean(
@@ -344,13 +397,16 @@ function syncCurrentUserRole() {
   currentUserRole.value = "unknown";
 }
 
-async function fetchRoom() {
+async function fetchRoom(options?: { silent?: boolean }) {
   if (!roomId.value) {
     error.value = t("room.invalidId");
     return;
   }
 
-  isLoading.value = true;
+  const shouldShowLoading = !options?.silent && !room.value;
+  if (shouldShowLoading) {
+    isLoading.value = true;
+  }
   error.value = "";
 
   try {
@@ -360,12 +416,16 @@ async function fetchRoom() {
     loadLocalPlaybackVolume();
     syncCurrentUserRole();
   } catch (e: any) {
-    room.value = null;
+    if (!options?.silent) {
+      room.value = null;
+    }
     error.value =
       getBackendErrorMessage(e) ||
       t("room.loadFailed");
   } finally {
-    isLoading.value = false;
+    if (shouldShowLoading) {
+      isLoading.value = false;
+    }
   }
 }
 
@@ -427,12 +487,58 @@ async function handleSend(segments: ChatSegment[]) {
   }
 }
 
-function canUseRealtimePlaybackCommands() {
+function canUseRoomRuntimePlaybackCommands() {
+  if (!realtime.isRealtimeActive.value) return false;
+
+  if (playbackSourceType.value === "local_file") {
+    return hasMatchingRoomLocalFile.value;
+  }
+
   return (
-    realtime.isRealtimeActive.value &&
     playbackSourceType.value === "external_url" &&
     playbackSourceUrl.value.trim().length > 0
   );
+}
+
+function openSourcePanelForLocalFile(issue: LocalFileSourceIssue = "select_required") {
+  localFileSourceIssue.value = issue;
+  sourcePanelOpenKey.value += 1;
+}
+
+function markRoomLocalFilePending(issue: LocalFileSourceIssue = "select_required") {
+  openSourcePanelForLocalFile(issue);
+  handleResourceStatusChange("stalling");
+}
+
+function syncRoomLocalFileRequirement() {
+  if (!roomRuntimeLocalFileHash.value) {
+    localFileSourceIssue.value = "none";
+    return true;
+  }
+
+  if (hasMatchingRoomLocalFile.value) {
+    localFileSourceIssue.value = "none";
+    return true;
+  }
+
+  markRoomLocalFilePending("select_required");
+  return false;
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function keepHashProgressVisibleSince(startedAt: number) {
+  const elapsed = performance.now() - startedAt;
+  if (elapsed >= MIN_HASH_PROGRESS_VISIBLE_MS) return;
+  await wait(MIN_HASH_PROGRESS_VISIBLE_MS - elapsed);
+}
+
+function closeSourcePanelAfterApply() {
+  sourcePanelCloseKey.value += 1;
 }
 
 function getRealtimeErrorReason(error: unknown) {
@@ -463,6 +569,19 @@ function showRealtimePlaybackError(error?: unknown) {
       : t("room.playback.errors.playFailed"),
     tone: "danger",
   });
+}
+
+function showRealtimePlaybackPermissionDenied() {
+  showRealtimePlaybackError({
+    reason: "room_video_control_permission_denied",
+  });
+}
+
+function ensureRealtimePlaybackControlAllowed() {
+  if (canControlRealtimePlayback.value) return true;
+
+  showRealtimePlaybackPermissionDenied();
+  return false;
 }
 
 function logPlaybackDebug(event: string, extra: Record<string, unknown> = {}) {
@@ -509,6 +628,9 @@ async function syncRoomRuntimeAfterUnlock() {
   }
 
   applyRealtimeVideoSource(currentVideoSource);
+  if (currentVideoSource?.source_type === "local_file" && !syncRoomLocalFileRequirement()) {
+    return;
+  }
 
   if (currentPlayback) {
     await applyRealtimePlaybackState(currentPlayback, { syncPosition: true });
@@ -546,11 +668,110 @@ async function handleApplyPlaybackSource(payload: {
   sourceType: "external_url" | "local_file";
   externalUrl: string;
   localFile: File | null;
+  localFileAction?: "match_room_target" | "set_room_target" | null;
 }) {
-  if (!realtime.isRealtimeActive.value || payload.sourceType === "local_file") {
-    applyLocalPlaybackSource(payload);
+  localFileSourceIssue.value = "none";
+
+  if (payload.sourceType === "local_file") {
+    const localFileAction = payload.localFileAction ??
+      (roomRuntimeLocalFileHash.value ? "match_room_target" : "set_room_target");
+    const selectedLocalFile = payload.localFile;
+
+    if (!selectedLocalFile) {
+      markRoomLocalFilePending("select_required");
+      return;
+    }
+
+    if (!realtime.isRealtimeActive.value) {
+      applyLocalPlaybackSource({
+        ...payload,
+        localFile: selectedLocalFile,
+      });
+      closeSourcePanelAfterApply();
+      return;
+    }
+
+    sourceApplying.value = true;
+    sourceHashProgress.value = 0;
+    const hashStartedAt = performance.now();
+    let localFileHash = "";
+    try {
+      localFileHash = await computeFileSha256(selectedLocalFile, {
+        onProgress: (progress) => {
+          sourceHashProgress.value = progress.percent;
+        },
+      });
+      sourceHashProgress.value = 100;
+      await keepHashProgressVisibleSince(hashStartedAt);
+    } catch {
+      localFileSourceIssue.value = "hash_failed";
+      sourcePanelOpenKey.value += 1;
+      await keepHashProgressVisibleSince(hashStartedAt);
+      sourceApplying.value = false;
+      sourceHashProgress.value = null;
+      return;
+    }
+
+    try {
+      if (localFileAction === "match_room_target") {
+        const runtimeLocalFileHash = roomRuntimeLocalFileHash.value;
+        if (!runtimeLocalFileHash) {
+          markRoomLocalFilePending("select_required");
+          return;
+        }
+
+        if (localFileHash !== runtimeLocalFileHash) {
+          markRoomLocalFilePending("hash_mismatch");
+          return;
+        }
+
+        applyLocalPlaybackSource({
+          ...payload,
+          localFile: selectedLocalFile,
+          localFileHash,
+        });
+        localFileSourceIssue.value = "none";
+
+        if (realtime.roomPlayback.value) {
+          await applyRealtimePlaybackState(realtime.roomPlayback.value, { syncPosition: true });
+        }
+        closeSourcePanelAfterApply();
+        return;
+      }
+
+      if (!ensureRealtimePlaybackControlAllowed()) return;
+
+      const response = await setRoomRealtimeVideoSource({
+        source_type: "local_file",
+        file_hash: localFileHash,
+        anchor_ts_ms: Date.now(),
+      });
+      applyLocalPlaybackSource({
+        ...payload,
+        localFile: selectedLocalFile,
+        localFileHash,
+      });
+      if ("room_video_source" in response) {
+        applyRealtimeVideoSource(response.room_video_source ?? null);
+      }
+      await applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
+      closeSourcePanelAfterApply();
+    } catch (error) {
+      showRealtimePlaybackError(error);
+    } finally {
+      sourceApplying.value = false;
+      sourceHashProgress.value = null;
+    }
     return;
   }
+
+  if (!realtime.isRealtimeActive.value) {
+    applyLocalPlaybackSource(payload);
+    closeSourcePanelAfterApply();
+    return;
+  }
+
+  if (!ensureRealtimePlaybackControlAllowed()) return;
 
   try {
     const response = await setRoomRealtimeVideoSource({
@@ -562,6 +783,7 @@ async function handleApplyPlaybackSource(payload: {
       applyRealtimeVideoSource(response.room_video_source ?? null);
     }
     await applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
+    closeSourcePanelAfterApply();
   } catch (error) {
     showRealtimePlaybackError(error);
   }
@@ -569,7 +791,7 @@ async function handleApplyPlaybackSource(payload: {
 
 async function togglePlayback() {
   logPlaybackDebug("togglePlaybackRequested", {
-    commandMode: canUseRealtimePlaybackCommands() ? "realtime" : "local",
+    commandMode: canUseRoomRuntimePlaybackCommands() ? "realtime" : "local",
   });
 
   if (!isSyncGateUnlocked()) {
@@ -577,10 +799,17 @@ async function togglePlayback() {
     return;
   }
 
-  if (!canUseRealtimePlaybackCommands()) {
+  if (roomRuntimeLocalFileHash.value && !hasMatchingRoomLocalFile.value) {
+    markRoomLocalFilePending("select_required");
+    return;
+  }
+
+  if (!canUseRoomRuntimePlaybackCommands()) {
     toggleLocalPlayback();
     return;
   }
+
+  if (!ensureRealtimePlaybackControlAllowed()) return;
 
   try {
     const payload = {
@@ -616,8 +845,17 @@ function handlePlaybackProgressChange(value: number) {
     return;
   }
 
-  handleLocalPlaybackProgressChange(value);
-  if (!canUseRealtimePlaybackCommands() || playbackDuration.value <= 0) return;
+  if (roomRuntimeLocalFileHash.value && !hasMatchingRoomLocalFile.value) {
+    markRoomLocalFilePending("select_required");
+    return;
+  }
+
+  if (!canUseRoomRuntimePlaybackCommands() || playbackDuration.value <= 0) {
+    handleLocalPlaybackProgressChange(value);
+    return;
+  }
+
+  if (!ensureRealtimePlaybackControlAllowed()) return;
 
   const normalizedValue = Math.min(100, Math.max(0, value));
   const positionSeconds = playbackDuration.value * (normalizedValue / 100);
@@ -649,14 +887,19 @@ function reportDisplayedResourceStatus(status: DisplayResourceStatus) {
 }
 
 function handleResourceStatusChange(status: DisplayResourceStatus) {
-  latestResourceStatus.value = status;
+  const nextStatus =
+    roomRuntimeLocalFileHash.value && !hasMatchingRoomLocalFile.value && status !== "error"
+      ? "stalling"
+      : status;
+
+  latestResourceStatus.value = nextStatus;
   if (!isSyncGateUnlocked()) {
     localResourceStatus.value = "idle";
     return;
   }
 
-  localResourceStatus.value = status;
-  reportDisplayedResourceStatus(status);
+  localResourceStatus.value = nextStatus;
+  reportDisplayedResourceStatus(nextStatus);
 }
 
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
@@ -686,6 +929,11 @@ watch(roomId, () => {
   latestResourceStatus.value = "idle";
   lastReportedResourceStatus = null;
   syncGateState.value = getInitialSyncGateState();
+  localFileSourceIssue.value = "none";
+  sourceApplying.value = false;
+  sourceHashProgress.value = null;
+  sourcePanelOpenKey.value = 0;
+  sourcePanelCloseKey.value = 0;
   resetRoomRequestsState();
   resetRoomSettingsState();
   resetMemberActionState();
@@ -722,6 +970,12 @@ watch(
 
     applyRealtimeVideoSource(event.state);
     if (event.action !== "room_video_source_set" || !event.state) return;
+    if (event.state.source_type === "local_file" && !syncRoomLocalFileRequirement()) {
+      return;
+    }
+    if (event.state.source_type === "external_url") {
+      localFileSourceIssue.value = "none";
+    }
 
     void applyRealtimePlaybackState({
       room_id: event.state.room_id,
@@ -743,6 +997,10 @@ watch(
       syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
     });
     if (!isSyncGateUnlocked()) return;
+    if (roomRuntimeLocalFileHash.value && !hasMatchingRoomLocalFile.value) {
+      markRoomLocalFilePending("select_required");
+      return;
+    }
 
     void applyRealtimePlaybackState(event?.state ?? null, {
       syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
@@ -848,6 +1106,15 @@ watch(
                   :sync-label="t('room.playback.controls.syncNow')"
                   :source-label="t('room.playback.controls.source')"
                   :source-panel-title="t('room.sourcePanel.title')"
+                  :source-attention="needsRoomLocalFileSelection"
+                  :source-panel-open-key="sourcePanelOpenKey"
+                  :source-panel-close-key="sourcePanelCloseKey"
+                  :local-room-target-set="Boolean(roomRuntimeLocalFileHash)"
+                  :can-set-local-room-target="canControlRealtimePlayback"
+                  :source-message="sourcePanelMessage"
+                  :source-message-tone="sourcePanelMessageTone"
+                  :source-hash-progress="sourceHashProgress"
+                  :source-applying="sourceApplying"
                   :volume-label="t('room.playback.controls.volume')"
                   @toggle-play="togglePlayback"
                   @update:progress="handlePlaybackProgressChange"

@@ -11,6 +11,8 @@ import AppIcon from "@/ui/base/AppIcon.vue";
 import RoomSourcePanel from "@/features/room/components/RoomSourcePanel.vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 
+type LocalFileSourceAction = "match_room_target" | "set_room_target";
+
 const props = defineProps<{
   isPlaying: boolean;
   progress: number;
@@ -29,6 +31,15 @@ const props = defineProps<{
   syncLabel: string;
   sourceLabel: string;
   sourcePanelTitle: string;
+  sourceAttention?: boolean;
+  sourcePanelOpenKey?: number;
+  sourcePanelCloseKey?: number;
+  localRoomTargetSet?: boolean;
+  canSetLocalRoomTarget?: boolean;
+  sourceMessage?: string;
+  sourceMessageTone?: "muted" | "error";
+  sourceHashProgress?: number | null;
+  sourceApplying?: boolean;
   volumeLabel: string;
 }>();
 
@@ -40,6 +51,7 @@ const emit = defineEmits<{
     sourceType: RoomVideoSourceType;
     externalUrl: string;
     localFile: File | null;
+    localFileAction?: LocalFileSourceAction | null;
   }): void;
 }>();
 
@@ -47,8 +59,10 @@ const rootRef = ref<HTMLElement | null>(null);
 const sourceOpen = ref(false);
 const sourceTypeDraft = ref<RoomVideoSourceType>(props.sourceType);
 const sourceExternalUrlDraft = ref(props.sourceUrl);
-const sourceLocalFileDraft = ref<File | null>(null);
-const sourceLocalFileNameDraft = ref(props.sourceFileName);
+const sourceLocalActionDraft = ref<LocalFileSourceAction | null>(null);
+const sourceLocalMatchFileDraft = ref<File | null>(null);
+const sourceLocalTargetFileDraft = ref<File | null>(null);
+const sourceLocalTargetFileNameDraft = ref("");
 const volumeOpen = ref(false);
 const syncAnimating = ref(false);
 const scrubbing = ref(false);
@@ -108,12 +122,38 @@ const bufferedSegments = computed(() => {
     minWidth: bufferedValue.value > 0 ? "6px" : "0",
   }];
 });
+const sourceLocalFileNameDraft = computed(() =>
+  sourceLocalActionDraft.value === "match_room_target"
+    ? sourceLocalMatchFileDraft.value?.name ?? ""
+    : sourceLocalTargetFileNameDraft.value);
 
 watch(
   () => props.progress,
   (value) => {
     if (!scrubbing.value) {
       progressDraft.value = value;
+    }
+  },
+);
+watch(
+  () => props.sourcePanelOpenKey,
+  () => {
+    openSourcePanel();
+  },
+);
+watch(
+  () => props.sourcePanelCloseKey,
+  () => {
+    sourceOpen.value = false;
+  },
+);
+watch(
+  () => props.sourceFileName,
+  (value) => {
+    if (!sourceOpen.value || props.sourceType !== "local_file") return;
+    if (sourceLocalTargetFileDraft.value) return;
+    if (sourceLocalActionDraft.value === "set_room_target") {
+      sourceLocalTargetFileNameDraft.value = value;
     }
   },
 );
@@ -156,27 +196,57 @@ function onProgressPointerUp(event: PointerEvent) {
   });
 }
 
-function handleLocalFileSelected(file: File | null) {
-  sourceLocalFileDraft.value = file;
-  sourceLocalFileNameDraft.value = file?.name ?? "";
+function handleLocalMatchFileSelected(file: File | null) {
+  sourceLocalActionDraft.value = "match_room_target";
+  if (file) {
+    sourceLocalMatchFileDraft.value = file;
+  }
+}
+
+function handleLocalTargetFileSelected(file: File | null) {
+  sourceLocalActionDraft.value = "set_room_target";
+  if (file) {
+    sourceLocalTargetFileDraft.value = file;
+    sourceLocalTargetFileNameDraft.value = file.name;
+  }
 }
 
 function handleApplySourceDraft() {
+  const localFile =
+    sourceLocalActionDraft.value === "match_room_target"
+      ? sourceLocalMatchFileDraft.value
+      : sourceLocalTargetFileDraft.value;
+
   emit("apply-source", {
     sourceType: sourceTypeDraft.value,
     externalUrl: sourceExternalUrlDraft.value,
-    localFile: sourceLocalFileDraft.value,
+    localFile,
+    localFileAction: sourceTypeDraft.value === "local_file" ? sourceLocalActionDraft.value : null,
   });
-  sourceOpen.value = false;
+  if (sourceTypeDraft.value === "external_url") {
+    sourceOpen.value = false;
+  }
+}
+
+function syncSourceDraftFromProps() {
+  sourceTypeDraft.value = props.sourceType;
+  sourceExternalUrlDraft.value = props.sourceUrl;
+  sourceLocalActionDraft.value = null;
+  sourceLocalMatchFileDraft.value = null;
+  sourceLocalTargetFileDraft.value = null;
+  sourceLocalTargetFileNameDraft.value = "";
+}
+
+function openSourcePanel() {
+  sourceOpen.value = true;
+  syncSourceDraftFromProps();
+  volumeOpen.value = false;
 }
 
 function toggleSourcePanel() {
   sourceOpen.value = !sourceOpen.value;
   if (sourceOpen.value) {
-    sourceTypeDraft.value = props.sourceType;
-    sourceExternalUrlDraft.value = props.sourceUrl;
-    sourceLocalFileDraft.value = null;
-    sourceLocalFileNameDraft.value = props.sourceFileName;
+    syncSourceDraftFromProps();
     volumeOpen.value = false;
   }
 }
@@ -238,9 +308,11 @@ onBeforeUnmount(() => {
           type="button"
           :aria-label="sourceLabel"
           :aria-expanded="sourceOpen"
+          :class="{ attention: sourceAttention }"
           @click="toggleSourcePanel"
         >
           <AppIcon :icon="FilmIcon" :size="18" />
+          <span v-if="sourceAttention" class="sourceAttentionBadge" aria-hidden="true" />
         </button>
 
         <Transition name="floating-fade">
@@ -250,9 +322,17 @@ onBeforeUnmount(() => {
               :source-type="sourceTypeDraft"
               :external-url="sourceExternalUrlDraft"
               :local-file-name="sourceLocalFileNameDraft"
+              :local-room-target-set="localRoomTargetSet"
+              :can-set-local-room-target="canSetLocalRoomTarget"
+              :local-selected-action="sourceLocalActionDraft"
+              :message="sourceMessage"
+              :message-tone="sourceMessageTone"
+              :hash-progress="sourceHashProgress"
+              :applying="sourceApplying"
               @update:source-type="sourceTypeDraft = $event"
               @update:external-url="sourceExternalUrlDraft = $event"
-              @select-local-file="handleLocalFileSelected"
+              @select-local-match-file="handleLocalMatchFileSelected"
+              @select-local-target-file="handleLocalTargetFileSelected"
               @apply="handleApplySourceDraft"
             />
           </div>
@@ -420,6 +500,22 @@ onBeforeUnmount(() => {
 .iconControlBtn.prominent:hover {
   background: color-mix(in srgb, var(--c-primary) 16%, var(--c-surface));
   border-color: color-mix(in srgb, var(--c-primary) 32%, var(--c-border));
+}
+
+.iconControlBtn.attention {
+  position: relative;
+}
+
+.sourceAttentionBadge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--c-surface);
+  border-radius: 999px;
+  background: var(--c-danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-danger) 16%, transparent);
 }
 
 .popoverWrap {

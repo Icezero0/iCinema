@@ -64,6 +64,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   const playbackSourceUrl = ref("");
   const playbackSourceFile = ref<File | null>(null);
   const playbackSourceFileName = ref("");
+  const playbackSourceFileHash = ref("");
   const playbackSourceRevision = ref(0);
   const pendingRealtimePlayback = ref<PendingRealtimePlayback | null>(null);
 
@@ -146,6 +147,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     sourceType: RoomVideoSourceType;
     externalUrl: string;
     localFile: File | null;
+    localFileHash?: string | null;
   }) {
     playbackSourceType.value = payload.sourceType;
 
@@ -153,9 +155,11 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       playbackSourceUrl.value = payload.externalUrl.trim();
       playbackSourceFile.value = null;
       playbackSourceFileName.value = "";
+      playbackSourceFileHash.value = "";
     } else if (payload.localFile) {
       playbackSourceFile.value = payload.localFile;
       playbackSourceFileName.value = payload.localFile.name;
+      playbackSourceFileHash.value = payload.localFileHash ?? "";
       playbackSourceUrl.value = "";
       playbackBufferedProgress.value = 0;
       playbackBufferedRanges.value = [];
@@ -182,8 +186,17 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       source.source_type === "external_url" &&
       playbackSourceType.value === "external_url" &&
       playbackSourceUrl.value === nextSourceUrl;
+    const nextFileHash = source?.source_type === "local_file"
+      ? source.file_hash ?? ""
+      : "";
+    const isSameLocalFileSource =
+      Boolean(source) &&
+      source.source_type === "local_file" &&
+      playbackSourceType.value === "local_file" &&
+      Boolean(playbackSourceFile.value) &&
+      playbackSourceFileHash.value === nextFileHash;
 
-    if (isSameExternalSource) {
+    if (isSameExternalSource || isSameLocalFileSource) {
       pendingSeekProgress.value = null;
       pendingRealtimePlayback.value = null;
       playbackIsPlaying.value = false;
@@ -194,6 +207,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
 
     playbackSourceFile.value = null;
     playbackSourceFileName.value = "";
+    playbackSourceFileHash.value = "";
     playbackBufferedProgress.value = 0;
     playbackBufferedRanges.value = [];
     playbackCanSeek.value = false;
@@ -330,6 +344,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackSourceUrl.value = "";
     playbackSourceFile.value = null;
     playbackSourceFileName.value = "";
+    playbackSourceFileHash.value = "";
     playbackSourceRevision.value += 1;
   }
 
@@ -351,6 +366,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     playbackSourceUrl,
     playbackSourceFile,
     playbackSourceFileName,
+    playbackSourceFileHash,
     playbackSourceRevision,
     playbackTimelineLabel,
     togglePlayback,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type {
   Room,
@@ -39,72 +39,114 @@ type RoomSettingsSavePayload = {
 
 const { t } = useI18n();
 
-const draftName = ref(props.room.name);
-const draftVisibility = ref<RoomVisibility>(props.room.visibility);
-const draftJoinAuditMode = ref<RoomJoinAuditMode>(props.room.join_audit_mode ?? "manual_review");
-const draftSyncPolicy = ref<RoomSyncPolicy>(props.roomSettings?.sync_policy ?? "auto_sync");
-const draftActiveSyncPermission = ref<RoomActiveSyncPermission>(
-  props.roomSettings?.active_sync_permission ?? "owner_and_manager",
-);
-const draftLocalSyncStrategy = ref<LocalRoomSyncStrategy>(props.localSyncStrategy);
+type RoomSettingsDraft = {
+  name: string;
+  visibility: RoomVisibility;
+  joinAuditMode: RoomJoinAuditMode;
+  syncPolicy: RoomSyncPolicy;
+  activeSyncPermission: RoomActiveSyncPermission;
+  localSyncStrategy: LocalRoomSyncStrategy;
+};
 
-const savedName = computed(() => props.room.name);
-const savedVisibility = computed(() => props.room.visibility);
-const savedJoinAuditMode = computed(() => props.room.join_audit_mode ?? "manual_review");
-const savedSyncPolicy = computed(() => props.roomSettings?.sync_policy ?? "auto_sync");
-const savedActiveSyncPermission = computed(() =>
-  props.roomSettings?.active_sync_permission ?? "owner_and_manager");
-const savedLocalSyncStrategy = computed(() => props.localSyncStrategy);
+type RoomSettingsDraftKey = keyof RoomSettingsDraft;
+
+const defaultSyncPolicy: RoomSyncPolicy = "auto_sync";
+const defaultActiveSyncPermission: RoomActiveSyncPermission = "owner_and_manager";
+
+const draft = reactive<RoomSettingsDraft>({
+  name: props.room.name,
+  visibility: props.room.visibility,
+  joinAuditMode: props.room.join_audit_mode ?? "manual_review",
+  syncPolicy: props.roomSettings?.sync_policy ?? defaultSyncPolicy,
+  activeSyncPermission: props.roomSettings?.active_sync_permission ?? defaultActiveSyncPermission,
+  localSyncStrategy: props.localSyncStrategy,
+});
+const dirty = reactive<Record<RoomSettingsDraftKey, boolean>>({
+  name: false,
+  visibility: false,
+  joinAuditMode: false,
+  syncPolicy: false,
+  activeSyncPermission: false,
+  localSyncStrategy: false,
+});
+
+const hasLoadedRoomSettings = computed(() => Boolean(props.roomSettings));
+const saved = computed<RoomSettingsDraft>(() => ({
+  name: props.room.name,
+  visibility: props.room.visibility,
+  joinAuditMode: props.room.join_audit_mode ?? "manual_review",
+  syncPolicy: props.roomSettings?.sync_policy ?? defaultSyncPolicy,
+  activeSyncPermission: props.roomSettings?.active_sync_permission ?? defaultActiveSyncPermission,
+  localSyncStrategy: props.localSyncStrategy,
+}));
 
 const hasRoomInfoChanges = computed(() =>
   props.canManageRoomSettings &&
   (
-    draftName.value.trim() !== savedName.value ||
-    draftVisibility.value !== savedVisibility.value ||
-    draftJoinAuditMode.value !== savedJoinAuditMode.value
+    draft.name.trim() !== saved.value.name ||
+    draft.visibility !== saved.value.visibility ||
+    draft.joinAuditMode !== saved.value.joinAuditMode
   ));
 const hasRoomSettingsChanges = computed(() =>
   props.canManageRoomSettings &&
+  hasLoadedRoomSettings.value &&
   (
-    draftSyncPolicy.value !== savedSyncPolicy.value ||
-    (props.isOwner && draftActiveSyncPermission.value !== savedActiveSyncPermission.value)
+    draft.syncPolicy !== saved.value.syncPolicy ||
+    (props.isOwner && draft.activeSyncPermission !== saved.value.activeSyncPermission)
   ));
 const hasLocalChanges = computed(() =>
-  draftLocalSyncStrategy.value !== savedLocalSyncStrategy.value);
+  draft.localSyncStrategy !== saved.value.localSyncStrategy);
 const hasChanges = computed(() =>
   hasRoomInfoChanges.value || hasRoomSettingsChanges.value || hasLocalChanges.value);
 const actionsDisabled = computed(() => !hasChanges.value || props.settingsSaving);
 
 function resetDraft() {
-  draftName.value = savedName.value;
-  draftVisibility.value = savedVisibility.value;
-  draftJoinAuditMode.value = savedJoinAuditMode.value;
-  draftSyncPolicy.value = savedSyncPolicy.value;
-  draftActiveSyncPermission.value = savedActiveSyncPermission.value;
-  draftLocalSyncStrategy.value = savedLocalSyncStrategy.value;
+  (Object.keys(draft) as RoomSettingsDraftKey[]).forEach(syncDraftFieldFromSaved);
 }
 
 function save() {
   if (actionsDisabled.value) return;
 
   emit("save", {
-    name: draftName.value.trim(),
-    visibility: draftVisibility.value,
-    joinAuditMode: draftJoinAuditMode.value,
-    syncPolicy: draftSyncPolicy.value,
-    activeSyncPermission: draftActiveSyncPermission.value,
-    localSyncStrategy: draftLocalSyncStrategy.value,
+    name: draft.name.trim(),
+    visibility: draft.visibility,
+    joinAuditMode: draft.joinAuditMode,
+    syncPolicy: draft.syncPolicy,
+    activeSyncPermission: draft.activeSyncPermission,
+    localSyncStrategy: draft.localSyncStrategy,
   });
+}
+
+function isDraftFieldSaved(key: RoomSettingsDraftKey) {
+  if (key === "name") return draft.name.trim() === saved.value.name;
+  return draft[key] === saved.value[key];
+}
+
+function syncDraftFieldFromSaved(key: RoomSettingsDraftKey) {
+  draft[key] = saved.value[key] as never;
+  dirty[key] = false;
+}
+
+function reconcileDraftField(key: RoomSettingsDraftKey) {
+  if (dirty[key]) {
+    dirty[key] = !isDraftFieldSaved(key);
+    return;
+  }
+
+  syncDraftFieldFromSaved(key);
+}
+
+function setDraftField<K extends RoomSettingsDraftKey>(key: K, value: RoomSettingsDraft[K]) {
+  draft[key] = value as never;
+  dirty[key] = !isDraftFieldSaved(key);
 }
 
 watch(
   () => props.room,
   () => {
-    if (hasRoomInfoChanges.value) return;
-
-    draftName.value = savedName.value;
-    draftVisibility.value = savedVisibility.value;
-    draftJoinAuditMode.value = savedJoinAuditMode.value;
+    reconcileDraftField("name");
+    reconcileDraftField("visibility");
+    reconcileDraftField("joinAuditMode");
   },
   { deep: true },
 );
@@ -112,10 +154,9 @@ watch(
 watch(
   () => props.roomSettings,
   () => {
-    if (hasRoomSettingsChanges.value) return;
-
-    draftSyncPolicy.value = savedSyncPolicy.value;
-    draftActiveSyncPermission.value = savedActiveSyncPermission.value;
+    if (!props.roomSettings) return;
+    reconcileDraftField("syncPolicy");
+    reconcileDraftField("activeSyncPermission");
   },
   { immediate: true },
 );
@@ -123,8 +164,7 @@ watch(
 watch(
   () => props.localSyncStrategy,
   () => {
-    if (hasLocalChanges.value) return;
-    draftLocalSyncStrategy.value = savedLocalSyncStrategy.value;
+    reconcileDraftField("localSyncStrategy");
   },
 );
 </script>
@@ -133,23 +173,23 @@ watch(
   <div class="settingsTab">
     <div class="panelBody">
       <RoomSettingsPanel
-        :room-name="draftName"
-        :visibility="draftVisibility"
-        :join-audit-mode="draftJoinAuditMode"
-        :sync-policy="draftSyncPolicy"
-        :active-sync-permission="draftActiveSyncPermission"
+        :room-name="draft.name"
+        :visibility="draft.visibility"
+        :join-audit-mode="draft.joinAuditMode"
+        :sync-policy="draft.syncPolicy"
+        :active-sync-permission="draft.activeSyncPermission"
         :settings-loading="settingsLoading"
         :settings-error="settingsError"
         :can-manage-room-settings="canManageRoomSettings"
         :is-owner="isOwner"
-        :local-sync-strategy="draftLocalSyncStrategy"
+        :local-sync-strategy="draft.localSyncStrategy"
         :local-sync-options="localSyncOptions"
-        @update:room-name="draftName = $event"
-        @update:visibility="draftVisibility = $event"
-        @update:join-audit-mode="draftJoinAuditMode = $event"
-        @update:sync-policy="draftSyncPolicy = $event"
-        @update:active-sync-permission="draftActiveSyncPermission = $event"
-        @update:local-sync-strategy="draftLocalSyncStrategy = $event as LocalRoomSyncStrategy"
+        @update:room-name="setDraftField('name', $event)"
+        @update:visibility="setDraftField('visibility', $event)"
+        @update:join-audit-mode="setDraftField('joinAuditMode', $event)"
+        @update:sync-policy="setDraftField('syncPolicy', $event)"
+        @update:active-sync-permission="setDraftField('activeSyncPermission', $event)"
+        @update:local-sync-strategy="setDraftField('localSyncStrategy', $event as LocalRoomSyncStrategy)"
       />
     </div>
 
