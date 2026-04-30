@@ -33,6 +33,9 @@ export function useNativeVideoCore(options: {
   let pendingPlayback: PlaybackStateInput | null = null;
   let readyConfirmTimer: number | null = null;
   let stallingErrorTimer: number | null = null;
+  let stallingLastProgressAtMs = 0;
+  let stallingBufferedEndMark = 0;
+  let stallingPlaybackTimeMark = 0;
   let bufferedSeekSettleTimer: number | null = null;
   let pendingBufferedSeek = false;
 
@@ -295,6 +298,57 @@ export function useNativeVideoCore(options: {
       time <= item.end + config.bufferRangeEpsilonSeconds);
   }
 
+  function readStallingBufferedEnd(
+    video = videoRef.value,
+    ranges = readBufferedRanges(video),
+  ) {
+    if (!video) return 0;
+
+    const currentRange = findBufferedRangeForCurrentTime(ranges, video.currentTime);
+    if (currentRange) return currentRange.end;
+
+    return ranges.reduce((max, range) => Math.max(max, range.end), 0);
+  }
+
+  function resetStallingProgressTracking() {
+    stallingLastProgressAtMs = 0;
+    stallingBufferedEndMark = 0;
+    stallingPlaybackTimeMark = 0;
+  }
+
+  function markStallingProgressNow() {
+    const video = videoRef.value;
+    const ranges = readBufferedRanges(video);
+    stallingLastProgressAtMs = Date.now();
+    stallingBufferedEndMark = readStallingBufferedEnd(video, ranges);
+    stallingPlaybackTimeMark = video?.currentTime ?? currentTime.value;
+  }
+
+  function refreshStallingProgressTracking() {
+    if (mediaHealthState.value !== "stalling") return false;
+
+    const video = videoRef.value;
+    const ranges = readBufferedRanges(video);
+    const bufferedEnd = readStallingBufferedEnd(video, ranges);
+    const playbackTime = video?.currentTime ?? currentTime.value;
+    const epsilon = config.stallingProgressEpsilonSeconds;
+    const hasBufferedProgress = bufferedEnd > stallingBufferedEndMark + epsilon;
+    const hasPlaybackProgress = playbackTime > stallingPlaybackTimeMark + epsilon;
+
+    if (!hasBufferedProgress && !hasPlaybackProgress) return false;
+
+    stallingLastProgressAtMs = Date.now();
+    stallingBufferedEndMark = Math.max(stallingBufferedEndMark, bufferedEnd);
+    stallingPlaybackTimeMark = Math.max(stallingPlaybackTimeMark, playbackTime);
+    return true;
+  }
+
+  function noteStallingProgress(reason: string) {
+    if (!refreshStallingProgressTracking()) return;
+
+    armStallingErrorTimer(reason);
+  }
+
   function findSeekableRangeForTime(time: number) {
     return seekableRanges.value.find((item) =>
       time >= item.start - config.bufferRangeEpsilonSeconds &&
@@ -325,7 +379,7 @@ export function useNativeVideoCore(options: {
         ready: false,
         reason: "no_source",
         bufferAhead: 0,
-        requiredBufferAhead: config.readyBufferAheadSeconds,
+        requiredBufferAhead: config.readyRecoveryBufferAheadSeconds,
       };
     }
 
@@ -334,7 +388,7 @@ export function useNativeVideoCore(options: {
         ready: false,
         reason: "error",
         bufferAhead: 0,
-        requiredBufferAhead: config.readyBufferAheadSeconds,
+        requiredBufferAhead: config.readyRecoveryBufferAheadSeconds,
       };
     }
 
@@ -343,7 +397,7 @@ export function useNativeVideoCore(options: {
         ready: false,
         reason: "seeking",
         bufferAhead: 0,
-        requiredBufferAhead: config.readyBufferAheadSeconds,
+        requiredBufferAhead: config.readyRecoveryBufferAheadSeconds,
       };
     }
 
@@ -353,7 +407,7 @@ export function useNativeVideoCore(options: {
         ready: false,
         reason: "duration_unavailable",
         bufferAhead: 0,
-        requiredBufferAhead: config.readyBufferAheadSeconds,
+        requiredBufferAhead: config.readyRecoveryBufferAheadSeconds,
       };
     }
 
@@ -373,7 +427,7 @@ export function useNativeVideoCore(options: {
         ready: false,
         reason: "current_time_not_buffered",
         bufferAhead: 0,
-        requiredBufferAhead: config.readyBufferAheadSeconds,
+        requiredBufferAhead: config.readyRecoveryBufferAheadSeconds,
       };
     }
 
@@ -383,7 +437,7 @@ export function useNativeVideoCore(options: {
       currentRange.end >= mediaDuration - config.endOfMediaEpsilonSeconds;
     const requiredBufferAhead = reachesEnd
       ? Math.max(0, remaining - config.endOfMediaEpsilonSeconds)
-      : config.readyBufferAheadSeconds;
+      : config.readyRecoveryBufferAheadSeconds;
     const hasEnoughBufferedAhead =
       bufferAhead + config.bufferRangeEpsilonSeconds >= requiredBufferAhead;
     const hasDecodableFuture =
@@ -453,17 +507,39 @@ export function useNativeVideoCore(options: {
     clearStallingErrorTimer();
     if (!appliedUrl.value || config.stallingToErrorMs <= 0) return;
 
+    if (stallingLastProgressAtMs <= 0) {
+      markStallingProgressNow();
+    }
+
+    const elapsedMs = Date.now() - stallingLastProgressAtMs;
+    const timeoutDelayMs = Math.max(0, config.stallingToErrorMs - elapsedMs);
+
     stallingErrorTimer = window.setTimeout(() => {
       stallingErrorTimer = null;
       if (mediaHealthState.value !== "stalling") return;
 
-      errorMessage.value = `Media stayed stalling for ${Math.round(config.stallingToErrorMs / 1000)}s`;
+      updateMediaMetrics();
+      if (refreshStallingProgressTracking()) {
+        armStallingErrorTimer(`${reason}:progressObserved`);
+        return;
+      }
+
+      const silentMs = Date.now() - stallingLastProgressAtMs;
+      if (silentMs < config.stallingToErrorMs) {
+        armStallingErrorTimer(`${reason}:timeoutDeferred`);
+        return;
+      }
+
+      errorMessage.value = `Media made no progress while stalling for ${Math.round(config.stallingToErrorMs / 1000)}s`;
       clearReadyConfirmation();
       setMediaHealthState("error", "stallingTimeout", {
         triggerReason: reason,
         timeoutMs: config.stallingToErrorMs,
+        silentMs,
+        bufferedEnd: Number(stallingBufferedEndMark.toFixed(3)),
+        playbackTime: Number(stallingPlaybackTimeMark.toFixed(3)),
       });
-    }, config.stallingToErrorMs);
+    }, timeoutDelayMs);
   }
 
   function setPlayerState(nextState: PlayerState, reason: string) {
@@ -489,9 +565,11 @@ export function useNativeVideoCore(options: {
 
     mediaHealthState.value = nextState;
     if (nextState === "stalling") {
+      markStallingProgressNow();
       armStallingErrorTimer(reason);
     } else {
       clearStallingErrorTimer();
+      resetStallingProgressTracking();
     }
     options.writeLog("stateTransition", {
       machine: "mediaHealth",
@@ -620,12 +698,14 @@ export function useNativeVideoCore(options: {
 
   function handleTimeUpdate() {
     updateMediaMetrics();
+    noteStallingProgress("timeupdate");
     tryApplyPendingSeekablePlayback("timeupdate");
     scheduleReadyConfirmation("timeupdate");
   }
 
   function handleProgress() {
     updateMediaMetrics();
+    noteStallingProgress("video:progress");
     tryApplyPendingSeekablePlayback("progress");
     logProgressIfChanged("video:progress");
     scheduleReadyConfirmation("video:progress");
@@ -648,6 +728,7 @@ export function useNativeVideoCore(options: {
 
   function handleBufferAppended(reason: string) {
     updateMediaMetrics();
+    noteStallingProgress(reason);
     logProgressIfChanged(reason);
     scheduleReadyConfirmation(reason);
   }
