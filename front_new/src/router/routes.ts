@@ -1,5 +1,11 @@
 export default [
   {
+    path: "/hls-poc",
+    name: "hls-player-poc",
+    component: () => import("@/pages/hls-player-poc/HlsPlayerPocPage.vue"),
+  },
+
+  {
     path: "/auth",
     component: () => import("@/layouts/AuthLayout.vue"),
     children: [
