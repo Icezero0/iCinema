@@ -4,13 +4,14 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError, ForbiddenError
 from app.core.logging import log_extra
 from app.modules.rooms.constants import RoomSyncPolicy
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.room.service import RoomService
 from app.modules.rooms.settings.service import RoomSettingsService
-from app.realtime.constants import AutoPlaybackAction, WsCommandAction
+from app.realtime.constants import AutoPlaybackAction, SessionCloseReason, WsCommandAction
 from app.realtime.manager import RealtimeManager, WsConnection
 from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
@@ -67,7 +68,11 @@ class RoomCommandHandler:
         if command.action == WsCommandAction.ROOM_VIDEO_RUNTIME_GET:
             return await self._handle_room_video_runtime_get(connection=connection)
 
-        raise BadRequestError(f"Unsupported room command action: {command.action}")
+        raise BadRequestError(
+            f"Unsupported room command action: {command.action}",
+            reason=ErrorReason.UNSUPPORTED_ROOM_COMMAND_ACTION,
+            details={"action": command.action},
+        )
 
     async def _handle_room_presence_get(
         self,
@@ -121,7 +126,11 @@ class RoomCommandHandler:
             user_id=connection.user_id,
         )
         if role is None:
-            raise ForbiddenError("You are not allowed to enter this room")
+            raise ForbiddenError(
+                "You are not allowed to enter this room",
+                reason=ErrorReason.ROOM_ENTER_FORBIDDEN,
+                details={"room_id": room_id},
+            )
 
         previous_room_id = connection.active_room_id
         replaced_connection_id = await self.presence_service.find_room_user_connection(
@@ -156,7 +165,7 @@ class RoomCommandHandler:
             await publisher.publish_session_closed(
                 connection_id=replaced_connection_id,
                 room_id=room_id,
-                reason="entered_elsewhere",
+                reason=SessionCloseReason.ENTERED_ELSEWHERE,
             )
 
         if previous_room_id is not None and previous_room_id != room_id:
@@ -288,16 +297,27 @@ class RoomCommandHandler:
     def _require_active_room(connection: WsConnection) -> int:
         room_id = connection.active_room_id
         if room_id is None:
-            raise BadRequestError("You must enter a room before querying room runtime")
+            raise BadRequestError(
+                "You must enter a room before querying room runtime",
+                reason=ErrorReason.ROOM_NOT_ENTERED,
+            )
         return room_id
 
     @staticmethod
     def _extract_room_id(command: WsCommandPayload) -> int:
         if not command.data or "room_id" not in command.data:
-            raise BadRequestError("room_id is required")
+            raise BadRequestError(
+                "room_id is required",
+                reason=ErrorReason.MISSING_ROOM_ID,
+                details={"field": "room_id", "constraint": "required"},
+            )
 
         room_id = command.data["room_id"]
         if not isinstance(room_id, int) or room_id <= 0:
-            raise BadRequestError("room_id must be a positive integer")
+            raise BadRequestError(
+                "room_id must be a positive integer",
+                reason=ErrorReason.INVALID_ROOM_ID,
+                details={"field": "room_id", "constraint": "positive_integer"},
+            )
 
         return room_id

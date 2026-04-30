@@ -2,7 +2,7 @@ from typing import Any
 
 from app.modules.messages.schemas import MessageResponse
 from app.realtime.channels import ChannelKey, room_channel, user_channel
-from app.realtime.constants import WsEventType
+from app.realtime.constants import SessionCloseReason, WsEventType
 from app.realtime.manager import RealtimeManager
 from app.realtime.protocol import build_event_message
 from app.realtime.state import (
@@ -120,7 +120,7 @@ class RealtimePublisher:
         *,
         connection_id: str,
         room_id: int,
-        reason: str,
+        reason: SessionCloseReason,
     ) -> None:
         await self.manager.send_to_connection(
             connection_id=connection_id,

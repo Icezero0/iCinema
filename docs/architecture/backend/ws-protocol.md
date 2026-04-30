@@ -163,10 +163,23 @@
   "payload": {
     "request_id": "req-123",
     "code": "bad_request",
-    "message": "room_id is required"
+    "reason": "room_id_is_required",
+    "message": "room_id is required",
+    "details": null
   }
 }
 ```
+
+字段说明：
+
+- `code`：粗粒度错误类别，用于区分鉴权、权限、参数、资源不存在等大类。
+- `reason`：稳定的 snake_case 业务原因，前端应优先用它作为 i18n key。
+- `message`：后端兜底文案，主要用于开发调试或前端未配置 i18n 时展示。
+- `details`：可选结构化细节。payload 校验失败时会包含 `errors` 列表；普通业务错误通常为 `null`。
+
+WS 错误 `reason` 与 HTTP 错误共用后端登记表 `app.core.error_reasons.ErrorReason`。新增 WS 业务错误时，应先登记 `ErrorReason`，再在 handler 或 service 中引用，避免前后端 i18n key 漂移。
+
+完整登记表见 `error-reasons.md`。
 
 ### 5.4 heartbeat pong
 
@@ -764,6 +777,8 @@
 - `left_room`
 - `removed_from_room`
 - `room_deleted`
+
+该事件的 `reason` 登记在 `app.realtime.constants.SessionCloseReason`，不与错误 `ErrorReason` 混用。
 
 客户端收到后应：
 

@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.modules.rooms.constants import (
     RoomPermission,
@@ -35,7 +36,11 @@ class RoomSettingsService:
             user_id=user.id,
         )
         if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.ROOM_PERMISSION_DENIED,
+                details={"room_id": room_id, "permission": permission},
+            )
 
         require_room_permission(role, permission)
         return role
@@ -48,7 +53,11 @@ class RoomSettingsService:
     ) -> Room:
         room = await self.room_repo.get_room_by_id(db, room_id)
         if not room:
-            raise NotFoundError("Room not found")
+            raise NotFoundError(
+                "Room not found",
+                reason=ErrorReason.ROOM_NOT_FOUND,
+                details={"room_id": room_id},
+            )
         return room
 
     async def find_room_settings_by_room_id(
@@ -67,7 +76,11 @@ class RoomSettingsService:
     ) -> RoomSettings:
         settings = await self.find_room_settings_by_room_id(db, room_id=room_id)
         if not settings:
-            raise NotFoundError("Room settings not found")
+            raise NotFoundError(
+                "Room settings not found",
+                reason=ErrorReason.ROOM_SETTINGS_NOT_FOUND,
+                details={"room_id": room_id},
+            )
         return settings
 
     async def create_default_settings_in_tx(

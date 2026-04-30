@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass, field
 from time import time
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError
 from app.modules.rooms.constants import RoomSyncPolicy, RoomVideoSourceType
 from app.realtime.constants import (
@@ -88,7 +89,11 @@ class RoomVideoRuntimeService:
         state: RoomVideoRuntimeState,
     ) -> None:
         if state.room_video_source is None:
-            raise BadRequestError("Room video source is not set for this room")
+            raise BadRequestError(
+                "Room video source is not set for this room",
+                reason=ErrorReason.ROOM_VIDEO_SOURCE_NOT_SET,
+                details={"room_id": state.room_id},
+            )
 
     @staticmethod
     def _resolve_position_seconds_locked(
@@ -200,7 +205,12 @@ class RoomVideoRuntimeService:
 
             if sync_policy == RoomSyncPolicy.AUTO_SYNC and state.stalling_user_ids:
                 raise BadRequestError(
-                    "Cannot resume playback while some users are still stalling"
+                    "Cannot resume playback while some users are still stalling",
+                    reason=ErrorReason.PLAYBACK_RESUME_BLOCKED_BY_STALLING_USERS,
+                    details={
+                        "room_id": room_id,
+                        "stalling_user_ids": sorted(state.stalling_user_ids),
+                    },
                 )
 
             playback = PlaybackState(

@@ -56,6 +56,13 @@ class WsErrorCode(StrEnum):
     INTERNAL_ERROR = "internal_error"
 
 
+class SessionCloseReason(StrEnum):
+    ENTERED_ELSEWHERE = "entered_elsewhere"
+    LEFT_ROOM = "left_room"
+    REMOVED_FROM_ROOM = "removed_from_room"
+    ROOM_DELETED = "room_deleted"
+
+
 class ChannelKind(StrEnum):
     USER = "user"
     ROOM = "room"

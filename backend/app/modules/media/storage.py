@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import UploadFile
 
 from app.core.config import get_settings
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError
 from app.modules.media.constants import MediaAssetType
 
@@ -55,7 +56,11 @@ class MediaStorageService:
             return settings.sticker_dir_path
         if asset_type == MediaAssetType.VIDEO:
             return settings.video_dir_path
-        raise BadRequestError("Unsupported media asset type")
+        raise BadRequestError(
+            "Unsupported media asset type",
+            reason=ErrorReason.UNSUPPORTED_MEDIA_ASSET_TYPE,
+            details={"asset_type": asset_type},
+        )
 
     def _get_allowed_types(self, asset_type: str) -> set[str]:
         if asset_type == MediaAssetType.AVATAR:
@@ -64,7 +69,11 @@ class MediaStorageService:
             return self.IMAGE_ALLOWED_TYPES
         if asset_type == MediaAssetType.STICKER:
             return self.STICKER_ALLOWED_TYPES
-        raise BadRequestError("Unsupported upload media type")
+        raise BadRequestError(
+            "Unsupported upload media type",
+            reason=ErrorReason.UNSUPPORTED_UPLOAD_MEDIA_TYPE,
+            details={"asset_type": asset_type},
+        )
 
     def _get_allowed_exts(self, asset_type: str) -> set[str]:
         if asset_type == MediaAssetType.AVATAR:
@@ -73,7 +82,11 @@ class MediaStorageService:
             return self.IMAGE_ALLOWED_EXTS
         if asset_type == MediaAssetType.STICKER:
             return self.STICKER_ALLOWED_EXTS
-        raise BadRequestError("Unsupported upload media type")
+        raise BadRequestError(
+            "Unsupported upload media type",
+            reason=ErrorReason.UNSUPPORTED_UPLOAD_MEDIA_TYPE,
+            details={"asset_type": asset_type},
+        )
 
     async def prepare_upload(
         self,
@@ -83,7 +96,14 @@ class MediaStorageService:
     ) -> PreparedUploadFile:
         content_type = (file.content_type or "").lower()
         if content_type not in self._get_allowed_types(asset_type):
-            raise BadRequestError("Unsupported media file type")
+            raise BadRequestError(
+                "Unsupported media file type",
+                reason=ErrorReason.UNSUPPORTED_MEDIA_FILE_TYPE,
+                details={
+                    "asset_type": asset_type,
+                    "content_type": content_type or None,
+                },
+            )
 
         ext = Path(file.filename or "").suffix.lower()
         if ext not in self._get_allowed_exts(asset_type):
@@ -96,11 +116,23 @@ class MediaStorageService:
             elif content_type == "image/gif":
                 ext = ".gif"
             else:
-                raise BadRequestError("Unsupported media file extension")
+                raise BadRequestError(
+                    "Unsupported media file extension",
+                    reason=ErrorReason.UNSUPPORTED_MEDIA_FILE_EXTENSION,
+                    details={
+                        "asset_type": asset_type,
+                        "extension": ext or None,
+                        "content_type": content_type or None,
+                    },
+                )
 
         content = await file.read()
         if not content:
-            raise BadRequestError("Media file cannot be empty")
+            raise BadRequestError(
+                "Media file cannot be empty",
+                reason=ErrorReason.EMPTY_MEDIA_FILE,
+                details={"asset_type": asset_type},
+            )
 
         return PreparedUploadFile(
             content=content,
@@ -160,7 +192,11 @@ class MediaStorageService:
 
     def get_file_path(self, *, asset_type: str, storage_key: str) -> Path:
         if "/" in storage_key or "\\" in storage_key or ".." in storage_key:
-            raise BadRequestError("Invalid media storage key")
+            raise BadRequestError(
+                "Invalid media storage key",
+                reason=ErrorReason.INVALID_MEDIA_STORAGE_KEY,
+                details={"asset_type": asset_type},
+            )
 
         return self._get_base_dir(asset_type) / storage_key
     

@@ -7,6 +7,7 @@ from fastapi import WebSocket
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import AppError, BadRequestError
 from app.core.logging import log_extra
 from app.realtime.constants import WsCommandAction, WsErrorCode, WsMessageType
@@ -96,7 +97,11 @@ class RealtimeMessageHandler:
                 )
                 return connection
 
-            raise BadRequestError(f"Client cannot send message type: {message.type}")
+            raise BadRequestError(
+                f"Client cannot send message type: {message.type}",
+                reason=ErrorReason.UNSUPPORTED_CLIENT_MESSAGE_TYPE,
+                details={"type": message.type},
+            )
 
         except AppError as e:
             logger.warning(
@@ -117,12 +122,17 @@ class RealtimeMessageHandler:
                 build_error_message(
                     code=e.code,
                     request_id=request_id,
+                    reason=e.reason,
                     message=e.message,
+                    details=e.details,
                 ).model_dump(mode="json"),
             )
             return connection
 
-        except ValidationError:
+        except ValidationError as e:
+            details = {
+                "errors": e.errors(include_url=False, include_input=False),
+            }
             logger.warning(
                 "ws invalid payload connection_id=%s user_id=%s request_id=%s",
                 connection.connection_id if connection is not None else None,
@@ -134,13 +144,16 @@ class RealtimeMessageHandler:
                     connection_id=connection.connection_id if connection is not None else None,
                     request_id=request_id,
                     error_code=WsErrorCode.INVALID_PAYLOAD,
+                    error_reason=ErrorReason.INVALID_WEBSOCKET_PAYLOAD,
                 ),
             )
             await websocket.send_json(
                 build_error_message(
                     code=WsErrorCode.INVALID_PAYLOAD,
                     request_id=request_id,
+                    reason=ErrorReason.INVALID_WEBSOCKET_PAYLOAD,
                     message="Invalid websocket payload",
+                    details=details,
                 ).model_dump(mode="json"),
             )
             return connection
@@ -183,7 +196,11 @@ class RealtimeMessageHandler:
                 command=command,
             )
 
-        raise BadRequestError(f"Unsupported command action: {command.action}")
+        raise BadRequestError(
+            f"Unsupported command action: {command.action}",
+            reason=ErrorReason.UNSUPPORTED_COMMAND_ACTION,
+            details={"action": command.action},
+        )
 
     @staticmethod
     def _extract_request_id(raw_message: dict) -> str | None:
@@ -202,5 +219,8 @@ class RealtimeMessageHandler:
     @staticmethod
     def _require_authenticated(connection: WsConnection | None) -> WsConnection:
         if connection is None:
-            raise BadRequestError("Authentication required before this action")
+            raise BadRequestError(
+                "Authentication required before this action",
+                reason=ErrorReason.AUTHENTICATION_REQUIRED,
+            )
         return connection

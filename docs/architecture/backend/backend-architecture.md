@@ -840,10 +840,28 @@ HTTP 返回格式：
 {
   "error": {
     "code": "forbidden",
-    "message": "You do not have permission to perform this action"
+    "reason": "room_permission_denied",
+    "message": "You do not have permission to perform this action",
+    "details": {
+      "room_id": 1,
+      "permission": "manage_members"
+    }
   }
 }
 ```
+
+字段约定：
+
+- `code`：粗粒度错误类别，主要对应 HTTP 状态语义
+- `reason`：稳定的 snake_case 业务原因，前端应优先用它作为 i18n key
+- `message`：后端兜底文案，主要用于开发调试或前端未配置 i18n 时展示
+- `details`：可选结构化细节，只放安全、必要、便于前端或排查使用的信息
+
+`reason` 必须在 `app.core.error_reasons.ErrorReason` 中统一登记，业务代码禁止直接写 `reason="..."` 裸字符串。新增错误原因时，应先补充 `ErrorReason`，再在抛错处引用。
+
+完整登记表见 `error-reasons.md`。
+
+WS 会话关闭等非错误事件中的 `reason` 不属于 `ErrorReason`，当前登记在 `app.realtime.constants.SessionCloseReason`。
 
 WS 错误格式见 `ws-protocol.md`。
 
