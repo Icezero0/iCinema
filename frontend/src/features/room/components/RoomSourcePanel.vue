@@ -164,6 +164,15 @@ function toggleTargetHelp() {
 function closeTargetHelp() {
   targetHelpOpen.value = false;
 }
+
+function selectLocalMode(value: "match_room_target" | "set_room_target") {
+  if (value === "match_room_target") {
+    emit("select-local-match-file", null);
+    return;
+  }
+
+  emit("select-local-target-file", null);
+}
 </script>
 
 <template>
@@ -242,7 +251,7 @@ function closeTargetHelp() {
             :aria-checked="localSelectedAction === option.value"
             :disabled="option.disabled"
             :class="{ active: localSelectedAction === option.value }"
-            @click="emit(option.value === 'match_room_target' ? 'select-local-match-file' : 'select-local-target-file', null)"
+            @click="selectLocalMode(option.value)"
           >
             <span class="localModeRadio" aria-hidden="true" />
             <span>{{ option.label }}</span>
