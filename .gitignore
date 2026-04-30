@@ -39,4 +39,4 @@ Thumbs.db
 .devcontainer/
 
 # 忽略 data 目录下的所有内容
-data/
+/data/
