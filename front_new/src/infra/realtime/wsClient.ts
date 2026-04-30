@@ -440,6 +440,7 @@ class WSClient {
 
   private handleErrorEnvelope(envelope: WSErrorEnvelope) {
     const requestId = envelope.payload.request_id ?? this.authRequestId;
+    const isUnauthorized = envelope.payload.code === "unauthorized";
     const error = new WSProtocolError(
       envelope.payload.message,
       envelope.payload.code,
@@ -452,11 +453,14 @@ class WSClient {
         window.clearTimeout(pending.timeoutId);
         this.pendingRequests.delete(requestId);
         pending.reject(error);
+        if (isUnauthorized) {
+          this.disconnect();
+        }
         return;
       }
     }
 
-    if (envelope.payload.code === "unauthorized") {
+    if (isUnauthorized) {
       this.disconnect();
     }
   }
@@ -531,9 +535,10 @@ class WSClient {
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
 
-      if (!this.token || !this.shouldReconnect) return;
+      const token = localStorage.getItem("access_token") || this.token;
+      if (!token || !this.shouldReconnect) return;
 
-      void this.connect(this.token).catch(() => {
+      void this.connect(token).catch(() => {
         // reconnect 失败时，close handler 会继续安排下一次重连
       });
     }, delay);

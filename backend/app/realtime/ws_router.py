@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
+from app.core.logging import log_extra
 from app.modules.rooms.constants import RoomSyncPolicy
 from app.modules.rooms.settings.service import RoomSettingsService
 from app.realtime.constants import AutoPlaybackAction
@@ -16,7 +17,7 @@ from app.realtime.room_presence import RoomPresenceService
 from app.realtime.room_video_runtime import RoomVideoRuntimeService
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.realtime")
 
 router = APIRouter()
 
@@ -24,6 +25,15 @@ router = APIRouter()
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
     await ws.accept()
+    client = getattr(ws, "client", None)
+    logger.info(
+        "ws connected client_ip=%s",
+        client.host if client else None,
+        **log_extra(
+            "ws.connected",
+            client_ip=client.host if client else None,
+        ),
+    )
 
     manager: RealtimeManager = ws.app.state.realtime_manager
     publisher: RealtimePublisher = ws.app.state.realtime_publisher
@@ -45,7 +55,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             if connection is None:
                 remaining = auth_deadline - time.monotonic()
                 if remaining <= 0:
-                    logger.info("ws auth timeout before auth message")
+                    logger.warning(
+                        "ws auth timeout before auth message",
+                        **log_extra("ws.auth_timeout"),
+                    )
                     await ws.close(code=1008, reason="Authentication timeout")
                     break
 
@@ -55,7 +68,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         timeout=remaining,
                     )
                 except asyncio.TimeoutError:
-                    logger.info("ws auth timeout while waiting for auth message")
+                    logger.warning(
+                        "ws auth timeout while waiting for auth message",
+                        **log_extra("ws.auth_timeout"),
+                    )
                     await ws.close(code=1008, reason="Authentication timeout")
                     break
             else:
@@ -76,7 +92,27 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             connection.user_id if connection is not None else None,
             connection.connection_id if connection is not None else None,
             connection.active_room_id if connection is not None else None,
+            **log_extra(
+                "ws.disconnect",
+                user_id=connection.user_id if connection is not None else "-",
+                connection_id=connection.connection_id if connection is not None else None,
+                active_room_id=connection.active_room_id if connection is not None else None,
+            ),
         )
+    except Exception:
+        logger.exception(
+            "ws unhandled exception: user_id=%s connection_id=%s active_room_id=%s",
+            connection.user_id if connection is not None else None,
+            connection.connection_id if connection is not None else None,
+            connection.active_room_id if connection is not None else None,
+            **log_extra(
+                "ws.exception",
+                user_id=connection.user_id if connection is not None else "-",
+                connection_id=connection.connection_id if connection is not None else None,
+                active_room_id=connection.active_room_id if connection is not None else None,
+            ),
+        )
+        raise
     finally:
         if connection is not None:
             left_room_id = await presence_service.handle_disconnect(connection=connection)
@@ -118,6 +154,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     connection.user_id,
                     connection.connection_id,
                     left_room_id,
+                    **log_extra(
+                        "ws.disconnect_cleanup",
+                        user_id=connection.user_id,
+                        connection_id=connection.connection_id,
+                        room_id=left_room_id,
+                    ),
                 )
 
                 await publisher.publish_room_user_presence(

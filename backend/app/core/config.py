@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     app_env: str = Field("development", alias="APP_ENV")
     debug: bool = Field(True, alias="DEBUG")
     api_v1_prefix: str = "/api/v1"
+    log_level: str = Field("INFO", alias="LOG_LEVEL")
+    log_sql: bool = Field(False, alias="LOG_SQL")
+    log_access_exclude_paths: list[str] = Field(
+        default_factory=lambda: ["/health"],
+        alias="LOG_ACCESS_EXCLUDE_PATHS",
+    )
+    log_uvicorn_access: bool = Field(False, alias="LOG_UVICORN_ACCESS")
+    log_uvicorn_level: str = Field("WARNING", alias="LOG_UVICORN_LEVEL")
 
     # 数据目录 / DB
     data_dir: str = Field("../data", alias="DATA_DIR")

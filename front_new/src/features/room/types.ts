@@ -1,3 +1,3 @@
 export type RoomPanelKey = "chat" | "members" | "requests" | "settings";
 export type RoomRole = "owner" | "manager" | "member";
-export type MemberStatus = "playing" | "paused" | "buffering" | "offline" | "error";
+export type MemberStatus = "idle" | "ready" | "stalling" | "offline" | "error";

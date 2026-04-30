@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   ArrowPathIcon,
   FilmIcon,
@@ -17,9 +17,12 @@ const props = defineProps<{
   bufferedProgress: number;
   bufferedRanges: Array<{ startPercent: number; endPercent: number }>;
   volume: number;
+  seekDisabled?: boolean;
   sourceType: RoomVideoSourceType;
   sourceUrl: string;
   sourceFileName: string;
+  currentTime: number;
+  duration: number;
   timelineLabel: string;
   playLabel: string;
   pauseLabel: string;
@@ -48,16 +51,42 @@ const sourceLocalFileDraft = ref<File | null>(null);
 const sourceLocalFileNameDraft = ref(props.sourceFileName);
 const volumeOpen = ref(false);
 const syncAnimating = ref(false);
+const scrubbing = ref(false);
+const progressDraft = ref(props.progress);
+const PROGRESS_COMMIT_EPSILON = 0.001;
 const volumeValue = computed(() =>
   Math.min(100, Math.max(0, Math.round(props.volume))));
+function normalizeProgress(value: number) {
+  return Math.min(100, Math.max(0, value));
+}
+
 const progressValue = computed(() =>
-  Math.min(100, Math.max(0, props.progress)));
+  normalizeProgress(scrubbing.value ? progressDraft.value : props.progress));
+function formatPlaybackTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "00:00";
+
+  const totalSeconds = Math.floor(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const restSeconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(restSeconds).padStart(2, "0");
+
+  if (hours <= 0) return `${mm}:${ss}`;
+  return `${hours}:${mm}:${ss}`;
+}
+
+const displayTimelineLabel = computed(() => {
+  if (!scrubbing.value || props.duration <= 0) {
+    return props.timelineLabel;
+  }
+
+  const previewTime = props.duration * (progressValue.value / 100);
+  return `${formatPlaybackTime(previewTime)} / ${formatPlaybackTime(props.duration)}`;
+});
 const bufferedValue = computed(() =>
   Math.max(progressValue.value, Math.min(100, Math.max(0, props.bufferedProgress))));
-const shouldShowBufferedSegments = computed(() => props.sourceType === "external_url");
 const bufferedSegments = computed(() => {
-  if (!shouldShowBufferedSegments.value) return [];
-
   if (props.bufferedRanges.length > 0) {
     return props.bufferedRanges
       .map((range) => {
@@ -80,9 +109,51 @@ const bufferedSegments = computed(() => {
   }];
 });
 
-function onProgressInput(event: Event) {
+watch(
+  () => props.progress,
+  (value) => {
+    if (!scrubbing.value) {
+      progressDraft.value = value;
+    }
+  },
+);
+
+function readProgressInputValue(event: Event) {
   const target = event.target as HTMLInputElement;
-  emit("update:progress", Number(target.value));
+  return normalizeProgress(Number(target.value));
+}
+
+function onProgressInput(event: Event) {
+  if (props.seekDisabled) return;
+  scrubbing.value = true;
+  progressDraft.value = readProgressInputValue(event);
+}
+
+function onProgressPointerDown(event: PointerEvent) {
+  if (props.seekDisabled) return;
+  scrubbing.value = true;
+  progressDraft.value = readProgressInputValue(event);
+}
+
+function commitProgress(value = progressDraft.value) {
+  if (props.seekDisabled) return;
+  if (!scrubbing.value) return;
+  scrubbing.value = false;
+  progressDraft.value = normalizeProgress(value);
+  if (Math.abs(progressDraft.value - normalizeProgress(props.progress)) <= PROGRESS_COMMIT_EPSILON) {
+    return;
+  }
+  emit("update:progress", progressDraft.value);
+}
+
+function onProgressCommit(event: Event) {
+  commitProgress(readProgressInputValue(event));
+}
+
+function onProgressPointerUp(event: PointerEvent) {
+  window.requestAnimationFrame(() => {
+    commitProgress(readProgressInputValue(event));
+  });
 }
 
 function handleLocalFileSelected(file: File | null) {
@@ -233,15 +304,21 @@ onBeforeUnmount(() => {
         </div>
         <input
           class="timelineSlider"
+          :class="{ disabled: seekDisabled }"
           type="range"
           min="0"
           max="100"
           step="0.01"
-          :value="progress"
+          :disabled="seekDisabled"
+          :value="progressValue"
+          @pointerdown="onProgressPointerDown"
           @input="onProgressInput"
+          @change="onProgressCommit"
+          @pointerup="onProgressPointerUp"
+          @blur="onProgressCommit"
         >
       </div>
-      <span class="timelineLabel">{{ timelineLabel }}</span>
+      <span class="timelineLabel">{{ displayTimelineLabel }}</span>
     </div>
 
     <div class="controlGroup rightAligned">
@@ -407,6 +484,10 @@ onBeforeUnmount(() => {
   background: transparent;
   accent-color: #62a5ff;
   cursor: pointer;
+}
+
+.timelineSlider.disabled {
+  cursor: not-allowed;
 }
 
 .timelineSlider::-webkit-slider-runnable-track {

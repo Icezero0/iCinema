@@ -203,6 +203,20 @@ export async function getMyRooms(params?: {
   } satisfies RoomListResponse;
 }
 
+export async function getMyOwnedRooms(params?: {
+  page?: number;
+  page_size?: number;
+}) {
+  const { data } = await http.get<UserRoomSummaryListResponse>("/users/me/owned-rooms", {
+    params,
+  });
+
+  return {
+    ...data,
+    items: data.items.map(mapUserRoomSummary),
+  } satisfies RoomListResponse;
+}
+
 export async function createRoom(payload: RoomCreatePayload) {
   const { data } = await http.post<RoomResponse>("/rooms", payload);
   return mapRoomResponse(data);

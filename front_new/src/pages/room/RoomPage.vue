@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, type Component, type Ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -11,20 +11,8 @@ import {
 import {
   getRoomById,
   getRoomMembers,
-  getRoomJoinRequests,
-  deleteRoom,
-  leaveRoom,
-  removeRoomMember,
-  setRoomMemberManager,
-  unsetRoomMemberManager,
   type Room,
-  type RoomJoinRequest,
-  type RoomVideoSourceType,
 } from "@/infra/api/rooms.api";
-import {
-  approveJoinRequestById,
-  rejectJoinRequestById,
-} from "@/infra/api/join-requests.api";
 import BasePill from "@/ui/base/BasePill.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
 import RoomPlayerStage from "@/features/room/components/RoomPlayerStage.vue";
@@ -38,15 +26,27 @@ import type { ChatSegment } from "@/features/chat/types";
 import { useRoomTheaterLayout } from "@/features/room/composables/useRoomTheaterLayout";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
 import { useRoomSettingsState } from "@/features/room/composables/useRoomSettingsState";
-import { useMessagesStore } from "@/stores/messages.store";
 import {
-  DEFAULT_LOCAL_ROOM_VOLUME,
-  useEntitiesStore,
-} from "@/stores/entities.store";
+  useRoomPlaybackState,
+  type RoomPlayerStageHandle,
+} from "@/features/room/composables/useRoomPlaybackState";
+import { useRoomJoinRequests } from "@/features/room/composables/useRoomJoinRequests";
+import { useRoomMemberActions } from "@/features/room/composables/useRoomMemberActions";
+import { useRoomRealtimeSession } from "@/features/room/composables/useRoomRealtimeSession";
+import {
+  sendRoomRealtimePlaybackPause,
+  sendRoomRealtimePlaybackPlay,
+  sendRoomRealtimePlaybackSeek,
+  sendRoomRealtimeUserPlayerStatus,
+  setRoomRealtimeVideoSource,
+  type RoomRealtimePlayerStatus,
+  type RoomRealtimeSessionClosed,
+} from "@/infra/realtime/roomRealtime";
+import { useMessagesStore } from "@/stores/messages.store";
+import { useEntitiesStore } from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
-import { formatLocalDateTime } from "@/utils/datetime";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -57,28 +57,21 @@ const messagesStore = useMessagesStore();
 const toasts = useToastsStore();
 
 type RoomRoleState = RoomRole | "unknown";
+type DisplayPlayerStatus = "idle" | RoomRealtimePlayerStatus;
+type SyncGateState = "locked" | "unlocked";
+const ROOM_PLAYBACK_DEBUG = false;
 
 const room = ref<Room | null>(null);
 const isLoading = ref(false);
 const error = ref("");
 const membersLoading = ref(false);
 const membersError = ref("");
-const requestsLoading = ref(false);
-const requestsError = ref("");
-const requestsLoaded = ref(false);
-const roomJoinRequests = ref<RoomJoinRequest[]>([]);
-const requestActionIds = ref<number[]>([]);
-const isLeavingRoom = ref(false);
-const isDisbandingRoom = ref(false);
-const settingManagerUserIds = ref<number[]>([]);
-const removingMemberUserIds = ref<number[]>([]);
 const mainGridRef = ref<HTMLElement | null>(null);
-const playerStageRef = ref<{
-  togglePlayback: () => Promise<void>;
-  pauseVideo: () => void;
-  seekToPercent: (percent: number) => void;
-  captureCurrentFrame: () => Promise<Blob>;
-} | null>(null);
+const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
+let lastReportedPlayerStatus: RoomRealtimePlayerStatus | null = null;
+const localPlayerStatus = ref<DisplayPlayerStatus>("idle");
+const latestPlayerStatus = ref<DisplayPlayerStatus>("idle");
+const syncGateState = ref<SyncGateState>(getInitialSyncGateState());
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -89,18 +82,6 @@ const roomId = computed(() => {
 const currentUserRole = ref<RoomRoleState>("unknown");
 const activePanel = ref<RoomPanelKey>("chat");
 const panelBeforeTheater = ref<RoomPanelKey>("chat");
-const playbackIsPlaying = ref(false);
-const playbackProgress = ref(0);
-const playbackBufferedProgress = ref(0);
-const playbackBufferedRanges = ref<Array<{ startPercent: number; endPercent: number }>>([]);
-const playbackVolume = ref(DEFAULT_LOCAL_ROOM_VOLUME);
-const playbackCurrentTime = ref(0);
-const playbackDuration = ref(0);
-const playbackSourceType = ref<RoomVideoSourceType>("external_url");
-const playbackSourceUrl = ref("");
-const playbackSourceFile = ref<File | null>(null);
-const playbackSourceFileName = ref("");
-const playbackSourceRevision = ref(0);
 const canManageRoomRequests = computed(() =>
   currentUserRole.value === "owner" || currentUserRole.value === "manager");
 const currentUserIsOwner = computed(() => currentUserRole.value === "owner");
@@ -132,46 +113,78 @@ const panelOptions = computed(() => {
 const roomMessagesState = computed(() => messagesStore.getRoomState(roomId.value));
 const roomChatMessages = computed(() => messagesStore.getRoomChatMessages(roomId.value));
 const entityRoomMembers = computed(() => entitiesStore.getRoomMembers(roomId.value));
-const roomRequestItems = computed(() => roomJoinRequests.value.map((request) => {
-  const isApply = request.source === "apply";
-  const user = isApply ? request.initiator : request.target;
-
-  return {
-    id: request.id,
-    user:
-      user?.username ||
-      user?.email ||
-      `User #${isApply ? request.initiator_user_id : request.target_user_id}`,
-    note: isApply
-      ? t("room.requests.applyNote")
-      : t("room.requests.inviteNote"),
-    time: formatLocalDateTime(request.updated_at || request.created_at),
-  };
-}));
-const pendingMemberInviteStates = computed(() => roomJoinRequests.value
-  .filter((request) => request.status === "pending")
-  .map((request) => ({
-    userId:
-      request.source === "apply"
-        ? request.initiator_user_id
-        : request.target_user_id,
-    source: request.source,
-  })));
-const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
-  const user = entitiesStore.getUser(member.user_id);
-
-  return {
-    id: member.user_id,
-    name:
-      user?.username ||
-      user?.email ||
-      `User #${member.user_id}`,
-    email: user?.email ?? null,
-    avatarUrl: resolveMediaUrl(user?.avatar_url),
-    role: member.role,
-    status: "idle" as const,
-  };
-}));
+const playback = useRoomPlaybackState({
+  roomId,
+  playerStageRef,
+  t,
+});
+const {
+  playbackIsPlaying,
+  playbackDisplayProgress,
+  playbackBufferedProgress,
+  playbackBufferedRanges,
+  playbackCanSeek,
+  playbackVolume,
+  playbackCurrentTime,
+  playbackDuration,
+  playbackSourceType,
+  playbackSourceUrl,
+  playbackSourceFile,
+  playbackSourceFileName,
+  playbackSourceRevision,
+  playbackTimelineLabel,
+  togglePlayback: toggleLocalPlayback,
+  handlePlaybackProgressChange: handleLocalPlaybackProgressChange,
+  handlePlaybackDurationChange,
+  handlePlaybackTimeChange,
+  handleApplyPlaybackSource: applyLocalPlaybackSource,
+  applyRealtimeVideoSource,
+  applyRealtimePlaybackState,
+  handleCopyPlayerScreenshot,
+  loadLocalPlaybackVolume,
+  handlePlaybackVolumeChange,
+  handlePlaybackCanSeekChange,
+  resetPlaybackState,
+  resetPlaybackVolume,
+} = playback;
+const memberActions = useRoomMemberActions({
+  roomId,
+  router,
+  t,
+  syncCurrentUserRole,
+  fetchRoomRequests: (options) => fetchRoomRequests(options),
+});
+const {
+  isLeavingRoom,
+  isDisbandingRoom,
+  invitingMemberUserIds,
+  settingManagerUserIds,
+  removingMemberUserIds,
+  handleLeaveRoom,
+  handleDisbandRoom,
+  handleInviteUser,
+  handleSetMemberManager,
+  handleUnsetMemberManager,
+  handleRemoveRoomMember,
+  resetMemberActionState,
+} = memberActions;
+const {
+  requestsLoading,
+  requestsError,
+  roomJoinRequests,
+  roomRequestItems,
+  pendingMemberInviteStates,
+  fetchRoomRequests,
+  isRequestActionLoading,
+  approveRequest,
+  rejectRequest,
+  resetRoomRequestsState,
+} = useRoomJoinRequests({
+  roomId,
+  canManageRoomRequests,
+  optimisticInviteUserIds: invitingMemberUserIds,
+  t,
+});
 const layout = useRoomWorkspaceLayout({
   activePanel,
   roomId: computed(() => room.value?.id),
@@ -205,6 +218,45 @@ const {
   canManageRoomSettings: canManageRoomRequests,
   isOwner: currentUserIsOwner,
 });
+const realtime = useRoomRealtimeSession({
+  roomId,
+  refreshRoom: fetchRoom,
+  refreshRoomMembers: fetchRoomMembers,
+  refreshRoomRequests: () => fetchRoomRequests({ force: true }),
+  refreshRoomSettings: fetchRoomSettings,
+  onSessionClosed: handleRealtimeSessionClosed,
+});
+const presentUserIds = computed(() => new Set(realtime.presentUserIds.value));
+const displayPlayerStatusByUserId = computed(() => {
+  const statuses = new Map<number, DisplayPlayerStatus>(
+    realtime.userPlayerStates.value.map((state) => [state.user_id, state.status]),
+  );
+  if (auth.me?.id && realtime.isRealtimeActive.value && presentUserIds.value.has(auth.me.id)) {
+    statuses.set(auth.me.id, localPlayerStatus.value);
+  }
+  return statuses;
+});
+const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
+  const user = entitiesStore.getUser(member.user_id);
+  const memberStatus =
+    realtime.hasPresenceSnapshot.value && presentUserIds.value.has(member.user_id)
+      ? displayPlayerStatusByUserId.value.get(member.user_id) ?? "idle"
+      : "offline";
+
+  return {
+    id: member.user_id,
+    name:
+      user?.username ||
+      user?.email ||
+      `User #${member.user_id}`,
+    email: user?.email ?? null,
+    avatarUrl: resolveMediaUrl(user?.avatar_url),
+    role: member.role,
+    status: memberStatus,
+  };
+}));
+const roomMemberStatusByUserId = computed(() =>
+  new Map(roomMemberItems.value.map((member) => [member.id, member.status])));
 const syncPolicyStatusLabel = computed(() => {
   if (roomSettingsError.value && !roomSettings.value) {
     return t("room.playback.syncPolicyUnavailable");
@@ -220,129 +272,6 @@ const syncPolicyStatusLabel = computed(() => {
 
   return t("room.playback.syncPolicyAuto");
 });
-const playbackTimelineLabel = computed(() =>
-  `${formatPlaybackTime(playbackCurrentTime.value)} / ${formatPlaybackTime(playbackDuration.value)}`);
-
-function formatPlaybackTime(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "00:00";
-
-  const totalSeconds = Math.floor(seconds);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const restSeconds = totalSeconds % 60;
-  const mm = String(minutes).padStart(2, "0");
-  const ss = String(restSeconds).padStart(2, "0");
-
-  if (hours <= 0) return `${mm}:${ss}`;
-  return `${hours}:${mm}:${ss}`;
-}
-
-function updatePlaybackProgress() {
-  playbackProgress.value =
-    playbackDuration.value > 0
-      ? Math.min(100, Math.max(0, (playbackCurrentTime.value / playbackDuration.value) * 100))
-      : 0;
-}
-
-function togglePlayback() {
-  void playerStageRef.value?.togglePlayback();
-}
-
-function handlePlaybackProgressChange(value: number) {
-  playerStageRef.value?.pauseVideo();
-  playbackIsPlaying.value = false;
-  playbackProgress.value = value;
-  playerStageRef.value?.seekToPercent(value);
-}
-
-function handlePlaybackDurationChange(value: number) {
-  playbackDuration.value = value;
-  updatePlaybackProgress();
-}
-
-function handlePlaybackTimeChange(value: number) {
-  playbackCurrentTime.value = value;
-  updatePlaybackProgress();
-}
-
-function handleApplyPlaybackSource(payload: {
-  sourceType: RoomVideoSourceType;
-  externalUrl: string;
-  localFile: File | null;
-}) {
-  playbackSourceType.value = payload.sourceType;
-
-  if (payload.sourceType === "external_url") {
-    playbackSourceUrl.value = payload.externalUrl.trim();
-    playbackSourceFile.value = null;
-    playbackSourceFileName.value = "";
-  } else if (payload.localFile) {
-    playbackSourceFile.value = payload.localFile;
-    playbackSourceFileName.value = payload.localFile.name;
-    playbackSourceUrl.value = "";
-    playbackBufferedProgress.value = 0;
-    playbackBufferedRanges.value = [];
-  }
-
-  playbackCurrentTime.value = 0;
-  playbackDuration.value = 0;
-  playbackProgress.value = 0;
-  playbackBufferedProgress.value = 0;
-  playbackBufferedRanges.value = [];
-  playbackIsPlaying.value = false;
-  playbackSourceRevision.value += 1;
-}
-
-async function handleCopyPlayerScreenshot() {
-  try {
-    const blob = await playerStageRef.value?.captureCurrentFrame();
-    if (!blob) {
-      throw new Error(t("room.playback.screenshotNoFrame"));
-    }
-
-    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-      throw new Error(t("room.playback.screenshotClipboardUnsupported"));
-    }
-
-    await navigator.clipboard.write([
-      new ClipboardItem({ [blob.type]: blob }),
-    ]);
-    toasts.push({
-      message: t("room.playback.screenshotCopied"),
-      tone: "success",
-    });
-  } catch (error) {
-    toasts.push({
-      message:
-        error instanceof Error && error.message
-          ? error.message
-          : t("room.playback.screenshotFailed"),
-      tone: "danger",
-    });
-  }
-}
-
-function loadLocalPlaybackVolume() {
-  playbackVolume.value = entitiesStore.loadRoomLocalVolume(roomId.value);
-}
-
-function handlePlaybackVolumeChange(value: number) {
-  playbackVolume.value = entitiesStore.setRoomLocalVolume(roomId.value, value);
-}
-
-function resetPlaybackState() {
-  playbackIsPlaying.value = false;
-  playbackProgress.value = 0;
-  playbackBufferedProgress.value = 0;
-  playbackBufferedRanges.value = [];
-  playbackCurrentTime.value = 0;
-  playbackDuration.value = 0;
-  playbackSourceType.value = "external_url";
-  playbackSourceUrl.value = "";
-  playbackSourceFile.value = null;
-  playbackSourceFileName.value = "";
-  playbackSourceRevision.value += 1;
-}
 
 function isTheaterFullscreenActive() {
   return Boolean(
@@ -484,83 +413,6 @@ async function loadOlderRoomMessages() {
   }
 }
 
-async function fetchRoomRequests(options?: { force?: boolean }) {
-  if (!roomId.value || !canManageRoomRequests.value) {
-    roomJoinRequests.value = [];
-    requestsLoaded.value = false;
-    requestsError.value = "";
-    return;
-  }
-
-  if (requestsLoading.value) return;
-  if (!options?.force && requestsLoaded.value) return;
-
-  requestsLoading.value = true;
-  requestsError.value = "";
-
-  try {
-    const response = await getRoomJoinRequests(roomId.value, {
-      page: 1,
-      page_size: 30,
-      status: "pending",
-    });
-    roomJoinRequests.value = response.items;
-    entitiesStore.upsertJoinRequests(response.items);
-    requestsLoaded.value = true;
-  } catch (e: any) {
-    requestsError.value =
-      e?.response?.data?.detail ||
-      e?.message ||
-      t("room.requestsLoadFailed");
-  } finally {
-    requestsLoading.value = false;
-  }
-}
-
-function isRequestActionLoading(requestId: number) {
-  return requestActionIds.value.includes(requestId);
-}
-
-function setRequestActionLoading(requestId: number, loading: boolean) {
-  requestActionIds.value = loading
-    ? [...new Set([...requestActionIds.value, requestId])]
-    : requestActionIds.value.filter((id) => id !== requestId);
-}
-
-async function approveRequest(requestId: number) {
-  setRequestActionLoading(requestId, true);
-  requestsError.value = "";
-
-  try {
-    await approveJoinRequestById(requestId);
-    await fetchRoomRequests({ force: true });
-  } catch (e: any) {
-    requestsError.value =
-      e?.response?.data?.detail ||
-      e?.message ||
-      t("room.requestsLoadFailed");
-  } finally {
-    setRequestActionLoading(requestId, false);
-  }
-}
-
-async function rejectRequest(requestId: number) {
-  setRequestActionLoading(requestId, true);
-  requestsError.value = "";
-
-  try {
-    await rejectJoinRequestById(requestId);
-    await fetchRoomRequests({ force: true });
-  } catch (e: any) {
-    requestsError.value =
-      e?.response?.data?.detail ||
-      e?.message ||
-      t("room.requestsLoadFailed");
-  } finally {
-    setRequestActionLoading(requestId, false);
-  }
-}
-
 async function handleSend(segments: ChatSegment[]) {
   if (!roomId.value) return;
 
@@ -576,137 +428,213 @@ async function handleSend(segments: ChatSegment[]) {
   }
 }
 
-async function handleLeaveRoom() {
-  if (!roomId.value || isLeavingRoom.value) return;
+function canUseRealtimePlaybackCommands() {
+  return (
+    realtime.isRealtimeActive.value &&
+    playbackSourceType.value === "external_url" &&
+    playbackSourceUrl.value.trim().length > 0
+  );
+}
 
-  isLeavingRoom.value = true;
+function showRealtimePlaybackError() {
+  toasts.push({
+    message: t("room.playback.errors.playFailed"),
+    tone: "danger",
+  });
+}
+
+function logPlaybackDebug(event: string, extra: Record<string, unknown> = {}) {
+  if (!ROOM_PLAYBACK_DEBUG) return;
+
+  console.info("[iCinema room playback debug]", {
+    event,
+    roomId: roomId.value,
+    realtimeActive: realtime.isRealtimeActive.value,
+    realtimeStatus: realtime.realtimeStatus.value,
+    playbackIsPlaying: playbackIsPlaying.value,
+    playbackCurrentTime: playbackCurrentTime.value,
+    playbackDuration: playbackDuration.value,
+    playbackSourceType: playbackSourceType.value,
+    hasExternalSource: playbackSourceUrl.value.trim().length > 0,
+    localPlayerStatus: localPlayerStatus.value,
+    roomPlayback: realtime.roomPlayback.value,
+    roomPlaybackEvent: realtime.roomPlaybackEvent.value,
+    ...extra,
+  });
+}
+
+function isSyncGateUnlocked() {
+  return syncGateState.value === "unlocked";
+}
+
+function getInitialSyncGateState(): SyncGateState {
+  return route.meta.requiresSyncGate === true ? "locked" : "unlocked";
+}
+
+async function syncRoomRuntimeAfterUnlock() {
+  // TODO: call the backend runtime snapshot command once it is available.
+  const currentVideoSource = realtime.roomVideoSource.value;
+  const currentPlayback = realtime.roomPlayback.value;
+
+  applyRealtimeVideoSource(currentVideoSource);
+
+  if (currentPlayback) {
+    await applyRealtimePlaybackState(currentPlayback, { syncPosition: true });
+    return;
+  }
+
+  if (!currentVideoSource) return;
+
+  await applyRealtimePlaybackState({
+    room_id: currentVideoSource.room_id,
+    status: "paused",
+    position_seconds: 0,
+    anchor_ts_ms: Date.now(),
+    playback_rate: 1,
+  }, {
+    syncPosition: true,
+  });
+}
+
+function unlockSyncGate() {
+  if (isSyncGateUnlocked()) return;
+
+  syncGateState.value = "unlocked";
+  localPlayerStatus.value = latestPlayerStatus.value;
+  reportDisplayedPlayerStatus(latestPlayerStatus.value);
+  void syncRoomRuntimeAfterUnlock();
+}
+
+function handlePlaybackPlayStateChange(value: boolean) {
+  logPlaybackDebug("localPlayStateChange", { value });
+  playbackIsPlaying.value = value;
+}
+
+async function handleApplyPlaybackSource(payload: {
+  sourceType: "external_url" | "local_file";
+  externalUrl: string;
+  localFile: File | null;
+}) {
+  if (!realtime.isRealtimeActive.value || payload.sourceType === "local_file") {
+    applyLocalPlaybackSource(payload);
+    return;
+  }
 
   try {
-    await leaveRoom(roomId.value);
-    toasts.push({
-      message: t("room.members.leaveSuccess"),
-      tone: "success",
+    const response = await setRoomRealtimeVideoSource({
+      source_type: "external_url",
+      external_url: payload.externalUrl.trim(),
+      anchor_ts_ms: Date.now(),
     });
-    await router.push("/");
-  } catch (e: any) {
-    toasts.push({
-      message:
-        e?.response?.data?.detail ||
-        e?.message ||
-        t("room.members.leaveFailed"),
-      tone: "danger",
-    });
-  } finally {
-    isLeavingRoom.value = false;
+    if ("room_video_source" in response) {
+      applyRealtimeVideoSource(response.room_video_source ?? null);
+    }
+    await applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
+  } catch {
+    showRealtimePlaybackError();
   }
 }
 
-async function handleDisbandRoom() {
-  if (!roomId.value || isDisbandingRoom.value) return;
+async function togglePlayback() {
+  logPlaybackDebug("togglePlaybackRequested", {
+    commandMode: canUseRealtimePlaybackCommands() ? "realtime" : "local",
+  });
 
-  isDisbandingRoom.value = true;
+  if (!isSyncGateUnlocked()) {
+    unlockSyncGate();
+    return;
+  }
+
+  if (!canUseRealtimePlaybackCommands()) {
+    toggleLocalPlayback();
+    return;
+  }
 
   try {
-    await deleteRoom(roomId.value);
-    toasts.push({
-      message: t("room.members.disbandSuccess"),
-      tone: "success",
+    const payload = {
+      position_seconds: playbackCurrentTime.value,
+      anchor_ts_ms: Date.now(),
+      playback_rate: 1,
+    };
+    const action = playbackIsPlaying.value ? "playback_pause" : "playback_play";
+    logPlaybackDebug("sendPlaybackCommand", {
+      action,
+      payload,
     });
-    await router.push("/");
-  } catch (e: any) {
-    toasts.push({
-      message:
-        e?.response?.data?.detail ||
-        e?.message ||
-        t("room.members.disbandFailed"),
-      tone: "danger",
+    const response = playbackIsPlaying.value
+      ? await sendRoomRealtimePlaybackPause(payload)
+      : await sendRoomRealtimePlaybackPlay(payload);
+    logPlaybackDebug("playbackCommandAck", {
+      action,
+      response,
     });
-  } finally {
-    isDisbandingRoom.value = false;
+    await applyRealtimePlaybackState(response.playback ?? null);
+  } catch (error) {
+    logPlaybackDebug("playbackCommandFailed", {
+      errorName: error instanceof Error ? error.name : null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    showRealtimePlaybackError();
   }
 }
 
-function setMemberActionLoading(actionIds: Ref<number[]>, userId: number, loading: boolean) {
-  actionIds.value = loading
-    ? [...new Set([...actionIds.value, userId])]
-    : actionIds.value.filter((id) => id !== userId);
-}
-
-async function handleSetMemberManager(userId: number) {
-  if (!roomId.value || settingManagerUserIds.value.includes(userId)) return;
-
-  setMemberActionLoading(settingManagerUserIds, userId, true);
-
-  try {
-    const member = await setRoomMemberManager(roomId.value, userId);
-    entitiesStore.upsertRoomMember(member);
-    syncCurrentUserRole();
-    toasts.push({
-      message: t("room.members.setManagerSuccess"),
-      tone: "success",
-    });
-  } catch (e: any) {
-    toasts.push({
-      message:
-        e?.response?.data?.detail ||
-        e?.message ||
-        t("room.members.setManagerFailed"),
-      tone: "danger",
-    });
-  } finally {
-    setMemberActionLoading(settingManagerUserIds, userId, false);
+function handlePlaybackProgressChange(value: number) {
+  if (!isSyncGateUnlocked()) {
+    unlockSyncGate();
+    return;
   }
+
+  handleLocalPlaybackProgressChange(value);
+  if (!canUseRealtimePlaybackCommands() || playbackDuration.value <= 0) return;
+
+  const normalizedValue = Math.min(100, Math.max(0, value));
+  const positionSeconds = playbackDuration.value * (normalizedValue / 100);
+  void sendRoomRealtimePlaybackSeek({
+    position_seconds: positionSeconds,
+    anchor_ts_ms: Date.now(),
+  }).then((response) => {
+    void applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
+  }).catch(showRealtimePlaybackError);
 }
 
-async function handleUnsetMemberManager(userId: number) {
-  if (!roomId.value || settingManagerUserIds.value.includes(userId)) return;
+function toRealtimePlayerStatus(status: DisplayPlayerStatus): RoomRealtimePlayerStatus {
+  return status === "idle" ? "ready" : status;
+}
 
-  setMemberActionLoading(settingManagerUserIds, userId, true);
+function reportDisplayedPlayerStatus(status: DisplayPlayerStatus) {
+  if (!realtime.isRealtimeActive.value) return;
+  const realtimeStatus = toRealtimePlayerStatus(status);
+  if (realtimeStatus === lastReportedPlayerStatus) return;
 
-  try {
-    const member = await unsetRoomMemberManager(roomId.value, userId);
-    entitiesStore.upsertRoomMember(member);
-    syncCurrentUserRole();
-    toasts.push({
-      message: t("room.members.unsetManagerSuccess"),
-      tone: "success",
-    });
-  } catch (e: any) {
-    toasts.push({
-      message:
-        e?.response?.data?.detail ||
-        e?.message ||
-        t("room.members.unsetManagerFailed"),
-      tone: "danger",
-    });
-  } finally {
-    setMemberActionLoading(settingManagerUserIds, userId, false);
+  lastReportedPlayerStatus = realtimeStatus;
+  void sendRoomRealtimeUserPlayerStatus({
+    status: realtimeStatus,
+    reported_at_ms: Date.now(),
+    position_seconds: playbackCurrentTime.value,
+  }).catch(() => {
+    // Status reporting is opportunistic; playback commands surface their own errors.
+  });
+}
+
+function handlePlayerStatusChange(status: DisplayPlayerStatus) {
+  latestPlayerStatus.value = status;
+  if (!isSyncGateUnlocked()) {
+    localPlayerStatus.value = "idle";
+    return;
   }
+
+  localPlayerStatus.value = status;
+  reportDisplayedPlayerStatus(status);
 }
 
-async function handleRemoveRoomMember(userId: number) {
-  if (!roomId.value || removingMemberUserIds.value.includes(userId)) return;
+function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
+  toasts.push({
+    message: t(`room.realtime.sessionClosed.${payload.reason}`),
+    tone: "warning",
+  });
 
-  setMemberActionLoading(removingMemberUserIds, userId, true);
-
-  try {
-    await removeRoomMember(roomId.value, userId);
-    entitiesStore.removeRoomMember(roomId.value, userId);
-    syncCurrentUserRole();
-    toasts.push({
-      message: t("room.members.removeSuccess"),
-      tone: "success",
-    });
-  } catch (e: any) {
-    toasts.push({
-      message:
-        e?.response?.data?.detail ||
-        e?.message ||
-        t("room.members.removeFailed"),
-      tone: "danger",
-    });
-  } finally {
-    setMemberActionLoading(removingMemberUserIds, userId, false);
+  if (payload.reason === "removed_from_room" || payload.reason === "room_deleted") {
+    void router.push("/");
   }
 }
 
@@ -722,14 +650,14 @@ onBeforeUnmount(() => {
 });
 watch(roomId, () => {
   currentUserRole.value = "unknown";
-  roomJoinRequests.value = [];
-  requestsLoaded.value = false;
-  requestsError.value = "";
+  localPlayerStatus.value = "idle";
+  latestPlayerStatus.value = "idle";
+  lastReportedPlayerStatus = null;
+  syncGateState.value = getInitialSyncGateState();
+  resetRoomRequestsState();
   resetRoomSettingsState();
-  requestActionIds.value = [];
-  settingManagerUserIds.value = [];
-  removingMemberUserIds.value = [];
-  playbackVolume.value = DEFAULT_LOCAL_ROOM_VOLUME;
+  resetMemberActionState();
+  resetPlaybackVolume();
   resetPlaybackState();
   theaterLayout.setTheaterMode(false);
   void fetchRoom();
@@ -754,6 +682,41 @@ watch(activePanel, (panel) => {
   }
 });
 
+watch(
+  () => realtime.roomVideoSourceEvent.value,
+  (event) => {
+    if (!event) return;
+    if (!isSyncGateUnlocked()) return;
+
+    applyRealtimeVideoSource(event.state);
+    if (event.action !== "room_video_source_set" || !event.state) return;
+
+    void applyRealtimePlaybackState({
+      room_id: event.state.room_id,
+      status: "paused",
+      position_seconds: 0,
+      anchor_ts_ms: Date.now(),
+      playback_rate: 1,
+    }, {
+      syncPosition: true,
+    });
+  },
+);
+watch(
+  () => realtime.roomPlaybackEvent.value,
+  (event) => {
+    logPlaybackDebug("applyRealtimePlaybackEvent", {
+      action: event?.action ?? null,
+      state: event?.state ?? null,
+      syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
+    });
+    if (!isSyncGateUnlocked()) return;
+
+    void applyRealtimePlaybackState(event?.state ?? null, {
+      syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
+    });
+  },
+);
 watch(
   () => theaterLayout.isTheaterMode.value,
   (active) => {
@@ -804,52 +767,73 @@ watch(
             class="stageColumn"
           >
             <BaseCard class="stageCard">
-              <RoomPlayerStage
-                ref="playerStageRef"
-                class="playerStage"
-                :title="t('room.playback.emptyTitle')"
-                :hint="t('room.playback.emptyHint')"
-                :source-type="playbackSourceType"
-                :source-url="playbackSourceUrl"
-                :source-file="playbackSourceFile"
-                :source-revision="playbackSourceRevision"
-                :volume="playbackVolume"
-                :video-fullscreen-label="t('room.playback.controls.videoFullscreen')"
-                :exit-video-fullscreen-label="t('room.playback.controls.exitVideoFullscreen')"
-                :theater-mode-label="t('room.playback.controls.theaterMode')"
-                :exit-theater-mode-label="t('room.playback.controls.exitTheaterMode')"
-                :is-theater-mode="theaterLayout.isTheaterMode.value"
-                :theater-mode-available="theaterLayout.canUseTheaterMode.value"
-                @toggle-theater-mode="toggleTheaterMode"
-                @play-state-change="playbackIsPlaying = $event"
-                @duration-change="handlePlaybackDurationChange"
-                @time-change="handlePlaybackTimeChange"
-                @buffered-progress-change="playbackBufferedProgress = $event"
-                @buffered-ranges-change="playbackBufferedRanges = $event"
-              />
+              <div
+                class="stageContent"
+                :inert="syncGateState === 'locked'"
+              >
+                <RoomPlayerStage
+                  ref="playerStageRef"
+                  class="playerStage"
+                  :title="t('room.playback.emptyTitle')"
+                  :hint="t('room.playback.emptyHint')"
+                  :source-type="playbackSourceType"
+                  :source-url="playbackSourceUrl"
+                  :source-file="playbackSourceFile"
+                  :source-revision="playbackSourceRevision"
+                  :volume="playbackVolume"
+                  :video-fullscreen-label="t('room.playback.controls.videoFullscreen')"
+                  :exit-video-fullscreen-label="t('room.playback.controls.exitVideoFullscreen')"
+                  :theater-mode-label="t('room.playback.controls.theaterMode')"
+                  :exit-theater-mode-label="t('room.playback.controls.exitTheaterMode')"
+                  :is-theater-mode="theaterLayout.isTheaterMode.value"
+                  :theater-mode-available="theaterLayout.canUseTheaterMode.value"
+                  @toggle-theater-mode="toggleTheaterMode"
+                  @play-state-change="handlePlaybackPlayStateChange"
+                  @player-status-change="handlePlayerStatusChange"
+                  @duration-change="handlePlaybackDurationChange"
+                  @time-change="handlePlaybackTimeChange"
+                  @buffered-progress-change="playbackBufferedProgress = $event"
+                  @buffered-ranges-change="playbackBufferedRanges = $event"
+                  @seek-capability-change="handlePlaybackCanSeekChange"
+                />
 
-              <RoomPlaybackControls
-                class="playbackControls"
-                :is-playing="playbackIsPlaying"
-                :progress="playbackProgress"
-                :buffered-progress="playbackBufferedProgress"
-                :buffered-ranges="playbackBufferedRanges"
-                :volume="playbackVolume"
-                :source-type="playbackSourceType"
-                :source-url="playbackSourceUrl"
-                :source-file-name="playbackSourceFileName"
-                :timeline-label="playbackTimelineLabel"
-                :play-label="t('room.playback.controls.play')"
-                :pause-label="t('room.playback.controls.pause')"
-                :sync-label="t('room.playback.controls.syncNow')"
-                :source-label="t('room.playback.controls.source')"
-                :source-panel-title="t('room.sourcePanel.title')"
-                :volume-label="t('room.playback.controls.volume')"
-                @toggle-play="togglePlayback"
-                @update:progress="handlePlaybackProgressChange"
-                @update:volume="handlePlaybackVolumeChange"
-                @apply-source="handleApplyPlaybackSource"
-              />
+                <RoomPlaybackControls
+                  class="playbackControls"
+                  :is-playing="playbackIsPlaying"
+                  :progress="playbackDisplayProgress"
+                  :buffered-progress="playbackBufferedProgress"
+                  :buffered-ranges="playbackBufferedRanges"
+                  :seek-disabled="!playbackCanSeek"
+                  :volume="playbackVolume"
+                  :source-type="playbackSourceType"
+                  :source-url="playbackSourceUrl"
+                  :source-file-name="playbackSourceFileName"
+                  :current-time="playbackCurrentTime"
+                  :duration="playbackDuration"
+                  :timeline-label="playbackTimelineLabel"
+                  :play-label="t('room.playback.controls.play')"
+                  :pause-label="t('room.playback.controls.pause')"
+                  :sync-label="t('room.playback.controls.syncNow')"
+                  :source-label="t('room.playback.controls.source')"
+                  :source-panel-title="t('room.sourcePanel.title')"
+                  :volume-label="t('room.playback.controls.volume')"
+                  @toggle-play="togglePlayback"
+                  @update:progress="handlePlaybackProgressChange"
+                  @update:volume="handlePlaybackVolumeChange"
+                  @apply-source="handleApplyPlaybackSource"
+                />
+              </div>
+
+              <button
+                v-if="syncGateState === 'locked'"
+                class="stageSyncGateOverlay"
+                type="button"
+                @click="unlockSyncGate"
+              >
+                <span class="stageSyncGatePrompt">
+                  <span class="stageSyncGateTitle">{{ t('room.playback.syncGateStart') }}</span>
+                </span>
+              </button>
             </BaseCard>
           </section>
 
@@ -883,7 +867,9 @@ watch(
               <RoomChatTab
                 v-show="activePanel === 'chat'"
                 :room-key="roomId"
+                :active="activePanel === 'chat'"
                 :messages="roomChatMessages"
+                :member-status-by-user-id="roomMemberStatusByUserId"
                 :send-label="t('room.chat.send')"
                 :loading="roomMessagesState.isLoading"
                 :sending="roomMessagesState.isSending"
@@ -917,6 +903,7 @@ watch(
                 :empty-label="membersError || t('room.membersEmpty')"
                 @leave-room="handleLeaveRoom"
                 @disband-room="handleDisbandRoom"
+                @invite-user="handleInviteUser"
                 @set-manager="handleSetMemberManager"
                 @unset-manager="handleUnsetMemberManager"
                 @remove-member="handleRemoveRoomMember"
@@ -1061,11 +1048,16 @@ watch(
 }
 
 .stageCard {
+  position: relative;
   padding: 16px;
-  display: grid;
-  gap: 14px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--c-surface) 92%, white), color-mix(in srgb, var(--c-surface) 86%, var(--c-bg)));
+  overflow: hidden;
+}
+
+.stageContent {
+  display: grid;
+  gap: 14px;
 }
 
 .mainGrid.theaterMode .stageCard {
@@ -1075,6 +1067,11 @@ watch(
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.mainGrid.theaterMode .stageContent {
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
@@ -1093,6 +1090,72 @@ watch(
 
 .mainGrid.theaterMode .playbackControls {
   width: 100%;
+}
+
+.stageSyncGateOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  border: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--c-primary) 14%, transparent), transparent 44%),
+    color-mix(in srgb, var(--c-surface) 70%, transparent);
+  color: var(--c-text);
+  cursor: pointer;
+  transition: background-color 160ms ease;
+  backdrop-filter: blur(3px);
+}
+
+.stageSyncGateOverlay:hover {
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--c-primary) 18%, transparent), transparent 46%),
+    color-mix(in srgb, var(--c-surface) 64%, transparent);
+}
+
+:global([data-theme="dark"]) .stageSyncGateOverlay {
+  background:
+    radial-gradient(circle at center, rgb(98 165 255 / 0.16), transparent 42%),
+    rgb(3 7 12 / 0.68);
+  color: rgb(245 248 252 / 0.96);
+}
+
+:global([data-theme="dark"]) .stageSyncGateOverlay:hover {
+  background:
+    radial-gradient(circle at center, rgb(98 165 255 / 0.22), transparent 44%),
+    rgb(3 7 12 / 0.62);
+}
+
+.stageSyncGatePrompt {
+  min-width: min(220px, 100%);
+  min-height: 52px;
+  padding: 12px 20px;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 18%, var(--c-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--c-surface) 86%, white);
+  box-shadow:
+    0 18px 42px rgb(20 31 45 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:global([data-theme="dark"]) .stageSyncGatePrompt {
+  border-color: rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 0.1);
+  box-shadow:
+    0 18px 42px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.stageSyncGateTitle {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .theaterDivider {

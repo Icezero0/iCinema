@@ -6,6 +6,7 @@ export default {
     backHome: "Back to Home",
   },
   chat: {
+    newMessagesBelow: "{count} new message(s)",
     toolbar: {
       emoji: "Insert emoji",
       screenshot: "Screenshot",
@@ -288,6 +289,14 @@ export default {
       applyNote: "Requested to join this room",
       inviteNote: "Invited into this room",
     },
+    realtime: {
+      sessionClosed: {
+        entered_elsewhere: "This room realtime session was opened elsewhere.",
+        left_room: "You left this room realtime session.",
+        removed_from_room: "You were removed from this room.",
+        room_deleted: "This room has been disbanded.",
+      },
+    },
     members: {
       searchPlaceholder: "Search members",
       invite: "Invite",
@@ -316,6 +325,8 @@ export default {
       alreadyInRoom: "In room",
       applyPending: "Applying",
       invitePending: "Invited",
+      inviteSuccess: "Invitation sent.",
+      inviteFailed: "Failed to send invitation.",
       inviteSearchEmpty: "No inviteable users found.",
       inviteSearchFailed: "Failed to search users.",
       leaveConfirmTitle: "Leave this room",
@@ -361,6 +372,7 @@ export default {
       syncPolicyUnavailable: "Sync policy unavailable",
       syncPolicyAuto: "Sync policy: auto sync",
       syncPolicyManual: "Sync policy: manual sync",
+      syncGateStart: "Click to start sync",
       emptyTitle: "No playback source selected",
       emptyHint: "Choose an external URL or local file from the source control below to start playback.",
       timelineUnavailable: "00:00 / 00:00",

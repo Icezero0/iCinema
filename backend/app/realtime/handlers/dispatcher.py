@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import WebSocket
@@ -7,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError, BadRequestError
+from app.core.logging import log_extra
 from app.realtime.constants import WsCommandAction, WsErrorCode, WsMessageType
 from app.realtime.handlers.auth import AuthHandler
 from app.realtime.handlers.heartbeat import HeartbeatHandler
@@ -22,6 +24,8 @@ from app.realtime.protocol import (
 from app.realtime.publisher import RealtimePublisher
 from app.realtime.room_presence import RoomPresenceService
 from app.realtime.room_video_runtime import RoomVideoRuntimeService
+
+logger = logging.getLogger("app.realtime")
 
 
 class RealtimeMessageHandler:
@@ -95,6 +99,20 @@ class RealtimeMessageHandler:
             raise BadRequestError(f"Client cannot send message type: {message.type}")
 
         except AppError as e:
+            logger.warning(
+                "ws app error connection_id=%s user_id=%s request_id=%s code=%s",
+                connection.connection_id if connection is not None else None,
+                connection.user_id if connection is not None else None,
+                request_id,
+                e.code,
+                **log_extra(
+                    "ws.app_error",
+                    user_id=connection.user_id if connection is not None else "-",
+                    connection_id=connection.connection_id if connection is not None else None,
+                    request_id=request_id,
+                    error_code=e.code,
+                ),
+            )
             await websocket.send_json(
                 build_error_message(
                     code=e.code,
@@ -105,6 +123,19 @@ class RealtimeMessageHandler:
             return connection
 
         except ValidationError:
+            logger.warning(
+                "ws invalid payload connection_id=%s user_id=%s request_id=%s",
+                connection.connection_id if connection is not None else None,
+                connection.user_id if connection is not None else None,
+                request_id,
+                **log_extra(
+                    "ws.invalid_payload",
+                    user_id=connection.user_id if connection is not None else "-",
+                    connection_id=connection.connection_id if connection is not None else None,
+                    request_id=request_id,
+                    error_code=WsErrorCode.INVALID_PAYLOAD,
+                ),
+            )
             await websocket.send_json(
                 build_error_message(
                     code=WsErrorCode.INVALID_PAYLOAD,

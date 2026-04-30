@@ -19,7 +19,7 @@ type RoomMemberPanelItem = {
   email?: string | null;
   avatarUrl?: string | null;
   role: RoomRole;
-  status: MemberStatus | "idle";
+  status: MemberStatus;
 };
 
 type PendingJoinRequestState = {

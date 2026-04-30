@@ -7,6 +7,7 @@ export default {
     backHome: "返回首页",
   },
   chat: {
+    newMessagesBelow: "{count} 条新消息",
     toolbar: {
       emoji: "插入表情",
       screenshot: "截图",
@@ -288,6 +289,14 @@ export default {
       applyNote: "申请加入当前房间",
       inviteNote: "被邀请加入当前房间",
     },
+    realtime: {
+      sessionClosed: {
+        entered_elsewhere: "当前房间实时会话已在其他页面打开。",
+        left_room: "你已离开当前房间实时会话。",
+        removed_from_room: "你已被移出当前房间。",
+        room_deleted: "当前房间已被解散。",
+      },
+    },
     members: {
       searchPlaceholder: "搜索成员",
       invite: "邀请",
@@ -316,6 +325,8 @@ export default {
       alreadyInRoom: "已在房间",
       applyPending: "申请中",
       invitePending: "邀请中",
+      inviteSuccess: "已发送邀请。",
+      inviteFailed: "发送邀请失败。",
       inviteSearchEmpty: "没有找到可邀请的用户。",
       inviteSearchFailed: "检索用户失败。",
       leaveConfirmTitle: "退出房间",
@@ -361,6 +372,7 @@ export default {
       syncPolicyUnavailable: "同步策略暂不可用",
       syncPolicyAuto: "同步策略：自动同步",
       syncPolicyManual: "同步策略：手动同步",
+      syncGateStart: "点击以开始同步",
       emptyTitle: "未设置播放源",
       emptyHint: "通过下方播放源按钮选择外链或本地文件后即可开始播放。",
       timelineUnavailable: "00:00 / 00:00",
