@@ -50,12 +50,12 @@ export function useCompositePocMediaEngine(options: {
     if (source.sourceType === "local_file") {
       activeObjectUrl = source.objectUrl;
       hlsEngine.sourceUrl.value = source.file.name;
-      await hlsEngine.loadSource(source.objectUrl, playback);
+      await hlsEngine.loadSource(source.objectUrl, playback, source.engineKind);
       return;
     }
 
     hlsEngine.sourceUrl.value = source.url;
-    await hlsEngine.loadSource(source.url, playback);
+    await hlsEngine.loadSource(source.url, playback, source.engineKind);
   }
 
   function releaseObjectUrl() {

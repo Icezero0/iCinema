@@ -16,6 +16,11 @@ const {
   currentTime,
   duration,
   bufferedRanges,
+  seekableRanges,
+  canSeek,
+  seekRestrictionMessage,
+  sourceType,
+  engineKind,
   volume,
   logText,
   timelineLabel,
@@ -83,6 +88,7 @@ const {
         :buffered-progress="bufferedProgressPercent"
         :buffered-ranges="bufferedRangePercents"
         :volume="volume"
+        :seek-disabled="!canSeek"
         source-type="external_url"
         :source-url="sourceUrl"
         source-file-name=""
@@ -111,7 +117,12 @@ const {
         :timeline-label="timelineLabel"
         :buffer-ahead="bufferAhead"
         :buffered-ranges="bufferedRanges"
+        :seekable-ranges="seekableRanges"
+        :can-seek="canSeek"
+        :source-type="sourceType"
+        :engine-kind="engineKind"
         :error-message="errorMessage"
+        :seek-restriction-message="seekRestrictionMessage"
         :log-text="logText"
         @copy-logs="copyLogs"
         @clear-logs="clearLogs"

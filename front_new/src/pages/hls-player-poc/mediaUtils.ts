@@ -25,3 +25,12 @@ export function readBufferedRanges(video: HTMLVideoElement | null): BufferedRang
     end: Number(video.buffered.end(index).toFixed(3)),
   }));
 }
+
+export function readSeekableRanges(video: HTMLVideoElement | null): BufferedRange[] {
+  if (!video) return [];
+
+  return Array.from({ length: video.seekable.length }, (_item, index) => ({
+    start: Number(video.seekable.start(index).toFixed(3)),
+    end: Number(video.seekable.end(index).toFixed(3)),
+  }));
+}

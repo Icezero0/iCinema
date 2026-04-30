@@ -17,6 +17,7 @@ const props = defineProps<{
   bufferedProgress: number;
   bufferedRanges: Array<{ startPercent: number; endPercent: number }>;
   volume: number;
+  seekDisabled?: boolean;
   sourceType: RoomVideoSourceType;
   sourceUrl: string;
   sourceFileName: string;
@@ -123,16 +124,19 @@ function readProgressInputValue(event: Event) {
 }
 
 function onProgressInput(event: Event) {
+  if (props.seekDisabled) return;
   scrubbing.value = true;
   progressDraft.value = readProgressInputValue(event);
 }
 
 function onProgressPointerDown(event: PointerEvent) {
+  if (props.seekDisabled) return;
   scrubbing.value = true;
   progressDraft.value = readProgressInputValue(event);
 }
 
 function commitProgress(value = progressDraft.value) {
+  if (props.seekDisabled) return;
   if (!scrubbing.value) return;
   scrubbing.value = false;
   progressDraft.value = normalizeProgress(value);
@@ -300,10 +304,12 @@ onBeforeUnmount(() => {
         </div>
         <input
           class="timelineSlider"
+          :class="{ disabled: seekDisabled }"
           type="range"
           min="0"
           max="100"
           step="0.01"
+          :disabled="seekDisabled"
           :value="progressValue"
           @pointerdown="onProgressPointerDown"
           @input="onProgressInput"
@@ -478,6 +484,10 @@ onBeforeUnmount(() => {
   background: transparent;
   accent-color: #62a5ff;
   cursor: pointer;
+}
+
+.timelineSlider.disabled {
+  cursor: not-allowed;
 }
 
 .timelineSlider::-webkit-slider-runnable-track {

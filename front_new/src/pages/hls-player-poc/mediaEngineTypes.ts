@@ -7,15 +7,17 @@ import type {
   PlayerState,
 } from "./types";
 
+export type MediaEngineKind = "hls" | "direct_video" | "local_video";
+
 export type MediaEngineSource =
   | {
       sourceType: "external_url";
-      engineKind: "hls" | "direct_video";
+      engineKind: Extract<MediaEngineKind, "hls" | "direct_video">;
       url: string;
     }
   | {
       sourceType: "local_file";
-      engineKind: "local_video";
+      engineKind: Extract<MediaEngineKind, "local_video">;
       file: File;
       objectUrl: string;
     };
@@ -44,6 +46,9 @@ export type MediaEngine = {
   readonly currentTime: Ref<number>;
   readonly duration: Ref<number>;
   readonly bufferedRanges: Ref<BufferedRange[]>;
+  readonly seekableRanges: Ref<BufferedRange[]>;
+  readonly canSeek: ComputedRef<boolean>;
+  readonly seekRestrictionMessage: Ref<string>;
   readonly volume: Ref<number>;
   readonly timelineLabel: ComputedRef<string>;
   readonly progressPercent: ComputedRef<number>;

@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import Hls from "hls.js";
-import { formatTime, isHlsUrl, readBufferedRanges } from "./mediaUtils";
+import { formatTime, isHlsUrl, readBufferedRanges, readSeekableRanges } from "./mediaUtils";
+import type { MediaEngineKind } from "./mediaEngineTypes";
 import { HLS_POC_PLAYER_CONFIG, type HlsPocPlayerConfig } from "./playerConfig";
 import type {
   BufferedRange,
@@ -24,7 +25,10 @@ export function useHlsPocMediaEngine(options: {
   const currentTime = ref(0);
   const duration = ref(0);
   const bufferedRanges = ref<BufferedRange[]>([]);
+  const seekableRanges = ref<BufferedRange[]>([]);
+  const seekRestrictionMessage = ref("");
   const volume = ref(100);
+  const activeEngineKind = ref<MediaEngineKind | "none">("none");
 
   let hls: Hls | null = null;
   let lastBufferedSignature = "";
@@ -66,6 +70,19 @@ export function useHlsPocMediaEngine(options: {
     return range ? Math.max(0, range.end - current) : 0;
   });
 
+  const canSeek = computed(() => {
+    if (!Number.isFinite(duration.value) || duration.value <= 0) return false;
+    if (activeEngineKind.value === "hls" || activeEngineKind.value === "local_video") {
+      return true;
+    }
+
+    if (activeEngineKind.value === "direct_video") {
+      return seekableRanges.value.length > 0;
+    }
+
+    return false;
+  });
+
   function collectMediaMetrics() {
     const video = videoRef.value;
     const ranges = readBufferedRanges(video);
@@ -88,6 +105,10 @@ export function useHlsPocMediaEngine(options: {
       duration: video?.duration && Number.isFinite(video.duration)
         ? Number(video.duration.toFixed(3))
         : null,
+      canSeek: canSeek.value,
+      seekableRanges: readSeekableRanges(video),
+      engineKind: activeEngineKind.value,
+      seekRestrictionMessage: seekRestrictionMessage.value,
       bufferAhead: currentRange ? Number((currentRange.end - current).toFixed(3)) : 0,
       bufferedRanges: ranges,
       readyEvaluation,
@@ -99,6 +120,7 @@ export function useHlsPocMediaEngine(options: {
     currentTime.value = video?.currentTime ?? 0;
     duration.value = video?.duration && Number.isFinite(video.duration) ? video.duration : 0;
     bufferedRanges.value = readBufferedRanges(video);
+    seekableRanges.value = readSeekableRanges(video);
     if (video) {
       volume.value = Math.round(video.volume * 100);
     }
@@ -111,6 +133,7 @@ export function useHlsPocMediaEngine(options: {
     hls = null;
     lastBufferedSignature = "";
     pendingBufferedSeek = false;
+    activeEngineKind.value = "none";
 
     const video = videoRef.value;
     if (!video) return;
@@ -120,11 +143,17 @@ export function useHlsPocMediaEngine(options: {
     video.load();
   }
 
-  async function loadSource(url: string, playback: PlaybackStateInput | null = null) {
+  async function loadSource(
+    url: string,
+    playback: PlaybackStateInput | null = null,
+    engineKind: MediaEngineKind = isHlsUrl(url) ? "hls" : "direct_video",
+  ) {
     cleanupPlayer();
     updateMediaMetrics();
     errorMessage.value = "";
     appliedUrl.value = url;
+    activeEngineKind.value = url ? engineKind : "none";
+    seekRestrictionMessage.value = "";
     pendingPlayback = playback;
 
     if (!url) {
@@ -142,12 +171,12 @@ export function useHlsPocMediaEngine(options: {
     options.writeLog("applySource", {
       url,
       playback,
-      hlsUrl: isHlsUrl(url),
+      engineKind,
       hlsSupported: Hls.isSupported(),
       nativeHlsSupported: Boolean(video.canPlayType("application/vnd.apple.mpegurl")),
     });
 
-    if (isHlsUrl(url) && Hls.isSupported()) {
+    if (engineKind === "hls" && Hls.isSupported()) {
       hls = new Hls({
         enableWorker: config.hls.enableWorker,
         lowLatencyMode: config.hls.lowLatencyMode,
@@ -160,6 +189,15 @@ export function useHlsPocMediaEngine(options: {
       bindHlsEvents(hls);
       hls.attachMedia(video);
       hls.loadSource(url);
+      return;
+    }
+
+    if (
+      engineKind === "hls" &&
+      !video.canPlayType("application/vnd.apple.mpegurl")
+    ) {
+      errorMessage.value = "HLS is not supported in this browser";
+      setMediaHealthState("error", "hlsUnsupported");
       return;
     }
 
@@ -199,6 +237,14 @@ export function useHlsPocMediaEngine(options: {
         playback.position_seconds,
         Math.max(0, video.duration - 0.25),
       );
+      if (!canSeekToTime(nextTime)) {
+        pendingPlayback = playback;
+        seekRestrictionMessage.value = "该视频源暂不支持跳转到目标位置";
+        setMediaHealthStalling("applyPlayback:targetNotSeekable");
+        return;
+      }
+
+      seekRestrictionMessage.value = "";
       prepareSeek(nextTime, "applyPlayback");
       video.currentTime = nextTime;
       updateMediaMetrics();
@@ -232,6 +278,12 @@ export function useHlsPocMediaEngine(options: {
     if (!video || duration.value <= 0 || !Number.isFinite(value)) return null;
 
     const nextTime = duration.value * (Math.min(100, Math.max(0, value)) / 100);
+    if (!canSeekToTime(nextTime)) {
+      seekRestrictionMessage.value = "该视频源暂不支持跳转到目标位置";
+      return null;
+    }
+
+    seekRestrictionMessage.value = "";
     prepareSeek(nextTime, "seekToPercent");
     video.currentTime = nextTime;
     currentTime.value = nextTime;
@@ -320,6 +372,26 @@ export function useHlsPocMediaEngine(options: {
     return ranges.find((item) =>
       time >= item.start - config.bufferRangeEpsilonSeconds &&
       time <= item.end + config.bufferRangeEpsilonSeconds);
+  }
+
+  function findSeekableRangeForTime(time: number) {
+    return seekableRanges.value.find((item) =>
+      time >= item.start - config.bufferRangeEpsilonSeconds &&
+      time <= item.end + config.bufferRangeEpsilonSeconds);
+  }
+
+  function canSeekToTime(time: number) {
+    if (!Number.isFinite(duration.value) || duration.value <= 0) return false;
+
+    if (activeEngineKind.value === "hls" || activeEngineKind.value === "local_video") {
+      return true;
+    }
+
+    if (activeEngineKind.value === "direct_video") {
+      return Boolean(findSeekableRangeForTime(time));
+    }
+
+    return false;
   }
 
   function evaluateReadyCandidate(
@@ -591,13 +663,30 @@ export function useHlsPocMediaEngine(options: {
 
   function handleTimeUpdate() {
     updateMediaMetrics();
+    tryApplyPendingSeekablePlayback("timeupdate");
     scheduleReadyConfirmation("timeupdate");
   }
 
   function handleProgress() {
     updateMediaMetrics();
+    tryApplyPendingSeekablePlayback("progress");
     logProgressIfChanged("video:progress");
     scheduleReadyConfirmation("video:progress");
+  }
+
+  function tryApplyPendingSeekablePlayback(reason: string) {
+    if (!pendingPlayback || !Number.isFinite(duration.value) || duration.value <= 0) return;
+
+    const targetTime = Math.min(
+      pendingPlayback.position_seconds,
+      Math.max(0, duration.value - 0.25),
+    );
+    if (!canSeekToTime(targetTime)) return;
+
+    const playback = pendingPlayback;
+    pendingPlayback = null;
+    seekRestrictionMessage.value = "";
+    void applyPlayback(playback, { syncPosition: true });
   }
 
   onBeforeUnmount(() => {
@@ -614,6 +703,9 @@ export function useHlsPocMediaEngine(options: {
     currentTime,
     duration,
     bufferedRanges,
+    seekableRanges,
+    canSeek,
+    seekRestrictionMessage,
     volume,
     timelineLabel,
     progressPercent,

@@ -5,6 +5,7 @@ import type {
   PlayerState,
   SyncGateState,
 } from "./types";
+import type { MediaEngineKind } from "./mediaEngineTypes";
 
 defineProps<{
   roomId: number;
@@ -16,7 +17,12 @@ defineProps<{
   timelineLabel: string;
   bufferAhead: number;
   bufferedRanges: BufferedRange[];
+  seekableRanges: BufferedRange[];
+  canSeek: boolean;
+  sourceType: "external_url" | "local_file" | "none";
+  engineKind: MediaEngineKind | "none";
   errorMessage: string;
+  seekRestrictionMessage: string;
   logText: string;
 }>();
 
@@ -60,9 +66,18 @@ const emit = defineEmits<{
       <span class="label">缓冲段</span>
       <strong>{{ bufferedRanges.length }}</strong>
     </div>
+    <div>
+      <span class="label">播放实现</span>
+      <strong>{{ sourceType }} / {{ engineKind }}</strong>
+    </div>
+    <div>
+      <span class="label">跳转</span>
+      <strong>{{ canSeek ? "enabled" : "disabled" }} / {{ seekableRanges.length }}</strong>
+    </div>
   </div>
 
   <p v-if="errorMessage" class="errorText">{{ errorMessage }}</p>
+  <p v-if="seekRestrictionMessage" class="hintText">{{ seekRestrictionMessage }}</p>
 
   <div class="logHeader">
     <span>调试输出</span>
@@ -114,6 +129,12 @@ const emit = defineEmits<{
 .errorText {
   margin: 0;
   color: var(--c-danger);
+  font-size: 13px;
+}
+
+.hintText {
+  margin: 0;
+  color: var(--c-text-muted);
   font-size: 13px;
 }
 
