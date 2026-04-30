@@ -2,6 +2,7 @@ from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import (
     BadRequestError,
     ConflictError,
@@ -66,7 +67,11 @@ class RoomJoinRequestService:
         )
 
         if room.join_audit_mode == RoomJoinAuditMode.AUTO_REJECT:
-            raise ForbiddenError("This room is not accepting join requests.")
+            raise ForbiddenError(
+                "This room is not accepting join requests.",
+                reason=ErrorReason.ROOM_NOT_ACCEPTING_JOIN_REQUESTS,
+                details={"room_id": room_id, "join_audit_mode": room.join_audit_mode},
+            )
 
         if room.join_audit_mode == RoomJoinAuditMode.AUTO_APPROVE:
             await self.membership_service.add_room_member_in_tx(
@@ -211,7 +216,11 @@ class RoomJoinRequestService:
     ) -> RoomJoinRequest:
         request = await self.find_join_request_by_id(db, request_id)
         if not request:
-            raise NotFoundError("Join request not found.")
+            raise NotFoundError(
+                "Join request not found.",
+                reason=ErrorReason.JOIN_REQUEST_NOT_FOUND,
+                details={"request_id": request_id},
+            )
         return request
 
     async def get_accessible_join_request_by_id(
@@ -387,7 +396,11 @@ class RoomJoinRequestService:
         user: User,
     ) -> RoomJoinRequest:
         if request.target_user_id != user.id:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.JOIN_REQUEST_TARGET_ACTION_FORBIDDEN,
+                details={"request_id": request.id, "target_user_id": request.target_user_id},
+            )
 
         request.target_action = RoomJoinRequestAction.APPROVED
         request = await self._finalize(db, request)
@@ -416,7 +429,11 @@ class RoomJoinRequestService:
         user: User,
     ) -> RoomJoinRequest:
         if request.target_user_id != user.id:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.JOIN_REQUEST_TARGET_ACTION_FORBIDDEN,
+                details={"request_id": request.id, "target_user_id": request.target_user_id},
+            )
 
         request.target_action = RoomJoinRequestAction.REJECTED
 
@@ -444,7 +461,11 @@ class RoomJoinRequestService:
 
     def _ensure_pending(self, request: RoomJoinRequest) -> None:
         if request.status != RoomJoinRequestStatus.PENDING:
-            raise BadRequestError("Request already handled.")
+            raise BadRequestError(
+                "Request already handled.",
+                reason=ErrorReason.JOIN_REQUEST_ALREADY_HANDLED,
+                details={"request_id": request.id, "status": request.status},
+            )
 
     async def _require_room_permission(
         self,
@@ -460,7 +481,11 @@ class RoomJoinRequestService:
             user_id=user.id,
         )
         if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.ROOM_PERMISSION_DENIED,
+                details={"room_id": room_id, "permission": permission},
+            )
 
         require_room_permission(role, permission)
         return role
@@ -478,7 +503,15 @@ class RoomJoinRequestService:
             target_user_id=target_user_id,
         )
         if existing:
-            raise ConflictError("Pending request already exists.")
+            raise ConflictError(
+                "Pending request already exists.",
+                reason=ErrorReason.PENDING_JOIN_REQUEST_ALREADY_EXISTS,
+                details={
+                    "room_id": room_id,
+                    "target_user_id": target_user_id,
+                    "request_id": existing.id,
+                },
+            )
 
     async def _ensure_user_not_member(
         self,
@@ -493,7 +526,11 @@ class RoomJoinRequestService:
             user_id=user_id,
         )
         if member:
-            raise ConflictError("User is already a room member.")
+            raise ConflictError(
+                "User is already a room member.",
+                reason=ErrorReason.USER_ALREADY_ROOM_MEMBER,
+                details={"room_id": room_id, "user_id": user_id},
+            )
 
     async def _ensure_can_review_by_room(
         self,

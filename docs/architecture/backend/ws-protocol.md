@@ -163,10 +163,23 @@
   "payload": {
     "request_id": "req-123",
     "code": "bad_request",
-    "message": "room_id is required"
+    "reason": "room_id_is_required",
+    "message": "room_id is required",
+    "details": null
   }
 }
 ```
+
+字段说明：
+
+- `code`：粗粒度错误类别，用于区分鉴权、权限、参数、资源不存在等大类。
+- `reason`：稳定的 snake_case 业务原因，前端应优先用它作为 i18n key。
+- `message`：后端兜底文案，主要用于开发调试或前端未配置 i18n 时展示。
+- `details`：可选结构化细节。payload 校验失败时会包含 `errors` 列表；普通业务错误通常为 `null`。
+
+WS 错误 `reason` 与 HTTP 错误共用后端登记表 `app.core.error_reasons.ErrorReason`。新增 WS 业务错误时，应先登记 `ErrorReason`，再在 handler 或 service 中引用，避免前后端 i18n key 漂移。
+
+完整登记表见 `error-reasons.md`。
 
 ### 5.4 heartbeat pong
 
@@ -195,11 +208,13 @@
 
 - `room_enter`
 - `room_leave`
+- `room_presence_get`
+- `room_video_runtime_get`
 - `playback_pause`
 - `playback_play`
 - `playback_seek`
 - `room_video_source_set`
-- `user_player_status`
+- `user_resource_status`
 
 ### 6.3 `event`
 
@@ -214,7 +229,7 @@
 - `playback_play`
 - `playback_seek`
 - `room_video_source_set`
-- `user_player_states`
+- `user_resource_states`
 
 ### 6.4 `error.code`
 
@@ -248,9 +263,9 @@
     "anchor_ts_ms": 1710000000000,
     "playback_rate": 1.0
   },
-  "user_player_states": {
+  "user_resource_states": {
     "room_id": 1,
-    "user_player_states": []
+    "user_resource_states": []
   }
 }
 ```
@@ -260,7 +275,7 @@
 - `present_user_ids`：当前房间在线用户 ID 列表
 - `room_video_source`：当前房间视频源状态，可为空
 - `playback`：当前房间播放状态，可为空
-- `user_player_states`：房间内用户播放器状态聚合
+- `user_resource_states`：房间内用户资源健康状态聚合
 
 ### 7.2 PresenceState
 
@@ -313,14 +328,14 @@
 - `anchor_ts_ms`：客户端用于估算实际播放位置的时间锚点
 - `playback_rate`：播放速度
 
-### 7.5 UserPlayerStatesState
+### 7.5 UserResourceStatesState
 
-用于聚合房间内各用户的播放器状态。
+用于聚合房间内各用户的资源健康状态。
 
 ```json
 {
   "room_id": 1,
-  "user_player_states": [
+  "user_resource_states": [
     {
       "room_id": 1,
       "user_id": 2,
@@ -339,7 +354,12 @@
 - `ready`
 - `stalling`
 - `error`
-- `idle`
+
+说明：
+
+- 该状态描述资源加载健康情况，不描述播放器播放态。
+- 前端播放器播放态由前端自行维护为 `idle` / `paused` / `playing`。
+- 旧的资源状态 `idle` 已废弃，后端不再接受。
 
 ## 8. 命令说明
 
@@ -405,11 +425,105 @@
 服务端行为：
 
 - 清理该连接的房间 presence
-- 更新聚合播放器状态
+- 更新聚合资源健康状态
 - 必要时触发自动恢复播放
 - 向其他成员广播 `room_user_presence`
 
-### 8.3 `room_video_source_set`
+### 8.3 `room_presence_get`
+
+主动查询当前连接所在房间的在线成员状态。
+
+请求：
+
+```json
+{
+  "v": 1,
+  "type": "command",
+  "payload": {
+    "request_id": "req-room-presence",
+    "action": "room_presence_get",
+    "data": null
+  }
+}
+```
+
+成功响应：
+
+- `ack.data.presence`
+
+响应示例：
+
+```json
+{
+  "presence": {
+    "room_id": 1,
+    "present_user_ids": [1, 2, 3]
+  }
+}
+```
+
+说明：
+
+- 当前连接必须已经进入房间。
+- 该命令只返回 presence runtime，不返回播放同步 runtime。
+- 该命令无广播副作用。
+
+### 8.4 `room_video_runtime_get`
+
+主动查询当前连接所在房间的播放同步运行时。
+
+请求：
+
+```json
+{
+  "v": 1,
+  "type": "command",
+  "payload": {
+    "request_id": "req-room-video-runtime",
+    "action": "room_video_runtime_get",
+    "data": null
+  }
+}
+```
+
+成功响应：
+
+- `ack.data.room_video_source`
+- `ack.data.playback`
+- `ack.data.user_resource_states`
+
+响应示例：
+
+```json
+{
+  "room_video_source": {
+    "room_id": 1,
+    "source_type": "external_url",
+    "external_url": "https://example.com/video.mp4",
+    "file_hash": null
+  },
+  "playback": {
+    "room_id": 1,
+    "status": "paused",
+    "position_seconds": 12.5,
+    "anchor_ts_ms": 1710000000000,
+    "playback_rate": 1.0
+  },
+  "user_resource_states": {
+    "room_id": 1,
+    "user_resource_states": []
+  }
+}
+```
+
+说明：
+
+- 当前连接必须已经进入房间。
+- `room_video_source` 和 `playback` 在未设置视频源前可为空。
+- 该命令只返回播放同步 runtime，不返回 presence runtime。
+- 该命令无广播副作用。
+
+### 8.5 `room_video_source_set`
 
 设置房间当前视频源。
 
@@ -460,15 +574,15 @@
 
 - `ack.data.room_video_source`
 - `ack.data.playback`
-- `ack.data.user_player_states`
+- `ack.data.user_resource_states`
 
 副作用：
 
 - 广播 `room_video_source_set`
 - 广播 `playback_pause`
-- 广播 `user_player_states`
+- 广播 `user_resource_states`
 
-### 8.4 `playback_play`
+### 8.6 `playback_play`
 
 请求：
 
@@ -498,7 +612,7 @@
 - 当前用户必须满足主动同步权限
 - 在 `auto_sync` 模式下，如果仍有用户处于 `stalling`，服务端会拒绝恢复播放
 
-### 8.5 `playback_pause`
+### 8.7 `playback_pause`
 
 请求结构与 `playback_play` 类似：
 
@@ -526,7 +640,7 @@
 
 - 广播 `playback_pause`
 
-### 8.6 `playback_seek`
+### 8.8 `playback_seek`
 
 请求：
 
@@ -557,9 +671,9 @@
 
 - 当前实现中，seek 后房间播放状态会进入 `paused`
 
-### 8.7 `user_player_status`
+### 8.9 `user_resource_status`
 
-用于客户端上报本地播放器状态。
+用于客户端上报本地资源健康状态。
 
 请求：
 
@@ -568,8 +682,8 @@
   "v": 1,
   "type": "command",
   "payload": {
-    "request_id": "req-player-status",
-    "action": "user_player_status",
+    "request_id": "req-resource-status",
+    "action": "user_resource_status",
     "data": {
       "status": "ready",
       "reported_at_ms": 1710000000000,
@@ -590,14 +704,14 @@
 
 成功响应：
 
-- `ack.data.user_player_states`
+- `ack.data.user_resource_states`
 - 如触发自动暂停或自动恢复播放，还会额外带上：
   - `ack.data.playback`
   - `ack.data.auto_action`
 
 副作用：
 
-- 广播 `user_player_states`
+- 广播 `user_resource_states`
 - 在 `auto_sync` 模式下，可能额外广播 `playback_pause` 或 `playback_play`
 
 ## 9. 事件说明
@@ -664,6 +778,8 @@
 - `removed_from_room`
 - `room_deleted`
 
+该事件的 `reason` 登记在 `app.realtime.constants.SessionCloseReason`，不与错误 `ErrorReason` 混用。
+
 客户端收到后应：
 
 - 停止将当前连接视为该房间有效会话
@@ -678,13 +794,13 @@
 
 ### 9.8 播放相关事件
 
-以下事件 `data` 结构分别对应 `PlaybackState` 或 `RoomVideoSourceState` / `UserPlayerStatesState`：
+以下事件 `data` 结构分别对应 `PlaybackState` 或 `RoomVideoSourceState` / `UserResourceStatesState`：
 
 - `playback_play`
 - `playback_pause`
 - `playback_seek`
 - `room_video_source_set`
-- `user_player_states`
+- `user_resource_states`
 
 ## 10. 权限与状态约束
 

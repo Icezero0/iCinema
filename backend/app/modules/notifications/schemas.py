@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError
 from app.modules.notifications.constants import (
     NotificationRelatedType,
@@ -21,7 +22,12 @@ class NotificationCreate(BaseModel):
     def validate_related_fields(self) -> "NotificationCreate":
         if (self.related_type is None) != (self.related_id is None):
             raise BadRequestError(
-                "related_type and related_id must be provided together"
+                "related_type and related_id must be provided together",
+                reason=ErrorReason.NOTIFICATION_RELATED_FIELDS_INCOMPLETE,
+                details={
+                    "has_related_type": self.related_type is not None,
+                    "has_related_id": self.related_id is not None,
+                },
             )
         return self
 

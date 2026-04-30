@@ -46,14 +46,18 @@ def test_build_error_message_returns_standard_error_message() -> None:
     message = build_error_message(
         code=WsErrorCode.BAD_REQUEST,
         request_id="req-2",
+        reason="bad_input",
         message="bad input",
+        details={"field": "name"},
     )
 
     assert message.type == WsMessageType.ERROR
     assert message.payload == {
         "request_id": "req-2",
         "code": WsErrorCode.BAD_REQUEST,
+        "reason": "bad_input",
         "message": "bad input",
+        "details": {"field": "name"},
     }
 
 

@@ -2,6 +2,7 @@ from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.modules.rooms.constants import RoomPermission, RoomRole, RoomVisibility
 from app.modules.rooms.membership.service import RoomMembershipService
@@ -33,7 +34,11 @@ class RoomService:
             user_id=user.id,
         )
         if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.ROOM_PERMISSION_DENIED,
+                details={"room_id": room.id, "permission": permission},
+            )
 
         require_room_permission(role, permission)
         return role
@@ -44,7 +49,11 @@ class RoomService:
     async def get_room_by_id(self, db: AsyncSession, room_id: int) -> Room:
         room = await self.find_room_by_id(db, room_id)
         if not room:
-            raise NotFoundError("Room not found")
+            raise NotFoundError(
+                "Room not found",
+                reason=ErrorReason.ROOM_NOT_FOUND,
+                details={"room_id": room_id},
+            )
         return room
 
     async def get_accessible_room_by_id(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.modules.rooms.constants import RoomSyncPolicy
 from app.modules.rooms.settings.service import RoomSettingsService
-from app.realtime.constants import AutoPlaybackAction
+from app.realtime.constants import AutoPlaybackAction, SessionCloseReason
 from app.realtime.manager import RealtimeManager
 from app.realtime.publisher import RealtimePublisher
 from app.realtime.room_presence import RoomPresenceService
@@ -18,7 +18,7 @@ async def close_room_user_session(
     video_runtime_service: RoomVideoRuntimeService,
     room_id: int,
     user_id: int,
-    reason: str,
+    reason: SessionCloseReason,
 ) -> bool:
     connection_id = await presence_service.find_room_user_connection(
         room_id=room_id,
@@ -57,9 +57,9 @@ async def close_room_user_session(
         room_empty=not presence.present_user_ids,
     )
 
-    if not session_exit_result.room_cleared and session_exit_result.user_player_states is not None:
-        await publisher.publish_user_player_states(
-            user_player_states=session_exit_result.user_player_states,
+    if not session_exit_result.room_cleared and session_exit_result.user_resource_states is not None:
+        await publisher.publish_user_resource_states(
+            user_resource_states=session_exit_result.user_resource_states,
         )
         if (
             session_exit_result.auto_action == AutoPlaybackAction.PLAY
@@ -82,7 +82,7 @@ async def close_room_sessions(
     presence_service: RoomPresenceService,
     video_runtime_service: RoomVideoRuntimeService,
     room_id: int,
-    reason: str,
+    reason: SessionCloseReason,
 ) -> list[int]:
     active_connections = await presence_service.evict_room_users(
         manager=manager,

@@ -1,3 +1,4 @@
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import ForbiddenError
 from app.modules.rooms.constants import RoomPermission, RoomRole
 
@@ -44,4 +45,8 @@ def has_room_permission(role: RoomRole, permission: RoomPermission) -> bool:
 
 def require_room_permission(role: RoomRole, permission: RoomPermission) -> None:
     if not has_room_permission(role, permission):
-        raise ForbiddenError("You do not have permission to perform this action")
+        raise ForbiddenError(
+            "You do not have permission to perform this action",
+            reason=ErrorReason.ROOM_PERMISSION_DENIED,
+            details={"role": role, "permission": permission},
+        )

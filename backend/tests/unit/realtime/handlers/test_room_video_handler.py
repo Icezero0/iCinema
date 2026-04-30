@@ -8,15 +8,15 @@ from app.modules.rooms.constants import (
     RoomSyncPolicy,
     RoomVideoSourceType,
 )
-from app.realtime.constants import AutoPlaybackAction, PlaybackStatusType, UserPlayerStatusType, WsCommandAction
+from app.realtime.constants import AutoPlaybackAction, PlaybackStatusType, WsCommandAction
 from app.realtime.handlers.room_video import RoomVideoCommandHandler, RoomVideoRuntimePolicy
 from app.realtime.manager import WsConnection
 from app.realtime.protocol import WsCommandPayload
-from app.realtime.room_video_runtime import RoomVideoRuntimeService, UserPlayerStatesUpdateResult
+from app.realtime.room_video_runtime import RoomVideoRuntimeService, UserResourceStatesUpdateResult
 from app.realtime.state import (
     PlaybackState,
     RoomVideoSourceState,
-    UserPlayerStatesState,
+    UserResourceStatesState,
 )
 
 
@@ -36,8 +36,8 @@ class RecordingPublisher:
     async def publish_playback_seek(self, **kwargs) -> None:
         self.calls.append(("publish_playback_seek", kwargs))
 
-    async def publish_user_player_states(self, **kwargs) -> None:
-        self.calls.append(("publish_user_player_states", kwargs))
+    async def publish_user_resource_states(self, **kwargs) -> None:
+        self.calls.append(("publish_user_resource_states", kwargs))
 
 
 def _build_connection(*, user_id: int, room_id: int | None) -> WsConnection:
@@ -68,6 +68,14 @@ def test_require_active_sync_permission_rejects_role_without_permission() -> Non
         )
 
     assert exc_info.value.message == "You do not have permission to control room video"
+
+
+# 资源健康状态只接受 ready / stalling / error，废弃旧 idle 状态
+def test_parse_resource_health_status_rejects_idle() -> None:
+    with pytest.raises(BadRequestError) as exc_info:
+        RoomVideoCommandHandler._parse_resource_health_status("idle")
+
+    assert exc_info.value.message == "Invalid status"
 
 
 # 用户没有房间角色时不能控制房间视频
@@ -101,14 +109,14 @@ async def test_handle_rejects_user_without_room_role(monkeypatch) -> None:
     assert exc_info.value.message == "You are not allowed to control room video in this room"
 
 
-# USER_PLAYER_STATUS 会上报聚合状态并在需要时广播自动暂停
-async def test_handle_user_player_status_publishes_player_states_and_auto_pause(monkeypatch) -> None:
+# USER_RESOURCE_STATUS 会上报资源健康聚合状态并在需要时广播自动暂停
+async def test_handle_user_resource_status_publishes_resource_states_and_auto_pause(monkeypatch) -> None:
     handler = RoomVideoCommandHandler(video_runtime_service=RoomVideoRuntimeService())
     publisher = RecordingPublisher()
     connection = _build_connection(user_id=3, room_id=30)
     command = WsCommandPayload(
         request_id="req-2",
-        action=WsCommandAction.USER_PLAYER_STATUS,
+        action=WsCommandAction.USER_RESOURCE_STATUS,
         data={"status": "stalling", "reported_at_ms": 1000},
     )
     playback = PlaybackState(
@@ -118,8 +126,8 @@ async def test_handle_user_player_status_publishes_player_states_and_auto_pause(
         anchor_ts_ms=2000,
         playback_rate=1.0,
     )
-    update_result = UserPlayerStatesUpdateResult(
-        user_player_states=UserPlayerStatesState(room_id=30, user_player_states=[]),
+    update_result = UserResourceStatesUpdateResult(
+        user_resource_states=UserResourceStatesState(room_id=30, user_resource_states=[]),
         auto_playback=playback,
         auto_action=AutoPlaybackAction.PAUSE,
     )
@@ -136,7 +144,7 @@ async def test_handle_user_player_status_publishes_player_states_and_auto_pause(
             active_sync_permission=RoomActiveSyncPermission.ALL_MEMBERS,
         )
 
-    async def fake_report_user_player_status(**kwargs):  # noqa: ANN001
+    async def fake_report_user_resource_status(**kwargs):  # noqa: ANN001
         return update_result
 
     monkeypatch.setattr(handler.room_service, "get_room_by_id", fake_get_room_by_id)
@@ -144,8 +152,8 @@ async def test_handle_user_player_status_publishes_player_states_and_auto_pause(
     monkeypatch.setattr(handler, "_get_runtime_policy", fake_get_runtime_policy)
     monkeypatch.setattr(
         handler.video_runtime_service,
-        "report_user_player_status",
-        fake_report_user_player_status,
+        "report_user_resource_status",
+        fake_report_user_resource_status,
     )
 
     result = await handler.handle(
@@ -157,11 +165,11 @@ async def test_handle_user_player_status_publishes_player_states_and_auto_pause(
     )
 
     assert result == {
-        "user_player_states": {"room_id": 30, "user_player_states": []},
+        "user_resource_states": {"room_id": 30, "user_resource_states": []},
         "playback": playback.model_dump(mode="json"),
         "auto_action": "pause",
     }
-    assert publisher.calls[0][0] == "publish_user_player_states"
+    assert publisher.calls[0][0] == "publish_user_resource_states"
     assert publisher.calls[1] == ("publish_playback_pause", {"playback": playback})
 
 
@@ -191,13 +199,13 @@ async def test_handle_room_video_source_set_for_external_url(monkeypatch) -> Non
         anchor_ts_ms=1234,
         playback_rate=1.0,
     )
-    user_player_states = UserPlayerStatesState(room_id=40, user_player_states=[])
+    user_resource_states = UserResourceStatesState(room_id=40, user_resource_states=[])
 
     async def fake_set_selected_room_video_source_type(db, room_id, source_type):  # noqa: ANN001
         return SimpleNamespace()
 
     async def fake_set_room_video_source(**kwargs):  # noqa: ANN001
-        return room_video_source, playback, user_player_states
+        return room_video_source, playback, user_resource_states
 
     monkeypatch.setattr(
         handler.room_settings_service,
@@ -220,11 +228,14 @@ async def test_handle_room_video_source_set_for_external_url(monkeypatch) -> Non
     assert result == {
         "room_video_source": room_video_source.model_dump(mode="json"),
         "playback": playback.model_dump(mode="json"),
-        "user_player_states": user_player_states.model_dump(mode="json"),
+        "user_resource_states": user_resource_states.model_dump(mode="json"),
     }
     assert publisher.calls[0] == ("publish_room_video_source_set", {"room_video_source": room_video_source})
     assert publisher.calls[1] == ("publish_playback_pause", {"playback": playback})
-    assert publisher.calls[2] == ("publish_user_player_states", {"user_player_states": user_player_states})
+    assert publisher.calls[2] == (
+        "publish_user_resource_states",
+        {"user_resource_states": user_resource_states},
+    )
 
 
 # 外链视频源不允许同时传 file_hash

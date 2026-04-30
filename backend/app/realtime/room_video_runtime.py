@@ -4,19 +4,20 @@ import asyncio
 from dataclasses import dataclass, field
 from time import time
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError
 from app.modules.rooms.constants import RoomSyncPolicy, RoomVideoSourceType
 from app.realtime.constants import (
     AutoPlaybackAction,
     PlaybackHoldReason,
     PlaybackStatusType,
-    UserPlayerStatusType,
+    ResourceHealthStatusType,
 )
 from app.realtime.state import (
     PlaybackState,
-    RoomUserPlayerState,
+    RoomUserResourceState,
     RoomVideoSourceState,
-    UserPlayerStatesState,
+    UserResourceStatesState,
 )
 
 
@@ -25,8 +26,8 @@ def now_ms() -> int:
 
 
 @dataclass
-class UserPlayerStatesUpdateResult:
-    user_player_states: UserPlayerStatesState
+class UserResourceStatesUpdateResult:
+    user_resource_states: UserResourceStatesState
     auto_playback: PlaybackState | None = None
     auto_action: AutoPlaybackAction | None = None
 
@@ -34,7 +35,7 @@ class UserPlayerStatesUpdateResult:
 @dataclass
 class RoomSessionExitResult:
     room_cleared: bool
-    user_player_states: UserPlayerStatesState | None = None
+    user_resource_states: UserResourceStatesState | None = None
     auto_playback: PlaybackState | None = None
     auto_action: AutoPlaybackAction | None = None
 
@@ -44,7 +45,7 @@ class RoomVideoRuntimeState:
     room_id: int
     room_video_source: RoomVideoSourceState | None = None
     playback: PlaybackState | None = None
-    user_player_states: dict[int, RoomUserPlayerState] = field(default_factory=dict)
+    user_resource_states: dict[int, RoomUserResourceState] = field(default_factory=dict)
     stalling_user_ids: set[int] = field(default_factory=set)
     playback_hold_reason: PlaybackHoldReason = PlaybackHoldReason.NONE
 
@@ -78,9 +79,9 @@ class RoomVideoRuntimeService:
         return playback.model_copy(deep=True)
 
     @staticmethod
-    def _copy_user_player_states(
-        payload: UserPlayerStatesState,
-    ) -> UserPlayerStatesState:
+    def _copy_user_resource_states(
+        payload: UserResourceStatesState,
+    ) -> UserResourceStatesState:
         return payload.model_copy(deep=True)
 
     @staticmethod
@@ -88,7 +89,11 @@ class RoomVideoRuntimeService:
         state: RoomVideoRuntimeState,
     ) -> None:
         if state.room_video_source is None:
-            raise BadRequestError("Room video source is not set for this room")
+            raise BadRequestError(
+                "Room video source is not set for this room",
+                reason=ErrorReason.ROOM_VIDEO_SOURCE_NOT_SET,
+                details={"room_id": state.room_id},
+            )
 
     @staticmethod
     def _resolve_position_seconds_locked(
@@ -103,14 +108,14 @@ class RoomVideoRuntimeService:
         return playback.position_seconds + (elapsed_ms / 1000.0) * playback.playback_rate
 
     @staticmethod
-    def _build_user_player_states_locked(
+    def _build_user_resource_states_locked(
         state: RoomVideoRuntimeState,
-    ) -> UserPlayerStatesState:
-        return UserPlayerStatesState(
+    ) -> UserResourceStatesState:
+        return UserResourceStatesState(
             room_id=state.room_id,
-            user_player_states=[
-                user_player_state.model_copy(deep=True)
-                for _, user_player_state in sorted(state.user_player_states.items())
+            user_resource_states=[
+                user_resource_state.model_copy(deep=True)
+                for _, user_resource_state in sorted(state.user_resource_states.items())
             ],
         )
 
@@ -136,16 +141,16 @@ class RoomVideoRuntimeService:
                 return None
             return self._copy_playback(state.playback)
 
-    async def get_user_player_states(
+    async def get_user_resource_states(
         self,
         *,
         room_id: int,
-    ) -> UserPlayerStatesState:
+    ) -> UserResourceStatesState:
         async with self._lock:
             state = self._room_states.get(room_id)
             if state is None:
-                return UserPlayerStatesState(room_id=room_id, user_player_states=[])
-            return self._copy_user_player_states(self._build_user_player_states_locked(state))
+                return UserResourceStatesState(room_id=room_id, user_resource_states=[])
+            return self._copy_user_resource_states(self._build_user_resource_states_locked(state))
 
     async def set_room_video_source(
         self,
@@ -155,7 +160,7 @@ class RoomVideoRuntimeService:
         external_url: str | None = None,
         file_hash: str | None = None,
         anchor_ts_ms: int | None = None,
-    ) -> tuple[RoomVideoSourceState, PlaybackState, UserPlayerStatesState]:
+    ) -> tuple[RoomVideoSourceState, PlaybackState, UserResourceStatesState]:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
 
@@ -175,14 +180,14 @@ class RoomVideoRuntimeService:
 
             state.room_video_source = room_video_source
             state.playback = playback
-            state.user_player_states.clear()
+            state.user_resource_states.clear()
             state.stalling_user_ids.clear()
             state.playback_hold_reason = PlaybackHoldReason.NONE
 
             return (
                 self._copy_room_video_source(room_video_source),
                 self._copy_playback(playback),
-                self._copy_user_player_states(self._build_user_player_states_locked(state)),
+                self._copy_user_resource_states(self._build_user_resource_states_locked(state)),
             )
 
     async def play(
@@ -200,7 +205,12 @@ class RoomVideoRuntimeService:
 
             if sync_policy == RoomSyncPolicy.AUTO_SYNC and state.stalling_user_ids:
                 raise BadRequestError(
-                    "Cannot resume playback while some users are still stalling"
+                    "Cannot resume playback while some users are still stalling",
+                    reason=ErrorReason.PLAYBACK_RESUME_BLOCKED_BY_STALLING_USERS,
+                    details={
+                        "room_id": room_id,
+                        "stalling_user_ids": sorted(state.stalling_user_ids),
+                    },
                 )
 
             playback = PlaybackState(
@@ -272,24 +282,24 @@ class RoomVideoRuntimeService:
             )
             return self._copy_playback(playback)
 
-    async def report_user_player_status(
+    async def report_user_resource_status(
         self,
         *,
         room_id: int,
         user_id: int,
-        status: UserPlayerStatusType,
+        status: ResourceHealthStatusType,
         reported_at_ms: int,
         sync_policy: RoomSyncPolicy,
         position_seconds: float | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
-    ) -> UserPlayerStatesUpdateResult:
+    ) -> UserResourceStatesUpdateResult:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
-            previous_state = state.user_player_states.get(user_id)
+            previous_state = state.user_resource_states.get(user_id)
             previous_status = previous_state.status if previous_state is not None else None
 
-            user_player_state = RoomUserPlayerState(
+            user_resource_state = RoomUserResourceState(
                 room_id=room_id,
                 user_id=user_id,
                 status=status,
@@ -298,9 +308,9 @@ class RoomVideoRuntimeService:
                 error_code=error_code,
                 error_message=error_message,
             )
-            state.user_player_states[user_id] = user_player_state
+            state.user_resource_states[user_id] = user_resource_state
 
-            if status == UserPlayerStatusType.STALLING:
+            if status == ResourceHealthStatusType.STALLING:
                 state.stalling_user_ids.add(user_id)
             else:
                 state.stalling_user_ids.discard(user_id)
@@ -310,12 +320,12 @@ class RoomVideoRuntimeService:
 
             if sync_policy == RoomSyncPolicy.AUTO_SYNC:
                 entered_stalling = (
-                    status == UserPlayerStatusType.STALLING
-                    and previous_status != UserPlayerStatusType.STALLING
+                    status == ResourceHealthStatusType.STALLING
+                    and previous_status != ResourceHealthStatusType.STALLING
                 )
                 left_stalling = (
-                    previous_status == UserPlayerStatusType.STALLING
-                    and status != UserPlayerStatusType.STALLING
+                    previous_status == ResourceHealthStatusType.STALLING
+                    and status != ResourceHealthStatusType.STALLING
                 )
 
                 if (
@@ -356,9 +366,9 @@ class RoomVideoRuntimeService:
                         auto_action = AutoPlaybackAction.PLAY
                     state.playback_hold_reason = PlaybackHoldReason.NONE
 
-            payload = self._build_user_player_states_locked(state)
-            return UserPlayerStatesUpdateResult(
-                user_player_states=self._copy_user_player_states(payload),
+            payload = self._build_user_resource_states_locked(state)
+            return UserResourceStatesUpdateResult(
+                user_resource_states=self._copy_user_resource_states(payload),
                 auto_playback=self._copy_playback(auto_playback),
                 auto_action=auto_action,
             )
@@ -380,22 +390,22 @@ class RoomVideoRuntimeService:
             if state is None:
                 return RoomSessionExitResult(
                     room_cleared=False,
-                    user_player_states=UserPlayerStatesState(
+                    user_resource_states=UserResourceStatesState(
                         room_id=room_id,
-                        user_player_states=[],
+                        user_resource_states=[],
                     ),
                 )
 
-            previous_state = state.user_player_states.pop(user_id, None)
+            previous_state = state.user_resource_states.pop(user_id, None)
             if previous_state is None:
                 return RoomSessionExitResult(
                     room_cleared=False,
-                    user_player_states=self._copy_user_player_states(
-                        self._build_user_player_states_locked(state)
+                    user_resource_states=self._copy_user_resource_states(
+                        self._build_user_resource_states_locked(state)
                     ),
                 )
 
-            if previous_state.status == UserPlayerStatusType.STALLING:
+            if previous_state.status == ResourceHealthStatusType.STALLING:
                 state.stalling_user_ids.discard(user_id)
 
             auto_playback: PlaybackState | None = None
@@ -403,7 +413,7 @@ class RoomVideoRuntimeService:
 
             if (
                 sync_policy == RoomSyncPolicy.AUTO_SYNC
-                and previous_state.status == UserPlayerStatusType.STALLING
+                and previous_state.status == ResourceHealthStatusType.STALLING
                 and not state.stalling_user_ids
                 and state.playback_hold_reason == PlaybackHoldReason.STALL
             ):
@@ -420,31 +430,31 @@ class RoomVideoRuntimeService:
                     auto_action = AutoPlaybackAction.PLAY
                 state.playback_hold_reason = PlaybackHoldReason.NONE
 
-            payload = self._build_user_player_states_locked(state)
+            payload = self._build_user_resource_states_locked(state)
             return RoomSessionExitResult(
                 room_cleared=False,
-                user_player_states=self._copy_user_player_states(payload),
+                user_resource_states=self._copy_user_resource_states(payload),
                 auto_playback=self._copy_playback(auto_playback),
                 auto_action=auto_action,
             )
 
-    async def remove_user_player_state(
+    async def remove_user_resource_state(
         self,
         *,
         room_id: int,
         user_id: int,
         sync_policy: RoomSyncPolicy,
-    ) -> UserPlayerStatesUpdateResult | None:
+    ) -> UserResourceStatesUpdateResult | None:
         result = await self.handle_room_session_exit(
             room_id=room_id,
             user_id=user_id,
             sync_policy=sync_policy,
             room_empty=False,
         )
-        if result.user_player_states is None:
+        if result.user_resource_states is None:
             return None
-        return UserPlayerStatesUpdateResult(
-            user_player_states=result.user_player_states,
+        return UserResourceStatesUpdateResult(
+            user_resource_states=result.user_resource_states,
             auto_playback=result.auto_playback,
             auto_action=result.auto_action,
         )

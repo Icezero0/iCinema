@@ -8,7 +8,7 @@ from app.realtime.state import (
     PlaybackState,
     PresenceState,
     RoomVideoSourceState,
-    UserPlayerStatesState,
+    UserResourceStatesState,
 )
 
 
@@ -122,15 +122,15 @@ async def test_publish_room_video_source_set_broadcasts_source_change_event() ->
     assert call["message"].payload["data"]["external_url"] == "https://example.com/video.mp4"
 
 
-# publish_user_player_states 会广播用户播放器聚合状态
-async def test_publish_user_player_states_broadcasts_player_state_event() -> None:
+# publish_user_resource_states 会广播用户资源健康聚合状态
+async def test_publish_user_resource_states_broadcasts_resource_state_event() -> None:
     manager = RecordingManager()
     publisher = RealtimePublisher(manager)
-    state = UserPlayerStatesState(room_id=13, user_player_states=[])
+    state = UserResourceStatesState(room_id=13, user_resource_states=[])
 
-    await publisher.publish_user_player_states(user_player_states=state)
+    await publisher.publish_user_resource_states(user_resource_states=state)
 
     assert len(manager.publish_calls) == 1
     call = manager.publish_calls[0]
-    assert call["message"].payload["event"] == WsEventType.USER_PLAYER_STATES
-    assert call["message"].payload["data"] == {"room_id": 13, "user_player_states": []}
+    assert call["message"].payload["event"] == WsEventType.USER_RESOURCE_STATES
+    assert call["message"].payload["data"] == {"room_id": 13, "user_resource_states": []}
