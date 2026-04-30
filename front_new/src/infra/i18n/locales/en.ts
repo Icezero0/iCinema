@@ -360,7 +360,7 @@ export default {
       syncManual: "Manual sync",
       activeSyncPermission: "Active sync permission",
       activeSyncOwnerOnly: "Owner only",
-      activeSyncOwnerAndManager: "Owner and managers",
+      activeSyncOwnerAndManager: "Owner/Manager",
       activeSyncAllMembers: "All members",
       localSyncStrategy: "Local sync strategy",
       localSyncAdaptiveSpeed: "Adaptive speed",

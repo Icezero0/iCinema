@@ -45,6 +45,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "toggle-play"): void;
+  (e: "sync-now"): void;
   (e: "update:progress", value: number): void;
   (e: "update:volume", value: number): void;
   (e: "apply-source", value: {
@@ -266,6 +267,7 @@ function triggerSyncAnimation() {
   window.setTimeout(() => {
     syncAnimating.value = false;
   }, 720);
+  emit("sync-now");
 }
 
 function onVolumeInput(event: Event) {
