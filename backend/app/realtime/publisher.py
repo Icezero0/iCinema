@@ -9,7 +9,7 @@ from app.realtime.state import (
     PlaybackState,
     PresenceState,
     RoomVideoSourceState,
-    UserPlayerStatesState,
+    UserResourceStatesState,
 )
 
 
@@ -177,13 +177,13 @@ class RealtimePublisher:
             data=playback.model_dump(mode="json"),
         )
 
-    async def publish_user_player_states(
+    async def publish_user_resource_states(
         self,
         *,
-        user_player_states: UserPlayerStatesState,
+        user_resource_states: UserResourceStatesState,
     ) -> None:
         await self._publish_event(
-            channel=room_channel(user_player_states.room_id),
-            event=WsEventType.USER_PLAYER_STATES,
-            data=user_player_states.model_dump(mode="json"),
+            channel=room_channel(user_resource_states.room_id),
+            event=WsEventType.USER_RESOURCE_STATES,
+            data=user_resource_states.model_dump(mode="json"),
         )

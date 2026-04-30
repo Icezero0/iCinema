@@ -57,9 +57,9 @@ async def close_room_user_session(
         room_empty=not presence.present_user_ids,
     )
 
-    if not session_exit_result.room_cleared and session_exit_result.user_player_states is not None:
-        await publisher.publish_user_player_states(
-            user_player_states=session_exit_result.user_player_states,
+    if not session_exit_result.room_cleared and session_exit_result.user_resource_states is not None:
+        await publisher.publish_user_resource_states(
+            user_resource_states=session_exit_result.user_resource_states,
         )
         if (
             session_exit_result.auto_action == AutoPlaybackAction.PLAY

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from app.modules.rooms.constants import RoomVideoSourceType
-from app.realtime.constants import PlaybackStatusType, UserPlayerStatusType
+from app.realtime.constants import PlaybackStatusType, ResourceHealthStatusType
 
 
 class PresenceState(BaseModel):
@@ -32,23 +32,23 @@ class PlaybackState(BaseModel):
     playback_rate: float = 1.0
 
 
-class RoomUserPlayerState(BaseModel):
+class RoomUserResourceState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     room_id: int
     user_id: int
-    status: UserPlayerStatusType
+    status: ResourceHealthStatusType
     reported_at_ms: int
     position_seconds: float | None = None
     error_code: str | None = None
     error_message: str | None = None
 
 
-class UserPlayerStatesState(BaseModel):
+class UserResourceStatesState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     room_id: int
-    user_player_states: list[RoomUserPlayerState]
+    user_resource_states: list[RoomUserResourceState]
 
 
 class RoomSnapshot(BaseModel):
@@ -58,4 +58,4 @@ class RoomSnapshot(BaseModel):
     present_user_ids: list[int]
     room_video_source: RoomVideoSourceState | None = None
     playback: PlaybackState | None = None
-    user_player_states: UserPlayerStatesState | None = None
+    user_resource_states: UserResourceStatesState | None = None

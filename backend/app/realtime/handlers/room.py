@@ -61,7 +61,47 @@ class RoomCommandHandler:
             )
             return None
 
+        if command.action == WsCommandAction.ROOM_PRESENCE_GET:
+            return await self._handle_room_presence_get(connection=connection)
+
+        if command.action == WsCommandAction.ROOM_VIDEO_RUNTIME_GET:
+            return await self._handle_room_video_runtime_get(connection=connection)
+
         raise BadRequestError(f"Unsupported room command action: {command.action}")
+
+    async def _handle_room_presence_get(
+        self,
+        *,
+        connection: WsConnection,
+    ) -> dict[str, object]:
+        room_id = self._require_active_room(connection)
+        presence = await self.presence_service.get_presence_state(room_id=room_id)
+        return {
+            "presence": presence.model_dump(mode="json"),
+        }
+
+    async def _handle_room_video_runtime_get(
+        self,
+        *,
+        connection: WsConnection,
+    ) -> dict[str, object]:
+        room_id = self._require_active_room(connection)
+        room_video_source = await self.video_runtime_service.get_room_video_source(
+            room_id=room_id,
+        )
+        playback = await self.video_runtime_service.get_playback(room_id=room_id)
+        user_resource_states = await self.video_runtime_service.get_user_resource_states(
+            room_id=room_id,
+        )
+        return {
+            "room_video_source": (
+                room_video_source.model_dump(mode="json")
+                if room_video_source is not None
+                else None
+            ),
+            "playback": playback.model_dump(mode="json") if playback is not None else None,
+            "user_resource_states": user_resource_states.model_dump(mode="json"),
+        }
 
     async def _handle_room_enter(
         self,
@@ -101,7 +141,7 @@ class RoomCommandHandler:
             room_id=room_id
         )
         playback = await self.video_runtime_service.get_playback(room_id=room_id)
-        user_player_states = await self.video_runtime_service.get_user_player_states(
+        user_resource_states = await self.video_runtime_service.get_user_resource_states(
             room_id=room_id,
         )
         snapshot = RoomSnapshot(
@@ -109,7 +149,7 @@ class RoomCommandHandler:
             present_user_ids=current_presence.present_user_ids,
             room_video_source=room_video_source,
             playback=playback,
-            user_player_states=user_player_states,
+            user_resource_states=user_resource_states,
         )
 
         if replaced_connection_id is not None:
@@ -132,21 +172,21 @@ class RoomCommandHandler:
                     db=db,
                     room_id=previous_room_id,
                 )
-                user_player_states_update = await self.video_runtime_service.remove_user_player_state(
+                user_resource_states_update = await self.video_runtime_service.remove_user_resource_state(
                     room_id=previous_room_id,
                     user_id=connection.user_id,
                     sync_policy=sync_policy,
                 )
-                if user_player_states_update is not None:
-                    await publisher.publish_user_player_states(
-                        user_player_states=user_player_states_update.user_player_states,
+                if user_resource_states_update is not None:
+                    await publisher.publish_user_resource_states(
+                        user_resource_states=user_resource_states_update.user_resource_states,
                     )
                     if (
-                        user_player_states_update.auto_action == AutoPlaybackAction.PLAY
-                        and user_player_states_update.auto_playback is not None
+                        user_resource_states_update.auto_action == AutoPlaybackAction.PLAY
+                        and user_resource_states_update.auto_playback is not None
                     ):
                         await publisher.publish_playback_play(
-                            playback=user_player_states_update.auto_playback,
+                            playback=user_resource_states_update.auto_playback,
                         )
 
             await publisher.publish_room_user_presence(
@@ -201,9 +241,9 @@ class RoomCommandHandler:
             sync_policy=sync_policy,
             room_empty=not presence.present_user_ids,
         )
-        if not session_exit_result.room_cleared and session_exit_result.user_player_states is not None:
-            await publisher.publish_user_player_states(
-                user_player_states=session_exit_result.user_player_states,
+        if not session_exit_result.room_cleared and session_exit_result.user_resource_states is not None:
+            await publisher.publish_user_resource_states(
+                user_resource_states=session_exit_result.user_resource_states,
             )
             if (
                 session_exit_result.auto_action == AutoPlaybackAction.PLAY
@@ -243,6 +283,13 @@ class RoomCommandHandler:
         if settings is None:
             return RoomSyncPolicy.AUTO_SYNC
         return settings.sync_policy
+
+    @staticmethod
+    def _require_active_room(connection: WsConnection) -> int:
+        room_id = connection.active_room_id
+        if room_id is None:
+            raise BadRequestError("You must enter a room before querying room runtime")
+        return room_id
 
     @staticmethod
     def _extract_room_id(command: WsCommandPayload) -> int:

@@ -157,6 +157,8 @@ class RealtimeMessageHandler:
         if command.action in {
             WsCommandAction.ROOM_ENTER,
             WsCommandAction.ROOM_LEAVE,
+            WsCommandAction.ROOM_PRESENCE_GET,
+            WsCommandAction.ROOM_VIDEO_RUNTIME_GET,
         }:
             return await self.room_handler.handle(
                 db=db,
@@ -171,7 +173,7 @@ class RealtimeMessageHandler:
             WsCommandAction.PLAYBACK_PLAY,
             WsCommandAction.PLAYBACK_SEEK,
             WsCommandAction.ROOM_VIDEO_SOURCE_SET,
-            WsCommandAction.USER_PLAYER_STATUS,
+            WsCommandAction.USER_RESOURCE_STATUS,
         }:
             return await self.room_video_handler.handle(
                 db=db,

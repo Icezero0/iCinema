@@ -17,7 +17,7 @@ from app.modules.rooms.constants import (
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.room.service import RoomService
 from app.modules.rooms.settings.service import RoomSettingsService
-from app.realtime.constants import AutoPlaybackAction, UserPlayerStatusType, WsCommandAction
+from app.realtime.constants import AutoPlaybackAction, ResourceHealthStatusType, WsCommandAction
 from app.realtime.manager import RealtimeManager, WsConnection
 from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
@@ -62,8 +62,8 @@ class RoomVideoCommandHandler:
 
         policy = await self._get_runtime_policy(db=db, room_id=room_id)
 
-        if command.action == WsCommandAction.USER_PLAYER_STATUS:
-            return await self._handle_user_player_status(
+        if command.action == WsCommandAction.USER_RESOURCE_STATUS:
+            return await self._handle_user_resource_status(
                 publisher=publisher,
                 room_id=room_id,
                 user_id=connection.user_id,
@@ -151,7 +151,7 @@ class RoomVideoCommandHandler:
             source_type=source_type,
         )
 
-        room_video_source, playback, user_player_states = (
+        room_video_source, playback, user_resource_states = (
             await self.video_runtime_service.set_room_video_source(
                 room_id=room_id,
                 source_type=source_type,
@@ -174,12 +174,12 @@ class RoomVideoCommandHandler:
 
         await publisher.publish_room_video_source_set(room_video_source=room_video_source)
         await publisher.publish_playback_pause(playback=playback)
-        await publisher.publish_user_player_states(user_player_states=user_player_states)
+        await publisher.publish_user_resource_states(user_resource_states=user_resource_states)
 
         return {
             "room_video_source": room_video_source.model_dump(mode="json"),
             "playback": playback.model_dump(mode="json"),
-            "user_player_states": user_player_states.model_dump(mode="json"),
+            "user_resource_states": user_resource_states.model_dump(mode="json"),
         }
 
     async def _handle_play(
@@ -322,7 +322,7 @@ class RoomVideoCommandHandler:
             "playback": playback.model_dump(mode="json"),
         }
 
-    async def _handle_user_player_status(
+    async def _handle_user_resource_status(
         self,
         *,
         publisher: RealtimePublisher,
@@ -333,7 +333,7 @@ class RoomVideoCommandHandler:
     ) -> dict[str, Any]:
         data = command.data or {}
 
-        status = self._parse_user_player_status(data.get("status"))
+        status = self._parse_resource_health_status(data.get("status"))
         reported_at_ms = self._parse_positive_int(
             data.get("reported_at_ms"),
             field_name="reported_at_ms",
@@ -351,7 +351,7 @@ class RoomVideoCommandHandler:
             field_name="error_message",
         )
 
-        result = await self.video_runtime_service.report_user_player_status(
+        result = await self.video_runtime_service.report_user_resource_status(
             room_id=room_id,
             user_id=user_id,
             status=status,
@@ -363,13 +363,13 @@ class RoomVideoCommandHandler:
         )
 
         logger.info(
-            "user player status: room_id=%s user_id=%s status=%s sync_policy=%s",
+            "user resource status: room_id=%s user_id=%s status=%s sync_policy=%s",
             room_id,
             user_id,
             status,
             sync_policy,
             **log_extra(
-                "ws.user_player_status",
+                "ws.user_resource_status",
                 user_id=user_id,
                 room_id=room_id,
                 status=status,
@@ -377,8 +377,8 @@ class RoomVideoCommandHandler:
             ),
         )
 
-        await publisher.publish_user_player_states(
-            user_player_states=result.user_player_states,
+        await publisher.publish_user_resource_states(
+            user_resource_states=result.user_resource_states,
         )
 
         if result.auto_action == AutoPlaybackAction.PAUSE and result.auto_playback is not None:
@@ -387,7 +387,7 @@ class RoomVideoCommandHandler:
             await publisher.publish_playback_play(playback=result.auto_playback)
 
         response: dict[str, Any] = {
-            "user_player_states": result.user_player_states.model_dump(mode="json")
+            "user_resource_states": result.user_resource_states.model_dump(mode="json")
         }
         if result.auto_playback is not None:
             response["playback"] = result.auto_playback.model_dump(mode="json")
@@ -455,12 +455,12 @@ class RoomVideoCommandHandler:
             raise BadRequestError("Invalid source_type") from exc
 
     @staticmethod
-    def _parse_user_player_status(value: Any) -> UserPlayerStatusType:
+    def _parse_resource_health_status(value: Any) -> ResourceHealthStatusType:
         if not isinstance(value, str):
             raise BadRequestError("status is required")
 
         try:
-            return UserPlayerStatusType(value)
+            return ResourceHealthStatusType(value)
         except ValueError as exc:
             raise BadRequestError("Invalid status") from exc
 

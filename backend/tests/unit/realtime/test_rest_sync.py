@@ -34,7 +34,7 @@ async def test_close_room_user_session_publishes_presence_and_runtime_updates(
 ) -> None:
     publisher = SimpleNamespace(
         publish_session_closed=AsyncMock(),
-        publish_user_player_states=AsyncMock(),
+        publish_user_resource_states=AsyncMock(),
         publish_playback_play=AsyncMock(),
         publish_room_user_presence=AsyncMock(),
     )
@@ -46,7 +46,7 @@ async def test_close_room_user_session_publishes_presence_and_runtime_updates(
     )
     runtime_result = SimpleNamespace(
         room_cleared=False,
-        user_player_states={"items": [1]},
+        user_resource_states={"items": [1]},
         auto_action=AutoPlaybackAction.PLAY,
         auto_playback={"position": 3},
     )
@@ -77,8 +77,8 @@ async def test_close_room_user_session_publishes_presence_and_runtime_updates(
 
     assert result is True
     publisher.publish_session_closed.assert_awaited_once()
-    publisher.publish_user_player_states.assert_awaited_once_with(
-        user_player_states={"items": [1]}
+    publisher.publish_user_resource_states.assert_awaited_once_with(
+        user_resource_states={"items": [1]}
     )
     publisher.publish_playback_play.assert_awaited_once_with(playback={"position": 3})
     publisher.publish_room_user_presence.assert_awaited_once_with(presence=presence)

@@ -14,7 +14,7 @@ from app.realtime.state import (
     PlaybackState,
     PresenceState,
     RoomVideoSourceState,
-    UserPlayerStatesState,
+    UserResourceStatesState,
 )
 
 
@@ -28,8 +28,8 @@ class RecordingPublisher:
     async def publish_room_user_presence(self, **kwargs) -> None:
         self.calls.append(("publish_room_user_presence", kwargs))
 
-    async def publish_user_player_states(self, **kwargs) -> None:
-        self.calls.append(("publish_user_player_states", kwargs))
+    async def publish_user_resource_states(self, **kwargs) -> None:
+        self.calls.append(("publish_user_resource_states", kwargs))
 
     async def publish_playback_play(self, **kwargs) -> None:
         self.calls.append(("publish_playback_play", kwargs))
@@ -57,6 +57,121 @@ def test_extract_room_id_rejects_non_positive_room_id() -> None:
         RoomCommandHandler._extract_room_id(command)
 
     assert exc_info.value.message == "room_id must be a positive integer"
+
+
+# 未进入房间时不能主动查询房间运行时
+def test_require_active_room_rejects_connection_without_active_room() -> None:
+    connection = WsConnection(
+        connection_id="conn-no-room",
+        user_id=1,
+        websocket=SimpleNamespace(),
+    )
+
+    with pytest.raises(BadRequestError) as exc_info:
+        RoomCommandHandler._require_active_room(connection)
+
+    assert exc_info.value.message == "You must enter a room before querying room runtime"
+
+
+# room_presence_get 返回当前房间在线成员状态
+async def test_handle_room_presence_get_returns_presence(monkeypatch) -> None:
+    handler = RoomCommandHandler(
+        presence_service=RoomPresenceService(),
+        video_runtime_service=RoomVideoRuntimeService(),
+    )
+    connection = WsConnection(
+        connection_id="conn-presence",
+        user_id=1,
+        websocket=SimpleNamespace(),
+        active_room_id=10,
+    )
+    command = WsCommandPayload(
+        request_id="req-presence",
+        action=WsCommandAction.ROOM_PRESENCE_GET,
+        data=None,
+    )
+    presence = PresenceState(room_id=10, present_user_ids=[1, 2])
+
+    async def fake_get_presence_state(*, room_id):  # noqa: ANN001
+        assert room_id == 10
+        return presence
+
+    monkeypatch.setattr(handler.presence_service, "get_presence_state", fake_get_presence_state)
+
+    result = await handler.handle(
+        db=object(),
+        manager=object(),
+        publisher=RecordingPublisher(),
+        connection=connection,
+        command=command,
+    )
+
+    assert result == {"presence": presence.model_dump(mode="json")}
+
+
+# room_video_runtime_get 返回当前房间播放同步运行时，不夹带 presence
+async def test_handle_room_video_runtime_get_returns_video_runtime(monkeypatch) -> None:
+    runtime_service = RoomVideoRuntimeService()
+    handler = RoomCommandHandler(
+        presence_service=RoomPresenceService(),
+        video_runtime_service=runtime_service,
+    )
+    connection = WsConnection(
+        connection_id="conn-video-runtime",
+        user_id=1,
+        websocket=SimpleNamespace(),
+        active_room_id=11,
+    )
+    command = WsCommandPayload(
+        request_id="req-video-runtime",
+        action=WsCommandAction.ROOM_VIDEO_RUNTIME_GET,
+        data=None,
+    )
+    room_video_source = RoomVideoSourceState(
+        room_id=11,
+        source_type=RoomVideoSourceType.EXTERNAL_URL,
+        external_url="https://example.com/video.mp4",
+        file_hash=None,
+    )
+    playback = PlaybackState(
+        room_id=11,
+        status=PlaybackStatusType.PAUSED,
+        position_seconds=3.5,
+        anchor_ts_ms=1000,
+        playback_rate=1.0,
+    )
+    resource_states = UserResourceStatesState(room_id=11, user_resource_states=[])
+
+    async def fake_get_room_video_source(*, room_id):  # noqa: ANN001
+        assert room_id == 11
+        return room_video_source
+
+    async def fake_get_playback(*, room_id):  # noqa: ANN001
+        assert room_id == 11
+        return playback
+
+    async def fake_get_user_resource_states(*, room_id):  # noqa: ANN001
+        assert room_id == 11
+        return resource_states
+
+    monkeypatch.setattr(runtime_service, "get_room_video_source", fake_get_room_video_source)
+    monkeypatch.setattr(runtime_service, "get_playback", fake_get_playback)
+    monkeypatch.setattr(runtime_service, "get_user_resource_states", fake_get_user_resource_states)
+
+    result = await handler.handle(
+        db=object(),
+        manager=object(),
+        publisher=RecordingPublisher(),
+        connection=connection,
+        command=command,
+    )
+
+    assert result == {
+        "room_video_source": room_video_source.model_dump(mode="json"),
+        "playback": playback.model_dump(mode="json"),
+        "user_resource_states": resource_states.model_dump(mode="json"),
+    }
+    assert "presence" not in result
 
 
 # 没有房间角色时不能进入房间
@@ -121,7 +236,7 @@ async def test_handle_room_enter_returns_snapshot_and_publishes_presence(monkeyp
         anchor_ts_ms=1000,
         playback_rate=1.0,
     )
-    player_states = UserPlayerStatesState(room_id=20, user_player_states=[])
+    resource_states = UserResourceStatesState(room_id=20, user_resource_states=[])
 
     async def fake_get_room_by_id(db, room_id):  # noqa: ANN001
         return SimpleNamespace(id=room_id)
@@ -142,8 +257,8 @@ async def test_handle_room_enter_returns_snapshot_and_publishes_presence(monkeyp
     async def fake_get_playback(*, room_id):  # noqa: ANN001
         return playback
 
-    async def fake_get_user_player_states(*, room_id):  # noqa: ANN001
-        return player_states
+    async def fake_get_user_resource_states(*, room_id):  # noqa: ANN001
+        return resource_states
 
     monkeypatch.setattr(handler.room_service, "get_room_by_id", fake_get_room_by_id)
     monkeypatch.setattr(handler.membership_service, "find_room_role", fake_find_room_role)
@@ -151,7 +266,7 @@ async def test_handle_room_enter_returns_snapshot_and_publishes_presence(monkeyp
     monkeypatch.setattr(presence_service, "enter_room", fake_enter_room)
     monkeypatch.setattr(runtime_service, "get_room_video_source", fake_get_room_video_source)
     monkeypatch.setattr(runtime_service, "get_playback", fake_get_playback)
-    monkeypatch.setattr(runtime_service, "get_user_player_states", fake_get_user_player_states)
+    monkeypatch.setattr(runtime_service, "get_user_resource_states", fake_get_user_resource_states)
 
     result = await handler.handle(
         db=object(),
@@ -166,7 +281,7 @@ async def test_handle_room_enter_returns_snapshot_and_publishes_presence(monkeyp
         "present_user_ids": [2],
         "room_video_source": room_video_source.model_dump(mode="json"),
         "playback": playback.model_dump(mode="json"),
-        "user_player_states": player_states.model_dump(mode="json"),
+        "user_resource_states": resource_states.model_dump(mode="json"),
     }
     assert publisher.calls[0] == (
         "publish_session_closed",
@@ -235,7 +350,7 @@ async def test_handle_room_leave_publishes_session_exit_updates(monkeypatch) -> 
     )
     session_exit_result = RoomSessionExitResult(
         room_cleared=False,
-        user_player_states=UserPlayerStatesState(room_id=40, user_player_states=[]),
+        user_resource_states=UserResourceStatesState(room_id=40, user_resource_states=[]),
         auto_playback=playback,
         auto_action=AutoPlaybackAction.PLAY,
     )
@@ -271,7 +386,7 @@ async def test_handle_room_leave_publishes_session_exit_updates(monkeypatch) -> 
     )
 
     assert result is None
-    assert publisher.calls[0][0] == "publish_user_player_states"
+    assert publisher.calls[0][0] == "publish_user_resource_states"
     assert publisher.calls[1] == ("publish_playback_play", {"playback": playback})
     assert publisher.calls[2] == (
         "publish_room_user_presence",
