@@ -2,6 +2,7 @@ import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.modules.media.constants import MediaAssetStatus, MediaAssetType
 from app.modules.media.service import MediaService
@@ -68,19 +69,24 @@ class MessageService:
             sender_user_id=user.id,
             room_id=room_id,
         )
+        message_id = message.id
 
         if media_asset_ids:
             await self.repo.create_message_resource_refs(
                 db,
-                message_id=message.id,
+                message_id=message_id,
                 media_asset_ids=sorted(media_asset_ids),
             )
 
         await db.commit()
 
-        message = await self.repo.find_message_by_id(db, message.id)
+        message = await self.repo.find_message_by_id(db, message_id)
         if message is None:
-            raise NotFoundError("Message not found")
+            raise NotFoundError(
+                "Message not found",
+                reason=ErrorReason.MESSAGE_NOT_FOUND,
+                details={"message_id": message_id},
+            )
 
         if message.sender is not None:
             await self.user_service.hydrate_user_avatar_key(db, message.sender)
@@ -149,7 +155,11 @@ class MessageService:
             user_id=user_id,
         )
         if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.ROOM_PERMISSION_DENIED,
+                details={"room_id": room_id, "permission": permission.value},
+            )
 
         require_room_permission(role, permission)
 

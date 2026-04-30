@@ -3,6 +3,7 @@ from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.modules.notifications.constants import NotificationType
 from app.modules.notifications.models import Notification
@@ -31,10 +32,18 @@ class NotificationService:
     ) -> Notification:
         notification = await self.find_notification_by_id(db, notification_id)
         if notification is None:
-            raise NotFoundError("Notification not found")
+            raise NotFoundError(
+                "Notification not found",
+                reason=ErrorReason.NOTIFICATION_NOT_FOUND,
+                details={"notification_id": notification_id},
+            )
 
         if notification.recipient_user_id != user.id:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.NOTIFICATION_PERMISSION_DENIED,
+                details={"notification_id": notification_id},
+            )
 
         return notification
 

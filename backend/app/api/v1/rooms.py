@@ -39,6 +39,7 @@ from app.modules.rooms.settings.service import RoomSettingsService
 from app.modules.rooms.room.service import RoomService
 from app.modules.rooms.permissions import has_room_permission
 from app.modules.users.models import User
+from app.realtime.constants import SessionCloseReason
 from app.realtime.manager import RealtimeManager
 from app.realtime.publisher import RealtimePublisher
 from app.realtime.rest_sync import close_room_sessions, close_room_user_session
@@ -171,7 +172,7 @@ async def delete_room(
         presence_service=presence_service,
         video_runtime_service=video_runtime_service,
         room_id=room_id,
-        reason="room_deleted",
+        reason=SessionCloseReason.ROOM_DELETED,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -321,7 +322,7 @@ async def leave_room(
         video_runtime_service=video_runtime_service,
         room_id=room_id,
         user_id=current_user.id,
-        reason="left_room",
+        reason=SessionCloseReason.LEFT_ROOM,
     )
     await publisher.publish_room_members(room_id=room_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -399,7 +400,7 @@ async def remove_room_member(
         video_runtime_service=video_runtime_service,
         room_id=room_id,
         user_id=target_user_id,
-        reason="removed_from_room",
+        reason=SessionCloseReason.REMOVED_FROM_ROOM,
     )
     await publisher.publish_room_members(room_id=room_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

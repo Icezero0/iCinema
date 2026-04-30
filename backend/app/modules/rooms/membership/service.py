@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from app.modules.rooms.constants import RoomPermission, RoomRole
 from app.modules.rooms.models import RoomMember
@@ -46,7 +47,11 @@ class RoomMembershipService:
     ) -> dict[str, list[RoomMember] | int]:
         role = await self.find_room_role(db, room_id=room_id, user_id=user.id)
         if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.ROOM_PERMISSION_DENIED,
+                details={"room_id": room_id, "permission": RoomPermission.VIEW_MEMBERS},
+            )
 
         require_room_permission(role, RoomPermission.VIEW_MEMBERS)
 
@@ -127,22 +132,46 @@ class RoomMembershipService:
             user_id=target_user_id,
         )
         if target_member is None:
-            raise NotFoundError("Room member not found")
+            raise NotFoundError(
+                "Room member not found",
+                reason=ErrorReason.ROOM_MEMBER_NOT_FOUND,
+                details={"room_id": room_id, "user_id": target_user_id},
+            )
 
         role = await self.find_room_role(db, room_id=room_id, user_id=current_user.id)
         if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.ROOM_PERMISSION_DENIED,
+                details={"room_id": room_id, "permission": RoomPermission.MANAGE_MEMBERS},
+            )
 
         if current_user.id == target_user_id:
-            raise ForbiddenError("You cannot remove yourself from the room")
+            raise ForbiddenError(
+                "You cannot remove yourself from the room",
+                reason=ErrorReason.CANNOT_REMOVE_SELF_FROM_ROOM,
+                details={"room_id": room_id, "user_id": target_user_id},
+            )
 
         try:
             target_role = RoomRole(target_member.role)
         except ValueError:
-            raise BadRequestError("Invalid target member role")
+            raise BadRequestError(
+                "Invalid target member role",
+                reason=ErrorReason.INVALID_ROOM_MEMBER_ROLE,
+                details={
+                    "room_id": room_id,
+                    "user_id": target_user_id,
+                    "role": target_member.role,
+                },
+            )
 
         if target_role == RoomRole.OWNER:
-            raise ForbiddenError("Owner cannot be removed from the room")
+            raise ForbiddenError(
+                "Owner cannot be removed from the room",
+                reason=ErrorReason.OWNER_CANNOT_BE_REMOVED_FROM_ROOM,
+                details={"room_id": room_id, "user_id": target_user_id},
+            )
 
         if target_role == RoomRole.MANAGER:
             require_room_permission(role, RoomPermission.MANAGE_MANAGERS)
@@ -151,7 +180,15 @@ class RoomMembershipService:
             require_room_permission(role, RoomPermission.MANAGE_MEMBERS)
 
         else:
-            raise BadRequestError("Invalid target member role")
+            raise BadRequestError(
+                "Invalid target member role",
+                reason=ErrorReason.INVALID_ROOM_MEMBER_ROLE,
+                details={
+                    "room_id": room_id,
+                    "user_id": target_user_id,
+                    "role": target_role,
+                },
+            )
 
         await self.repo.delete_members_by_room_and_user_id(
             db,
@@ -173,15 +210,27 @@ class RoomMembershipService:
             user_id=user.id,
         )
         if member is None:
-            raise NotFoundError("Room member not found")
+            raise NotFoundError(
+                "Room member not found",
+                reason=ErrorReason.ROOM_MEMBER_NOT_FOUND,
+                details={"room_id": room_id, "user_id": user.id},
+            )
 
         try:
             role = RoomRole(member.role)
         except ValueError:
-            raise BadRequestError("Invalid member role")
+            raise BadRequestError(
+                "Invalid member role",
+                reason=ErrorReason.INVALID_ROOM_MEMBER_ROLE,
+                details={"room_id": room_id, "user_id": user.id, "role": member.role},
+            )
 
         if role == RoomRole.OWNER:
-            raise ForbiddenError("Owner cannot leave the room")
+            raise ForbiddenError(
+                "Owner cannot leave the room",
+                reason=ErrorReason.OWNER_CANNOT_LEAVE_ROOM,
+                details={"room_id": room_id, "user_id": user.id},
+            )
 
         await self.repo.delete_members_by_room_and_user_id(
             db,
@@ -201,7 +250,11 @@ class RoomMembershipService:
     ) -> RoomMember:
         role = await self.find_room_role(db, room_id=room_id, user_id=current_user.id)
         if role is None:
-            raise ForbiddenError("You do not have permission to perform this action")
+            raise ForbiddenError(
+                "You do not have permission to perform this action",
+                reason=ErrorReason.ROOM_PERMISSION_DENIED,
+                details={"room_id": room_id, "permission": RoomPermission.MANAGE_MANAGERS},
+            )
 
         require_room_permission(role, RoomPermission.MANAGE_MANAGERS)
 
@@ -211,15 +264,31 @@ class RoomMembershipService:
             user_id=target_user_id,
         )
         if target_member is None:
-            raise NotFoundError("Room member not found")
+            raise NotFoundError(
+                "Room member not found",
+                reason=ErrorReason.ROOM_MEMBER_NOT_FOUND,
+                details={"room_id": room_id, "user_id": target_user_id},
+            )
 
         try:
             target_role = RoomRole(target_member.role)
         except ValueError:
-            raise BadRequestError("Invalid target member role")
+            raise BadRequestError(
+                "Invalid target member role",
+                reason=ErrorReason.INVALID_ROOM_MEMBER_ROLE,
+                details={
+                    "room_id": room_id,
+                    "user_id": target_user_id,
+                    "role": target_member.role,
+                },
+            )
 
         if target_role == RoomRole.OWNER:
-            raise ForbiddenError("Owner role cannot be changed")
+            raise ForbiddenError(
+                "Owner role cannot be changed",
+                reason=ErrorReason.OWNER_ROLE_CANNOT_BE_CHANGED,
+                details={"room_id": room_id, "user_id": target_user_id},
+            )
 
         next_role = RoomRole.MANAGER if is_manager else RoomRole.MEMBER
         if target_role == next_role:
@@ -232,7 +301,11 @@ class RoomMembershipService:
             role=next_role.value,
         )
         if updated_member is None:
-            raise NotFoundError("Room member not found")
+            raise NotFoundError(
+                "Room member not found",
+                reason=ErrorReason.ROOM_MEMBER_NOT_FOUND,
+                details={"room_id": room_id, "user_id": target_user_id},
+            )
 
         await db.commit()
         return updated_member

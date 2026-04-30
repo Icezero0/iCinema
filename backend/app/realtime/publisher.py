@@ -2,14 +2,14 @@ from typing import Any
 
 from app.modules.messages.schemas import MessageResponse
 from app.realtime.channels import ChannelKey, room_channel, user_channel
-from app.realtime.constants import WsEventType
+from app.realtime.constants import SessionCloseReason, WsEventType
 from app.realtime.manager import RealtimeManager
 from app.realtime.protocol import build_event_message
 from app.realtime.state import (
     PlaybackState,
     PresenceState,
     RoomVideoSourceState,
-    UserPlayerStatesState,
+    UserResourceStatesState,
 )
 
 
@@ -120,7 +120,7 @@ class RealtimePublisher:
         *,
         connection_id: str,
         room_id: int,
-        reason: str,
+        reason: SessionCloseReason,
     ) -> None:
         await self.manager.send_to_connection(
             connection_id=connection_id,
@@ -177,13 +177,13 @@ class RealtimePublisher:
             data=playback.model_dump(mode="json"),
         )
 
-    async def publish_user_player_states(
+    async def publish_user_resource_states(
         self,
         *,
-        user_player_states: UserPlayerStatesState,
+        user_resource_states: UserResourceStatesState,
     ) -> None:
         await self._publish_event(
-            channel=room_channel(user_player_states.room_id),
-            event=WsEventType.USER_PLAYER_STATES,
-            data=user_player_states.model_dump(mode="json"),
+            channel=room_channel(user_resource_states.room_id),
+            event=WsEventType.USER_RESOURCE_STATES,
+            data=user_resource_states.model_dump(mode="json"),
         )

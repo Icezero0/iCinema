@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.error_reasons import ErrorReason
+from app.core.exceptions import BadRequestError
 from app.modules.auth.deps import get_current_user
 from app.modules.media.schemas import (
     EmojiListResponse,
@@ -13,7 +15,6 @@ from app.modules.media.schemas import (
 )
 from app.modules.media.service import MediaService
 from app.modules.users.models import User
-from app.core.exceptions import BadRequestError
 
 router = APIRouter(prefix="/media", tags=["media"])
 
@@ -110,7 +111,15 @@ async def get_my_stickers(
     current_user: User = Depends(get_current_user),
 ) -> StickerLibraryResponse:
     if all and not (page is None and page_size is None):
-        raise BadRequestError("page and page_size are not allowed when all=true")
+        raise BadRequestError(
+            "page and page_size are not allowed when all=true",
+            reason=ErrorReason.PAGINATION_NOT_ALLOWED_WITH_ALL,
+            details={
+                "all": all,
+                "has_page": page is not None,
+                "has_page_size": page_size is not None,
+            },
+        )
     data = await media_service.get_user_sticker_library(
         db,
         user=current_user,

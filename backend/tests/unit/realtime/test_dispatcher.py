@@ -141,7 +141,9 @@ async def test_dispatcher_rejects_command_before_authentication() -> None:
     assert websocket.sent_json[0]["payload"] == {
         "request_id": "req-2",
         "code": "bad_request",
+        "reason": "authentication_required",
         "message": "Authentication required before this action",
+        "details": None,
     }
 
 
@@ -165,6 +167,8 @@ async def test_dispatcher_returns_invalid_payload_error_for_malformed_message() 
 
     assert result is connection
     assert websocket.sent_json[0]["payload"]["code"] == WsErrorCode.INVALID_PAYLOAD
+    assert websocket.sent_json[0]["payload"]["reason"] == "invalid_websocket_payload"
+    assert "errors" in websocket.sent_json[0]["payload"]["details"]
 
 
 # _dispatch_command 会把房间命令路由给 RoomCommandHandler

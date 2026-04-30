@@ -68,7 +68,9 @@ class WsErrorPayload(BaseModel):
 
     request_id: str | None = None
     code: WsErrorCode
+    reason: str
     message: str
+    details: dict[str, Any] | None = None
 
 
 class WsAckPayload(BaseModel):
@@ -115,14 +117,18 @@ def build_error_message(
     *,
     code: WsErrorCode,
     request_id: str | None = None,
+    reason: str,
     message: str,
+    details: dict[str, Any] | None = None,
 ) -> WsMessage:
     return WsMessage(
         type=WsMessageType.ERROR,
         payload=WsErrorPayload(
             code=code,
             request_id=request_id,
+            reason=reason,
             message=message,
+            details=details,
         ).model_dump(mode="json"),
     )
 

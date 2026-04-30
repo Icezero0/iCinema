@@ -5,6 +5,7 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.modules.media.constants import (
     EmojiProvider,
@@ -40,7 +41,11 @@ class MediaService:
     async def get_media_asset_by_id(self, db: AsyncSession, asset_id: int) -> MediaAsset:
         asset = await self.find_media_asset_by_id(db, asset_id)
         if not asset:
-            raise NotFoundError("Media asset not found")
+            raise NotFoundError(
+                "Media asset not found",
+                reason=ErrorReason.MEDIA_ASSET_NOT_FOUND,
+                details={"asset_id": asset_id},
+            )
         return asset
 
     def get_media_asset_url(self, asset: MediaAsset) -> str:
@@ -52,7 +57,11 @@ class MediaService:
             return f"{settings.sticker_public_prefix}/{asset.storage_key}"
         if asset.asset_type == MediaAssetType.VIDEO:
             return f"{settings.video_public_prefix}/{asset.storage_key}"
-        raise NotFoundError("Unsupported media asset type")
+        raise NotFoundError(
+            "Unsupported media asset type",
+            reason=ErrorReason.UNSUPPORTED_MEDIA_ASSET_TYPE,
+            details={"asset_id": asset.id, "asset_type": asset.asset_type},
+        )
 
     async def create_avatar_asset_in_tx(
         self,
@@ -237,7 +246,11 @@ class MediaService:
             asset_id=sticker_id,
         )
         if asset is None:
-            raise NotFoundError("Sticker not found")
+            raise NotFoundError(
+                "Sticker not found",
+                reason=ErrorReason.STICKER_NOT_FOUND,
+                details={"sticker_id": sticker_id},
+            )
 
         item = await self.repo.find_user_sticker_library_item(
             db,
@@ -269,11 +282,19 @@ class MediaService:
     ) -> MediaAsset:
         image = await self.find_media_asset_by_id(db, image_id)
         if image is None or image.asset_type != MediaAssetType.IMAGE:
-            raise NotFoundError("Image not found")
+            raise NotFoundError(
+                "Image not found",
+                reason=ErrorReason.IMAGE_NOT_FOUND,
+                details={"image_id": image_id},
+            )
 
         image = await self.expire_asset_if_needed(db, image)
         if self.is_asset_expired(image):
-            raise NotFoundError("Image not found")
+            raise NotFoundError(
+                "Image not found",
+                reason=ErrorReason.IMAGE_NOT_FOUND,
+                details={"image_id": image_id},
+            )
 
         sticker = None
         if image.sha256:
@@ -291,7 +312,11 @@ class MediaService:
                     target_asset_type=MediaAssetType.STICKER,
                 )
             except FileNotFoundError as exc:
-                raise NotFoundError("Media file not found") from exc
+                raise NotFoundError(
+                    "Media file not found",
+                    reason=ErrorReason.MEDIA_FILE_NOT_FOUND,
+                    details={"asset_id": image.id},
+                ) from exc
 
             sticker = await self.repo.create_media_asset(
                 db,
@@ -389,11 +414,15 @@ class MediaService:
         payload_id_set = set(sticker_ids)
 
         if len(sticker_ids) != len(payload_id_set):
-            raise BadRequestError("Duplicate sticker ids in library payload")
+            raise BadRequestError(
+                "Duplicate sticker ids in library payload",
+                reason=ErrorReason.DUPLICATE_STICKER_IDS,
+            )
 
         if not payload_id_set.issubset(db_id_set):
             raise BadRequestError(
-                "Sticker payload contains items not in user's sticker library"
+                "Sticker payload contains items not in user's sticker library",
+                reason=ErrorReason.STICKER_LIBRARY_PAYLOAD_CONTAINS_INVALID_ITEMS,
             )
         
         removed_ids = list(db_id_set - payload_id_set)
@@ -422,7 +451,11 @@ class MediaService:
         asset = await self.expire_asset_if_needed(db, asset)
 
         if self.is_asset_expired(asset):
-            raise NotFoundError("Media asset not found")
+            raise NotFoundError(
+                "Media asset not found",
+                reason=ErrorReason.MEDIA_ASSET_NOT_FOUND,
+                details={"asset_id": asset_id},
+            )
 
         return asset
 
@@ -550,7 +583,11 @@ class MediaService:
     async def get_emoji_or_raise(self, emoji_id: str) -> dict:
         emoji = await self.get_emoji(emoji_id)
         if emoji is None:
-            raise BadRequestError("Invalid emoji id")
+            raise BadRequestError(
+                "Invalid emoji id",
+                reason=ErrorReason.INVALID_EMOJI_ID,
+                details={"emoji_id": emoji_id},
+            )
         return emoji
 
     async def touch_user_emoji_usage_in_tx(
@@ -620,10 +657,18 @@ class MediaService:
     ) -> MediaAsset:
         asset = await self.find_media_asset_by_id(db, asset_id)
         if asset is None or asset.asset_type != MediaAssetType.IMAGE:
-            raise BadRequestError("Invalid image id")
+            raise BadRequestError(
+                "Invalid image id",
+                reason=ErrorReason.INVALID_IMAGE_ID,
+                details={"image_id": asset_id},
+            )
 
         if asset.status != MediaAssetStatus.ACTIVE or self.is_asset_expired(asset):
-            raise BadRequestError("Image is expired or unavailable")
+            raise BadRequestError(
+                "Image is expired or unavailable",
+                reason=ErrorReason.IMAGE_UNAVAILABLE,
+                details={"image_id": asset_id},
+            )
 
         return asset
     
@@ -652,7 +697,11 @@ class MediaService:
             asset_id=asset_id,
         )
         if asset is None:
-            raise BadRequestError("Invalid sticker id")
+            raise BadRequestError(
+                "Invalid sticker id",
+                reason=ErrorReason.INVALID_STICKER_ID,
+                details={"sticker_id": asset_id},
+            )
 
         item = await self.repo.find_user_sticker_library_item(
             db,
@@ -660,6 +709,10 @@ class MediaService:
             media_asset_id=asset_id,
         )
         if item is None:
-            raise BadRequestError("Sticker is not in user's library")
+            raise BadRequestError(
+                "Sticker is not in user's library",
+                reason=ErrorReason.STICKER_NOT_IN_USER_LIBRARY,
+                details={"sticker_id": asset_id},
+            )
 
         return asset

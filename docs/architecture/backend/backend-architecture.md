@@ -743,6 +743,7 @@ WebSocket 主要用于：
 
 - 单个连接同一时刻只能激活一个房间
 - 同一用户在同一房间只保留一个有效连接
+- 前端可通过 `room_presence_get` 主动补拉当前房间在线状态
 
 ## 13.4 房间播放运行时
 
@@ -750,11 +751,13 @@ WebSocket 主要用于：
 
 - 当前房间视频源
 - 当前房间播放状态
-- 每个用户的播放器状态
+- 每个用户的资源健康状态
 - stalling 用户集合
 - 自动暂停/恢复的 hold reason
 
 这些状态均保存在内存中，不持久化到数据库。
+
+前端可通过 `room_video_runtime_get` 主动补拉当前房间播放同步运行时。该接口只返回视频源、播放状态和资源健康状态，不夹带 presence 状态。
 
 ## 14. 文件存储与媒体约定
 
@@ -837,10 +840,28 @@ HTTP 返回格式：
 {
   "error": {
     "code": "forbidden",
-    "message": "You do not have permission to perform this action"
+    "reason": "room_permission_denied",
+    "message": "You do not have permission to perform this action",
+    "details": {
+      "room_id": 1,
+      "permission": "manage_members"
+    }
   }
 }
 ```
+
+字段约定：
+
+- `code`：粗粒度错误类别，主要对应 HTTP 状态语义
+- `reason`：稳定的 snake_case 业务原因，前端应优先用它作为 i18n key
+- `message`：后端兜底文案，主要用于开发调试或前端未配置 i18n 时展示
+- `details`：可选结构化细节，只放安全、必要、便于前端或排查使用的信息
+
+`reason` 必须在 `app.core.error_reasons.ErrorReason` 中统一登记，业务代码禁止直接写 `reason="..."` 裸字符串。新增错误原因时，应先补充 `ErrorReason`，再在抛错处引用。
+
+完整登记表见 `error-reasons.md`。
+
+WS 会话关闭等非错误事件中的 `reason` 不属于 `ErrorReason`，当前登记在 `app.realtime.constants.SessionCloseReason`。
 
 WS 错误格式见 `ws-protocol.md`。
 
@@ -885,7 +906,7 @@ HTTP/WS 访问日志以应用侧 logger 为准。默认关闭 uvicorn 原生 acc
 - `app.realtime`
   WebSocket 鉴权、连接、断开、入房、离房和协议错误
 - `app.realtime.video`
-  房间视频源、播放控制、播放器状态上报等实时播放事件
+  房间视频源、播放控制、资源健康状态上报等实时播放事件
 - `app.startup`
   启动初始化与数据库迁移
 

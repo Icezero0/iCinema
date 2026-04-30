@@ -69,7 +69,7 @@ async def test_websocket_endpoint_disconnect_cleanup_publishes_presence(monkeypa
     )
     presence = SimpleNamespace(room_id=42, present_user_ids={1, 2})
     publisher = SimpleNamespace(
-        publish_user_player_states=AsyncMock(),
+        publish_user_resource_states=AsyncMock(),
         publish_playback_play=AsyncMock(),
         publish_room_user_presence=AsyncMock(),
     )
@@ -80,7 +80,7 @@ async def test_websocket_endpoint_disconnect_cleanup_publishes_presence(monkeypa
     )
     session_exit_result = SimpleNamespace(
         room_cleared=False,
-        user_player_states={"states": []},
+        user_resource_states={"states": []},
         auto_action="pause",
         auto_playback=None,
     )
@@ -123,7 +123,7 @@ async def test_websocket_endpoint_disconnect_cleanup_publishes_presence(monkeypa
     ws.accept.assert_awaited_once()
     presence_service.handle_disconnect.assert_awaited_once_with(connection=connection)
     manager.disconnect.assert_awaited_once_with(connection.connection_id)
-    publisher.publish_user_player_states.assert_awaited_once_with(
-        user_player_states={"states": []}
+    publisher.publish_user_resource_states.assert_awaited_once_with(
+        user_resource_states={"states": []}
     )
     publisher.publish_room_user_presence.assert_awaited_once_with(presence=presence)

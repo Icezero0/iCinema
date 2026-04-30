@@ -2,6 +2,7 @@ from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_reasons import ErrorReason
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.core.validators import normalize_email
@@ -38,7 +39,11 @@ class UserService:
 
     async def create_user(self, db: AsyncSession, payload: UserCreate) -> User:
         if await self.repo.get_by_email(db, payload.email):
-            raise ConflictError("Email already exists")
+            raise ConflictError(
+                "Email already exists",
+                reason=ErrorReason.EMAIL_ALREADY_EXISTS,
+                details={"field": "email"},
+            )
 
         user = await self.repo.create(
             db,
@@ -55,7 +60,11 @@ class UserService:
     async def get_user_by_id(self, db: AsyncSession, user_id: int) -> User:
         user = await self.find_user_by_id(db, user_id)
         if not user:
-            raise NotFoundError("User not found")
+            raise NotFoundError(
+                "User not found",
+                reason=ErrorReason.USER_NOT_FOUND,
+                details={"user_id": user_id},
+            )
         return await self.hydrate_user_avatar_key(db, user)
 
     async def find_user_by_email(self, db: AsyncSession, email: str) -> User | None:

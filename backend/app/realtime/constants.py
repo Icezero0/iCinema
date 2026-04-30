@@ -18,12 +18,14 @@ class WsHeartbeatAction(StrEnum):
 class WsCommandAction(StrEnum):
     ROOM_ENTER = "room_enter"
     ROOM_LEAVE = "room_leave"
+    ROOM_PRESENCE_GET = "room_presence_get"
+    ROOM_VIDEO_RUNTIME_GET = "room_video_runtime_get"
 
     PLAYBACK_PAUSE = "playback_pause"
     PLAYBACK_PLAY = "playback_play"
     PLAYBACK_SEEK = "playback_seek"
     ROOM_VIDEO_SOURCE_SET = "room_video_source_set"
-    USER_PLAYER_STATUS = "user_player_status"
+    USER_RESOURCE_STATUS = "user_resource_status"
 
 
 class WsEventType(StrEnum):
@@ -42,7 +44,7 @@ class WsEventType(StrEnum):
     PLAYBACK_PLAY = "playback_play"
     PLAYBACK_SEEK = "playback_seek"
     ROOM_VIDEO_SOURCE_SET = "room_video_source_set"
-    USER_PLAYER_STATES = "user_player_states"
+    USER_RESOURCE_STATES = "user_resource_states"
 
 
 class WsErrorCode(StrEnum):
@@ -52,6 +54,13 @@ class WsErrorCode(StrEnum):
     BAD_REQUEST = "bad_request"
     INVALID_PAYLOAD = "invalid_payload"
     INTERNAL_ERROR = "internal_error"
+
+
+class SessionCloseReason(StrEnum):
+    ENTERED_ELSEWHERE = "entered_elsewhere"
+    LEFT_ROOM = "left_room"
+    REMOVED_FROM_ROOM = "removed_from_room"
+    ROOM_DELETED = "room_deleted"
 
 
 class ChannelKind(StrEnum):
@@ -70,11 +79,10 @@ class PlaybackHoldReason(StrEnum):
     STALL = "stall"
 
 
-class UserPlayerStatusType(StrEnum):
+class ResourceHealthStatusType(StrEnum):
     READY = "ready"
     STALLING = "stalling"
     ERROR = "error"
-    IDLE = "idle"
 
 
 class AutoPlaybackAction(StrEnum):
