@@ -2,14 +2,16 @@ import { onBeforeUnmount, onMounted, ref, watch, type Ref } from "vue";
 import wsClient, { type WSConnectionStatus } from "@/infra/realtime/wsClient";
 import {
   enterRoomRealtime,
+  getRoomRealtimePresence,
+  getRoomRealtimeVideoRuntime,
   leaveRoomRealtime,
   type RoomRealtimePlaybackState,
   type RoomRealtimePresenceState,
   type RoomRealtimeSessionClosed,
   type RoomRealtimeSnapshot,
-  type RoomRealtimePlayerStatus,
-  type RoomRealtimeUserPlayerState,
-  type RoomRealtimeUserPlayerStatesState,
+  type RoomRealtimeResourceStatus,
+  type RoomRealtimeUserResourceState,
+  type RoomRealtimeUserResourceStatesState,
   type RoomRealtimeVideoSourceState,
 } from "@/infra/realtime/roomRealtime";
 import type { MessageResponse } from "@/infra/api/messages.api";
@@ -65,17 +67,16 @@ function normalizePresentUserIds(snapshot: RoomRealtimeSnapshot) {
     : [];
 }
 
-function normalizeRealtimePlayerStatus(status: unknown): RoomRealtimePlayerStatus | null {
-  if (status === "idle") return "ready";
+function normalizeRealtimeResourceStatus(status: unknown): RoomRealtimeResourceStatus | null {
   if (status === "ready" || status === "stalling" || status === "error") return status;
   return null;
 }
 
-function normalizeUserPlayerStates(state: RoomRealtimeUserPlayerStatesState | null | undefined) {
-  if (!Array.isArray(state?.user_player_states)) return [];
+function normalizeUserResourceStates(state: RoomRealtimeUserResourceStatesState | null | undefined) {
+  if (!Array.isArray(state?.user_resource_states)) return [];
 
-  return state.user_player_states.flatMap((item): RoomRealtimeUserPlayerState[] => {
-    const status = normalizeRealtimePlayerStatus(item?.status);
+  return state.user_resource_states.flatMap((item): RoomRealtimeUserResourceState[] => {
+    const status = normalizeRealtimeResourceStatus(item?.status);
     if (
       typeof item?.room_id !== "number" ||
       typeof item?.user_id !== "number" ||
@@ -97,7 +98,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   const roomVideoSourceEvent = ref<RoomRealtimeVideoSourceEvent | null>(null);
   const roomPlayback = ref<RoomRealtimePlaybackState | null>(null);
   const roomPlaybackEvent = ref<RoomRealtimePlaybackEvent | null>(null);
-  const userPlayerStates = ref<RoomRealtimeUserPlayerState[]>([]);
+  const userResourceStates = ref<RoomRealtimeUserResourceState[]>([]);
   const isRealtimeActive = ref(false);
   const realtimeStatus = ref<WSConnectionStatus>(wsClient.connectionStatus);
   const realtimeError = ref("");
@@ -148,7 +149,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       roomPlaybackEvent.value = snapshot.playback
         ? { action: "snapshot", state: snapshot.playback }
         : null;
-      userPlayerStates.value = normalizeUserPlayerStates(snapshot.user_player_states);
+      userResourceStates.value = normalizeUserResourceStates(snapshot.user_resource_states);
     } catch (error) {
       if (attempt !== enterAttempt) return;
       isRealtimeActive.value = false;
@@ -173,7 +174,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     roomVideoSourceEvent.value = null;
     roomPlayback.value = null;
     roomPlaybackEvent.value = null;
-    userPlayerStates.value = [];
+    userResourceStates.value = [];
 
     if (wsClient.connectionStatus !== "ready") return;
 
@@ -231,16 +232,45 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     roomPlaybackEvent.value = payload ? { action, state: payload } : null;
   }
 
-  function handleUserPlayerStates(payload: RoomRealtimeUserPlayerStatesState) {
+  async function fetchPresenceSnapshot() {
+    const response = await getRoomRealtimePresence();
+    const presence = response.presence;
+    if (!presence || !isCurrentRoomPayload(presence, options.roomId.value)) return;
+
+    handlePresence(presence);
+  }
+
+  async function fetchVideoRuntimeSnapshot(options?: { updateState?: boolean }) {
+    const response = await getRoomRealtimeVideoRuntime();
+    const shouldUpdateState = options?.updateState ?? true;
+
+    roomVideoSource.value = response.room_video_source ?? null;
+    roomPlayback.value = response.playback ?? null;
+    userResourceStates.value = normalizeUserResourceStates(response.user_resource_states);
+
+    if (shouldUpdateState) {
+      roomVideoSourceEvent.value = {
+        action: "snapshot",
+        state: response.room_video_source ?? null,
+      };
+      roomPlaybackEvent.value = response.playback
+        ? { action: "snapshot", state: response.playback }
+        : null;
+    }
+
+    return response;
+  }
+
+  function handleUserResourceStates(payload: RoomRealtimeUserResourceStatesState) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
     if (ROOM_REALTIME_DEBUG) {
       console.info("[iCinema realtime playback debug]", {
-        event: "userPlayerStatesReceived",
+        event: "userResourceStatesReceived",
         roomId: options.roomId.value,
         payload,
       });
     }
-    userPlayerStates.value = normalizeUserPlayerStates(payload);
+    userResourceStates.value = normalizeUserResourceStates(payload);
   }
 
   function handleSessionClosed(payload: RoomRealtimeSessionClosed) {
@@ -253,7 +283,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     roomVideoSourceEvent.value = null;
     roomPlayback.value = null;
     roomPlaybackEvent.value = null;
-    userPlayerStates.value = [];
+    userResourceStates.value = [];
     options.onSessionClosed?.(payload);
   }
 
@@ -283,7 +313,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       wsClient.onEvent<RoomRealtimePlaybackState>("playback_seek", (payload) => {
         handlePlayback("playback_seek", payload);
       }),
-      wsClient.onEvent<RoomRealtimeUserPlayerStatesState>("user_player_states", handleUserPlayerStates),
+      wsClient.onEvent<RoomRealtimeUserResourceStatesState>("user_resource_states", handleUserResourceStates),
       wsClient.onEvent<RoomRealtimeSessionClosed>("session_closed", handleSessionClosed),
     ];
   }
@@ -343,10 +373,12 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     roomVideoSourceEvent,
     roomPlayback,
     roomPlaybackEvent,
-    userPlayerStates,
+    userResourceStates,
     isRealtimeActive,
     realtimeStatus,
     realtimeError,
     enterCurrentRoom,
+    fetchPresenceSnapshot,
+    fetchVideoRuntimeSnapshot,
   };
 }

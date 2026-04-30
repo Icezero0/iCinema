@@ -18,6 +18,7 @@ import {
 } from "@/stores/entities.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import type { RoomRole } from "@/features/room/types";
+import { getBackendErrorMessage } from "@/infra/http/client";
 
 type RoomRoleState = RoomRole | "unknown";
 
@@ -94,8 +95,7 @@ export function useRoomSettingsState(options: UseRoomSettingsStateOptions) {
       roomSettingsLoaded.value = true;
     } catch (e: any) {
       roomSettingsError.value =
-        e?.response?.data?.detail ||
-        e?.message ||
+        getBackendErrorMessage(e) ||
         t("room.settings.loadFailed");
     } finally {
       roomSettingsLoading.value = false;
@@ -178,8 +178,7 @@ export function useRoomSettingsState(options: UseRoomSettingsStateOptions) {
     } catch (e: any) {
       toasts.push({
         message:
-          e?.response?.data?.detail ||
-          e?.message ||
+          getBackendErrorMessage(e) ||
           t("room.settings.saveFailed"),
         tone: "danger",
       });

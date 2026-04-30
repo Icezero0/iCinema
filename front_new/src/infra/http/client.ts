@@ -11,10 +11,58 @@ export const http = axios.create({
   timeout: 15000,
 })
 
+export type BackendErrorPayload = {
+  code?: string
+  reason?: string
+  message?: string
+  details?: unknown
+}
+
+type BackendErrorResponse = {
+  error?: BackendErrorPayload
+}
+
+export type BackendAxiosError = AxiosError & {
+  backendError?: BackendErrorPayload
+  backendReason?: string
+}
+
 type TokenResponse = {
   access_token: string
   refresh_token: string
   token_type: string
+}
+
+function extractBackendErrorPayload(err: unknown): BackendErrorPayload | null {
+  if (!axios.isAxiosError(err)) return null
+  const data = err.response?.data as BackendErrorResponse | undefined
+  return data?.error ?? null
+}
+
+function annotateBackendError(err: AxiosError) {
+  const backendError = extractBackendErrorPayload(err)
+  if (!backendError) return
+
+  const annotated = err as BackendAxiosError
+  annotated.backendError = backendError
+  annotated.backendReason = backendError.reason
+}
+
+export function getBackendErrorReason(err: unknown) {
+  if (axios.isAxiosError(err)) {
+    return (err as BackendAxiosError).backendReason ?? extractBackendErrorPayload(err)?.reason ?? ""
+  }
+
+  return ""
+}
+
+export function getBackendErrorMessage(err: unknown) {
+  if (axios.isAxiosError(err)) {
+    const backendError = (err as BackendAxiosError).backendError ?? extractBackendErrorPayload(err)
+    return backendError?.message || err.message
+  }
+
+  return err instanceof Error ? err.message : ""
 }
 
 function clearAuthStorage() {
@@ -80,6 +128,8 @@ async function refreshAccessTokenOnce(): Promise<string> {
 http.interceptors.response.use(
   (resp) => resp,
   async (err: AxiosError) => {
+    annotateBackendError(err)
+
     const status = err.response?.status
     const original = err.config as
       | (InternalAxiosRequestConfig & { _retry?: boolean })

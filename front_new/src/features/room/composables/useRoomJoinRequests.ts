@@ -9,6 +9,7 @@ import {
 } from "@/infra/api/join-requests.api";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { formatLocalDateTime } from "@/utils/datetime";
+import { getBackendErrorMessage } from "@/infra/http/client";
 
 type UseRoomJoinRequestsOptions = {
   roomId: ComputedRef<number>;
@@ -18,11 +19,7 @@ type UseRoomJoinRequestsOptions = {
 };
 
 function extractErrorMessage(error: any, fallback: string) {
-  return (
-    error?.response?.data?.detail ||
-    error?.message ||
-    fallback
-  );
+  return getBackendErrorMessage(error) || fallback;
 }
 
 export function useRoomJoinRequests(options: UseRoomJoinRequestsOptions) {

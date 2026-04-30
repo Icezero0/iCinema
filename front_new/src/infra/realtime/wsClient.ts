@@ -3,11 +3,13 @@ type WSMessageType = "auth" | "heartbeat" | "command" | "event" | "error" | "ack
 export type WSCommandAction =
   | "room_enter"
   | "room_leave"
+  | "room_presence_get"
+  | "room_video_runtime_get"
   | "playback_pause"
   | "playback_play"
   | "playback_seek"
   | "room_video_source_set"
-  | "user_player_status";
+  | "user_resource_status";
 
 export type WSEventName =
   | "notification"
@@ -21,7 +23,7 @@ export type WSEventName =
   | "playback_play"
   | "playback_seek"
   | "room_video_source_set"
-  | "user_player_states";
+  | "user_resource_states";
 
 export type WSErrorCode =
   | "unauthorized"
@@ -68,7 +70,9 @@ type AckPayload<T = unknown> = {
 type ErrorPayload = {
   request_id?: string | null;
   code: WSErrorCode;
+  reason?: string | null;
   message: string;
+  details?: unknown;
 };
 
 type EventPayload<T = unknown> = {
@@ -138,13 +142,23 @@ function createRequestId(prefix: string) {
 
 class WSProtocolError extends Error {
   code?: WSErrorCode;
+  reason?: string | null;
   requestId?: string | null;
+  details?: unknown;
 
-  constructor(message: string, code?: WSErrorCode, requestId?: string | null) {
+  constructor(
+    message: string,
+    code?: WSErrorCode,
+    requestId?: string | null,
+    reason?: string | null,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "WSProtocolError";
     this.code = code;
     this.requestId = requestId;
+    this.reason = reason;
+    this.details = details;
   }
 }
 
@@ -445,6 +459,8 @@ class WSClient {
       envelope.payload.message,
       envelope.payload.code,
       requestId,
+      envelope.payload.reason,
+      envelope.payload.details,
     );
 
     if (requestId) {

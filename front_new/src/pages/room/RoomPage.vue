@@ -37,9 +37,9 @@ import {
   sendRoomRealtimePlaybackPause,
   sendRoomRealtimePlaybackPlay,
   sendRoomRealtimePlaybackSeek,
-  sendRoomRealtimeUserPlayerStatus,
+  sendRoomRealtimeUserResourceStatus,
   setRoomRealtimeVideoSource,
-  type RoomRealtimePlayerStatus,
+  type RoomRealtimeResourceStatus,
   type RoomRealtimeSessionClosed,
 } from "@/infra/realtime/roomRealtime";
 import { useMessagesStore } from "@/stores/messages.store";
@@ -47,8 +47,9 @@ import { useEntitiesStore } from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
+import { getBackendErrorMessage } from "@/infra/http/client";
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
@@ -57,7 +58,7 @@ const messagesStore = useMessagesStore();
 const toasts = useToastsStore();
 
 type RoomRoleState = RoomRole | "unknown";
-type DisplayPlayerStatus = "idle" | RoomRealtimePlayerStatus;
+type DisplayResourceStatus = "idle" | RoomRealtimeResourceStatus;
 type SyncGateState = "locked" | "unlocked";
 const ROOM_PLAYBACK_DEBUG = false;
 
@@ -68,9 +69,9 @@ const membersLoading = ref(false);
 const membersError = ref("");
 const mainGridRef = ref<HTMLElement | null>(null);
 const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
-let lastReportedPlayerStatus: RoomRealtimePlayerStatus | null = null;
-const localPlayerStatus = ref<DisplayPlayerStatus>("idle");
-const latestPlayerStatus = ref<DisplayPlayerStatus>("idle");
+let lastReportedResourceStatus: RoomRealtimeResourceStatus | null = null;
+const localResourceStatus = ref<DisplayResourceStatus>("idle");
+const latestResourceStatus = ref<DisplayResourceStatus>("idle");
 const syncGateState = ref<SyncGateState>(getInitialSyncGateState());
 
 const roomId = computed(() => {
@@ -227,12 +228,12 @@ const realtime = useRoomRealtimeSession({
   onSessionClosed: handleRealtimeSessionClosed,
 });
 const presentUserIds = computed(() => new Set(realtime.presentUserIds.value));
-const displayPlayerStatusByUserId = computed(() => {
-  const statuses = new Map<number, DisplayPlayerStatus>(
-    realtime.userPlayerStates.value.map((state) => [state.user_id, state.status]),
+const displayResourceStatusByUserId = computed(() => {
+  const statuses = new Map<number, DisplayResourceStatus>(
+    realtime.userResourceStates.value.map((state) => [state.user_id, state.status]),
   );
   if (auth.me?.id && realtime.isRealtimeActive.value && presentUserIds.value.has(auth.me.id)) {
-    statuses.set(auth.me.id, localPlayerStatus.value);
+    statuses.set(auth.me.id, localResourceStatus.value);
   }
   return statuses;
 });
@@ -240,7 +241,7 @@ const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
   const memberStatus =
     realtime.hasPresenceSnapshot.value && presentUserIds.value.has(member.user_id)
-      ? displayPlayerStatusByUserId.value.get(member.user_id) ?? "idle"
+      ? displayResourceStatusByUserId.value.get(member.user_id) ?? "idle"
       : "offline";
 
   return {
@@ -361,8 +362,7 @@ async function fetchRoom() {
   } catch (e: any) {
     room.value = null;
     error.value =
-      e?.response?.data?.detail ||
-      e?.message ||
+      getBackendErrorMessage(e) ||
       t("room.loadFailed");
   } finally {
     isLoading.value = false;
@@ -385,8 +385,7 @@ async function fetchRoomMembers() {
     await fetchRoomRequests({ force: true });
   } catch (e: any) {
     membersError.value =
-      e?.response?.data?.detail ||
-      e?.message ||
+      getBackendErrorMessage(e) ||
       t("room.membersLoadFailed");
   } finally {
     membersLoading.value = false;
@@ -436,9 +435,32 @@ function canUseRealtimePlaybackCommands() {
   );
 }
 
-function showRealtimePlaybackError() {
+function getRealtimeErrorReason(error: unknown) {
+  if (!error || typeof error !== "object") return "";
+  const reason = (error as { reason?: unknown }).reason;
+  return typeof reason === "string" ? reason : "";
+}
+
+function getRealtimeErrorDetails(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const details = (error as { details?: unknown }).details;
+  return details && typeof details === "object"
+    ? details as Record<string, unknown>
+    : null;
+}
+
+function showRealtimePlaybackError(error?: unknown) {
+  const reason = getRealtimeErrorReason(error);
+  const reasonKey = reason ? `room.playback.errors.${reason}` : "";
+  const details = getRealtimeErrorDetails(error);
+  const stallingUserIds = Array.isArray(details?.stalling_user_ids)
+    ? details.stalling_user_ids
+    : [];
+
   toasts.push({
-    message: t("room.playback.errors.playFailed"),
+    message: reasonKey && te(reasonKey)
+      ? t(reasonKey, { count: stallingUserIds.length })
+      : t("room.playback.errors.playFailed"),
     tone: "danger",
   });
 }
@@ -456,7 +478,7 @@ function logPlaybackDebug(event: string, extra: Record<string, unknown> = {}) {
     playbackDuration: playbackDuration.value,
     playbackSourceType: playbackSourceType.value,
     hasExternalSource: playbackSourceUrl.value.trim().length > 0,
-    localPlayerStatus: localPlayerStatus.value,
+    localResourceStatus: localResourceStatus.value,
     roomPlayback: realtime.roomPlayback.value,
     roomPlaybackEvent: realtime.roomPlaybackEvent.value,
     ...extra,
@@ -472,9 +494,19 @@ function getInitialSyncGateState(): SyncGateState {
 }
 
 async function syncRoomRuntimeAfterUnlock() {
-  // TODO: call the backend runtime snapshot command once it is available.
-  const currentVideoSource = realtime.roomVideoSource.value;
-  const currentPlayback = realtime.roomPlayback.value;
+  let currentVideoSource = realtime.roomVideoSource.value;
+  let currentPlayback = realtime.roomPlayback.value;
+
+  try {
+    const runtime = await realtime.fetchVideoRuntimeSnapshot({ updateState: false });
+    currentVideoSource = runtime.room_video_source ?? null;
+    currentPlayback = runtime.playback ?? null;
+  } catch (error) {
+    logPlaybackDebug("syncRoomRuntimeAfterUnlockFailed", {
+      errorName: error instanceof Error ? error.name : null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   applyRealtimeVideoSource(currentVideoSource);
 
@@ -500,8 +532,8 @@ function unlockSyncGate() {
   if (isSyncGateUnlocked()) return;
 
   syncGateState.value = "unlocked";
-  localPlayerStatus.value = latestPlayerStatus.value;
-  reportDisplayedPlayerStatus(latestPlayerStatus.value);
+  localResourceStatus.value = latestResourceStatus.value;
+  reportDisplayedResourceStatus(latestResourceStatus.value);
   void syncRoomRuntimeAfterUnlock();
 }
 
@@ -530,8 +562,8 @@ async function handleApplyPlaybackSource(payload: {
       applyRealtimeVideoSource(response.room_video_source ?? null);
     }
     await applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
-  } catch {
-    showRealtimePlaybackError();
+  } catch (error) {
+    showRealtimePlaybackError(error);
   }
 }
 
@@ -574,7 +606,7 @@ async function togglePlayback() {
       errorName: error instanceof Error ? error.name : null,
       errorMessage: error instanceof Error ? error.message : String(error),
     });
-    showRealtimePlaybackError();
+    showRealtimePlaybackError(error);
   }
 }
 
@@ -597,18 +629,18 @@ function handlePlaybackProgressChange(value: number) {
   }).catch(showRealtimePlaybackError);
 }
 
-function toRealtimePlayerStatus(status: DisplayPlayerStatus): RoomRealtimePlayerStatus {
-  return status === "idle" ? "ready" : status;
-}
-
-function reportDisplayedPlayerStatus(status: DisplayPlayerStatus) {
+function reportDisplayedResourceStatus(status: DisplayResourceStatus) {
   if (!realtime.isRealtimeActive.value) return;
-  const realtimeStatus = toRealtimePlayerStatus(status);
-  if (realtimeStatus === lastReportedPlayerStatus) return;
+  if (status === "idle") {
+    lastReportedResourceStatus = null;
+    return;
+  }
 
-  lastReportedPlayerStatus = realtimeStatus;
-  void sendRoomRealtimeUserPlayerStatus({
-    status: realtimeStatus,
+  if (status === lastReportedResourceStatus) return;
+
+  lastReportedResourceStatus = status;
+  void sendRoomRealtimeUserResourceStatus({
+    status,
     reported_at_ms: Date.now(),
     position_seconds: playbackCurrentTime.value,
   }).catch(() => {
@@ -616,15 +648,15 @@ function reportDisplayedPlayerStatus(status: DisplayPlayerStatus) {
   });
 }
 
-function handlePlayerStatusChange(status: DisplayPlayerStatus) {
-  latestPlayerStatus.value = status;
+function handleResourceStatusChange(status: DisplayResourceStatus) {
+  latestResourceStatus.value = status;
   if (!isSyncGateUnlocked()) {
-    localPlayerStatus.value = "idle";
+    localResourceStatus.value = "idle";
     return;
   }
 
-  localPlayerStatus.value = status;
-  reportDisplayedPlayerStatus(status);
+  localResourceStatus.value = status;
+  reportDisplayedResourceStatus(status);
 }
 
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
@@ -650,9 +682,9 @@ onBeforeUnmount(() => {
 });
 watch(roomId, () => {
   currentUserRole.value = "unknown";
-  localPlayerStatus.value = "idle";
-  latestPlayerStatus.value = "idle";
-  lastReportedPlayerStatus = null;
+  localResourceStatus.value = "idle";
+  latestResourceStatus.value = "idle";
+  lastReportedResourceStatus = null;
   syncGateState.value = getInitialSyncGateState();
   resetRoomRequestsState();
   resetRoomSettingsState();
@@ -789,7 +821,7 @@ watch(
                   :theater-mode-available="theaterLayout.canUseTheaterMode.value"
                   @toggle-theater-mode="toggleTheaterMode"
                   @play-state-change="handlePlaybackPlayStateChange"
-                  @player-status-change="handlePlayerStatusChange"
+                  @resource-status-change="handleResourceStatusChange"
                   @duration-change="handlePlaybackDurationChange"
                   @time-change="handlePlaybackTimeChange"
                   @buffered-progress-change="playbackBufferedProgress = $event"

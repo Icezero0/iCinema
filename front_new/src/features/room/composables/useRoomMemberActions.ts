@@ -10,6 +10,7 @@ import {
 } from "@/infra/api/rooms.api";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useToastsStore } from "@/stores/toasts.store";
+import { getBackendErrorMessage } from "@/infra/http/client";
 
 type UseRoomMemberActionsOptions = {
   roomId: ComputedRef<number>;
@@ -20,11 +21,7 @@ type UseRoomMemberActionsOptions = {
 };
 
 function extractErrorMessage(error: any, fallback: string) {
-  return (
-    error?.response?.data?.detail ||
-    error?.message ||
-    fallback
-  );
+  return getBackendErrorMessage(error) || fallback;
 }
 
 function setMemberActionLoading(actionIds: { value: number[] }, userId: number, loading: boolean) {

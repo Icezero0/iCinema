@@ -1,4 +1,4 @@
-import type { RoomRealtimePlayerStatus } from "@/infra/realtime/roomRealtime";
+import type { RoomRealtimeResourceStatus } from "@/infra/realtime/roomRealtime";
 
 export type PlayerState = "idle" | "loading" | "playing" | "paused";
 export type MediaHealthState = "unknown" | "ready" | "stalling" | "error";
@@ -18,7 +18,7 @@ export type MediaEngineLogger = (event: string, data?: Record<string, unknown>) 
 
 export function mapHealthToRealtimeStatus(
   mediaHealthState: MediaHealthState,
-): RoomRealtimePlayerStatus {
+): RoomRealtimeResourceStatus {
   if (mediaHealthState === "error") return "error";
   if (mediaHealthState === "ready") return "ready";
   return "stalling";

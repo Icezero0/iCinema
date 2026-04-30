@@ -1,7 +1,7 @@
 import wsClient from "@/infra/realtime/wsClient";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 
-export type RoomRealtimePlayerStatus = "ready" | "stalling" | "error";
+export type RoomRealtimeResourceStatus = "ready" | "stalling" | "error";
 export type RoomRealtimePlaybackStatus = "playing" | "paused";
 
 export type RoomRealtimeVideoSourceState = {
@@ -19,19 +19,19 @@ export type RoomRealtimePlaybackState = {
   playback_rate: number;
 };
 
-export type RoomRealtimeUserPlayerState = {
+export type RoomRealtimeUserResourceState = {
   room_id: number;
   user_id: number;
-  status: RoomRealtimePlayerStatus;
+  status: RoomRealtimeResourceStatus;
   reported_at_ms: number;
   position_seconds?: number | null;
   error_code?: string | null;
   error_message?: string | null;
 };
 
-export type RoomRealtimeUserPlayerStatesState = {
+export type RoomRealtimeUserResourceStatesState = {
   room_id: number;
-  user_player_states: RoomRealtimeUserPlayerState[];
+  user_resource_states: RoomRealtimeUserResourceState[];
 };
 
 export type RoomRealtimePresenceState = {
@@ -44,7 +44,7 @@ export type RoomRealtimeSnapshot = {
   present_user_ids: number[];
   room_video_source: RoomRealtimeVideoSourceState | null;
   playback: RoomRealtimePlaybackState | null;
-  user_player_states: RoomRealtimeUserPlayerStatesState | null;
+  user_resource_states: RoomRealtimeUserResourceStatesState | null;
 };
 
 export type RoomRealtimeSessionClosed = {
@@ -70,8 +70,8 @@ export type RoomRealtimePlaybackCommandPayload = {
   playback_rate?: number;
 };
 
-export type RoomRealtimeUserPlayerStatusPayload = {
-  status: RoomRealtimePlayerStatus;
+export type RoomRealtimeResourceStatusPayload = {
+  status: RoomRealtimeResourceStatus;
   reported_at_ms: number;
   position_seconds?: number | null;
   error_code?: string | null;
@@ -81,17 +81,27 @@ export type RoomRealtimeUserPlayerStatusPayload = {
 export type RoomRealtimeVideoSourceSetResponse = {
   room_video_source?: RoomRealtimeVideoSourceState | null;
   playback?: RoomRealtimePlaybackState | null;
-  user_player_states?: RoomRealtimeUserPlayerStatesState | null;
+  user_resource_states?: RoomRealtimeUserResourceStatesState | null;
 };
 
 export type RoomRealtimePlaybackResponse = {
   playback?: RoomRealtimePlaybackState | null;
 };
 
-export type RoomRealtimeUserPlayerStatusResponse = {
-  user_player_states?: RoomRealtimeUserPlayerStatesState | null;
+export type RoomRealtimeResourceStatusResponse = {
+  user_resource_states?: RoomRealtimeUserResourceStatesState | null;
   playback?: RoomRealtimePlaybackState | null;
   auto_action?: "playback_pause" | "playback_play" | null;
+};
+
+export type RoomRealtimePresenceGetResponse = {
+  presence?: RoomRealtimePresenceState | null;
+};
+
+export type RoomRealtimeVideoRuntimeGetResponse = {
+  room_video_source?: RoomRealtimeVideoSourceState | null;
+  playback?: RoomRealtimePlaybackState | null;
+  user_resource_states?: RoomRealtimeUserResourceStatesState | null;
 };
 
 export function enterRoomRealtime(roomId: number) {
@@ -104,6 +114,14 @@ export function leaveRoomRealtime(roomId: number) {
   return wsClient.command<void>("room_leave", {
     room_id: roomId,
   });
+}
+
+export function getRoomRealtimePresence() {
+  return wsClient.command<RoomRealtimePresenceGetResponse, null>("room_presence_get", null);
+}
+
+export function getRoomRealtimeVideoRuntime() {
+  return wsClient.command<RoomRealtimeVideoRuntimeGetResponse, null>("room_video_runtime_get", null);
 }
 
 export function setRoomRealtimeVideoSource(payload: RoomRealtimeVideoSourceSetPayload) {
@@ -131,9 +149,9 @@ export function sendRoomRealtimePlaybackSeek(payload: Omit<RoomRealtimePlaybackC
   return wsClient.command<RoomRealtimePlaybackResponse>("playback_seek", payload);
 }
 
-export function sendRoomRealtimeUserPlayerStatus(payload: RoomRealtimeUserPlayerStatusPayload) {
-  return wsClient.command<RoomRealtimeUserPlayerStatusResponse>(
-    "user_player_status",
+export function sendRoomRealtimeUserResourceStatus(payload: RoomRealtimeResourceStatusPayload) {
+  return wsClient.command<RoomRealtimeResourceStatusResponse>(
+    "user_resource_status",
     payload,
   );
 }

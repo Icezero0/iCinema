@@ -33,7 +33,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "toggle-theater-mode"): void;
   (e: "play-state-change", value: boolean): void;
-  (e: "player-status-change", value: "idle" | "ready" | "stalling" | "error"): void;
+  (e: "resource-status-change", value: "idle" | "ready" | "stalling" | "error"): void;
   (e: "duration-change", value: number): void;
   (e: "time-change", value: number): void;
   (e: "buffered-progress-change", value: number): void;
@@ -54,7 +54,8 @@ const player = useRoomMediaEngine({
 });
 const videoRef = player.videoRef;
 const hasSource = computed(() => Boolean(player.appliedUrl.value));
-const playerStatus = computed(() => toRoomPlayerStatus(player.mediaHealthState.value, hasSource.value));
+const displayedResourceStatus = computed(() =>
+  toDisplayedResourceStatus(player.mediaHealthState.value, hasSource.value));
 const showEmptyState = computed(() => !hasSource.value);
 const showWaitingState = computed(() => hasSource.value && player.mediaHealthState.value === "stalling");
 const showPausedState = computed(() =>
@@ -65,7 +66,7 @@ const showPausedState = computed(() =>
 const shouldAutoHideActions = computed(() =>
   isVideoFullscreen.value || Boolean(props.isTheaterMode));
 
-function toRoomPlayerStatus(status: MediaHealthState, sourceAvailable: boolean) {
+function toDisplayedResourceStatus(status: MediaHealthState, sourceAvailable: boolean) {
   if (!sourceAvailable) return "idle";
   if (status === "unknown") return "stalling";
   return status;
@@ -224,8 +225,8 @@ watch(
 watch(player.playerState, (value) => {
   emit("play-state-change", value === "playing");
 }, { immediate: true });
-watch(playerStatus, (value) => {
-  emit("player-status-change", value);
+watch(displayedResourceStatus, (value) => {
+  emit("resource-status-change", value);
   emit("waiting-change", value === "stalling");
 }, { immediate: true });
 watch(player.duration, (value) => emit("duration-change", value), { immediate: true });
