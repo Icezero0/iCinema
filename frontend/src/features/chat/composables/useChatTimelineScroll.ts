@@ -68,7 +68,7 @@ export function useChatTimelineScroll(options: UseChatTimelineScrollOptions) {
   let lastVisibleViewportAnchor: ViewportAnchor | null = null;
   let shouldRestoreViewportAfterInactive = false;
 
-  function isTimelineMeasurable(timeline: HTMLElement | null) {
+  function isTimelineMeasurable(timeline: HTMLElement | null): timeline is HTMLElement {
     if (!timeline || !timeline.isConnected) return false;
     const rect = timeline.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0 && timeline.clientHeight > 0;
@@ -169,7 +169,7 @@ export function useChatTimelineScroll(options: UseChatTimelineScrollOptions) {
     if (!isTimelineMeasurable(timeline)) return;
 
     if (anchor.stickToBottom) {
-      scrollToBottom("restoreActiveBottom");
+      scrollToBottom();
       return;
     }
 

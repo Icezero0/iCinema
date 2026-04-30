@@ -699,19 +699,19 @@ export function useNativeVideoCore(options: {
   function handleTimeUpdate() {
     updateMediaMetrics();
     noteStallingProgress("timeupdate");
-    tryApplyPendingSeekablePlayback("timeupdate");
+    tryApplyPendingSeekablePlayback();
     scheduleReadyConfirmation("timeupdate");
   }
 
   function handleProgress() {
     updateMediaMetrics();
     noteStallingProgress("video:progress");
-    tryApplyPendingSeekablePlayback("progress");
+    tryApplyPendingSeekablePlayback();
     logProgressIfChanged("video:progress");
     scheduleReadyConfirmation("video:progress");
   }
 
-  function tryApplyPendingSeekablePlayback(reason: string) {
+  function tryApplyPendingSeekablePlayback() {
     if (!pendingPlayback || !Number.isFinite(duration.value) || duration.value <= 0) return;
 
     const targetTime = Math.min(

@@ -182,7 +182,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       ? source.external_url?.trim() ?? ""
       : "";
     const isSameExternalSource =
-      Boolean(source) &&
+      source !== null &&
       source.source_type === "external_url" &&
       playbackSourceType.value === "external_url" &&
       playbackSourceUrl.value === nextSourceUrl;
@@ -190,7 +190,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       ? source.file_hash ?? ""
       : "";
     const isSameLocalFileSource =
-      Boolean(source) &&
+      source !== null &&
       source.source_type === "local_file" &&
       playbackSourceType.value === "local_file" &&
       Boolean(playbackSourceFile.value) &&

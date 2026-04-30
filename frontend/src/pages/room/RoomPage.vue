@@ -21,7 +21,7 @@ import RoomChatTab from "@/features/room/components/workspace/RoomChatTab.vue";
 import RoomMembersTab from "@/features/room/components/workspace/RoomMembersTab.vue";
 import RoomRequestsTab from "@/features/room/components/workspace/RoomRequestsTab.vue";
 import RoomSettingsTab from "@/features/room/components/workspace/RoomSettingsTab.vue";
-import type { RoomPanelKey, RoomRole } from "@/features/room/types";
+import type { MemberStatus, RoomPanelKey, RoomRole } from "@/features/room/types";
 import type { ChatSegment } from "@/features/chat/types";
 import { useRoomTheaterLayout } from "@/features/room/composables/useRoomTheaterLayout";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
@@ -275,7 +275,7 @@ const displayResourceStatusByUserId = computed(() => {
 });
 const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
-  const memberStatus =
+  const memberStatus: MemberStatus =
     realtime.hasPresenceSnapshot.value && presentUserIds.value.has(member.user_id)
       ? displayResourceStatusByUserId.value.get(member.user_id) ?? "idle"
       : "offline";
@@ -292,7 +292,7 @@ const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
     status: memberStatus,
   };
 }));
-const roomMemberStatusByUserId = computed(() =>
+const roomMemberStatusByUserId = computed<Map<number, MemberStatus>>(() =>
   new Map(roomMemberItems.value.map((member) => [member.id, member.status])));
 const syncPolicyStatusLabel = computed(() => {
   if (roomSettingsError.value && !roomSettings.value) {
