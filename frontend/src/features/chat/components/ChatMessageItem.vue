@@ -3,6 +3,7 @@ import { computed } from "vue";
 import RoomMemberAvatar from "@/features/room/components/RoomMemberAvatar.vue";
 import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
 import ChatInlineMedia from "./ChatInlineMedia.vue";
+import { useAssetsStore } from "@/stores/assets.store";
 import type { ChatSegment } from "@/features/chat/types";
 import type { MemberStatus } from "@/features/room/types";
 
@@ -18,6 +19,7 @@ const props = defineProps<{
   status?: MemberStatus;
 }>();
 
+const assetsStore = useAssetsStore();
 const firstSegment = computed(() => props.segments[0] ?? null);
 
 const isStandaloneMediaMessage = computed(() => (
@@ -34,6 +36,10 @@ function getSegmentDisplayMode(segment: ChatSegment) {
 function getSegmentLayoutClass(segment: ChatSegment) {
   if (segment.type !== "media") return null;
   return isStandaloneMediaMessage.value ? "segment-media-block" : "segment-media-inline";
+}
+
+function getQfaceDisplayUrl(emojiId: string) {
+  return assetsStore.getAssetDisplayUrl("qface", emojiId) || getQfaceUrl(emojiId);
 }
 </script>
 
@@ -79,11 +85,11 @@ function getSegmentLayoutClass(segment: ChatSegment) {
           </template>
           <template v-else-if="segment.type === 'emoji'">
             <ChatInlineMedia
-              v-if="getQfaceUrl(segment.emojiId)"
+              v-if="getQfaceDisplayUrl(segment.emojiId)"
               kind="emoji"
               context="message"
               display-mode="inline"
-              :src="getQfaceUrl(segment.emojiId) || undefined"
+              :src="getQfaceDisplayUrl(segment.emojiId) || undefined"
               :alt="getQfaceLabel(segment.emojiId)"
               :emoji-id="segment.emojiId"
               :animated="segment.animated"

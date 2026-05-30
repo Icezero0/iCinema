@@ -9,6 +9,7 @@ import TrailingInlineCursorAnchor, {
   moveCursorBeforeTrailingCursor,
 } from "@/features/chat/editor/TrailingInlineCursorAnchor";
 import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
+import { useAssetsStore } from "@/stores/assets.store";
 import { parseClipboardHtmlToContent } from "@/features/chat/editor/clipboard";
 import {
   collectChatSegmentsFromComposerDoc,
@@ -38,13 +39,14 @@ const emit = defineEmits<{
 }>();
 
 const editorVersion = ref(0);
+const assetsStore = useAssetsStore();
 
 function syncEditorState() {
   editorVersion.value += 1;
 }
 
 function insertQfaceById(qfaceId: string) {
-  const src = getQfaceUrl(qfaceId);
+  const src = assetsStore.getAssetDisplayUrl("qface", qfaceId) || getQfaceUrl(qfaceId);
   if (!src || !editor.value) return;
 
   moveCursorBeforeTrailingCursor(editor.value);

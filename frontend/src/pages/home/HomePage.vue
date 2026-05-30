@@ -86,7 +86,6 @@ function enterRoom(roomId: number) {
     <BaseLayout :max-width="1120">
       <HomeHero
         :title="t('home.headline', { name: userName })"
-        :subtitle="t('home.subline')"
       />
 
       <p

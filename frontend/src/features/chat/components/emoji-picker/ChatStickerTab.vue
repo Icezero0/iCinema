@@ -60,17 +60,29 @@ function clampPreviewPosition() {
 
   const viewportPadding = 10;
   const offset = 16;
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportWidth = viewport?.width ?? window.innerWidth;
+  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const minX = viewportLeft + viewportPadding;
+  const maxX = viewportLeft + viewportWidth - viewportPadding;
+  const minY = viewportTop + viewportPadding;
+  const maxY = viewportTop + viewportHeight - viewportPadding;
   const rect = preview.getBoundingClientRect();
   let nextX = previewX.value;
   let nextY = previewY.value;
 
-  if (nextX + rect.width > window.innerWidth - viewportPadding) {
-    nextX = Math.max(viewportPadding, nextX - rect.width - offset * 2);
+  if (nextX + rect.width > maxX) {
+    nextX = Math.max(minX, nextX - rect.width - offset * 2);
   }
 
-  if (nextY + rect.height > window.innerHeight - viewportPadding) {
-    nextY = Math.max(viewportPadding, window.innerHeight - rect.height - viewportPadding);
+  if (nextY + rect.height > maxY) {
+    nextY = Math.max(minY, maxY - rect.height);
   }
+
+  nextX = Math.max(minX, Math.min(nextX, maxX - rect.width));
+  nextY = Math.max(minY, Math.min(nextY, maxY - rect.height));
 
   previewX.value = nextX;
   previewY.value = nextY;
@@ -292,7 +304,7 @@ function handleStickerClick(stickerId: number) {
 <style scoped>
 .stickerHoverPreview {
   position: fixed;
-  z-index: 140;
+  z-index: 260;
   display: grid;
   place-items: center;
   width: min(168px, calc(100vw - 20px));

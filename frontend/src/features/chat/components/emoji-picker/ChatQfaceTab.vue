@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import { getQfaceUrl } from "@/features/chat/emoji";
+import { useAssetsStore } from "@/stores/assets.store";
 import type { QfaceTabProps } from "./types";
 
 defineProps<QfaceTabProps>();
@@ -10,6 +11,11 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const assetsStore = useAssetsStore();
+
+function getQfaceDisplayUrl(emojiId: string) {
+  return assetsStore.getAssetDisplayUrl("qface", emojiId) || getQfaceUrl(emojiId);
+}
 </script>
 
 <template>
@@ -29,9 +35,9 @@ const { t } = useI18n();
           @click="emit('select', emoji.id)"
         >
           <img
-            v-if="getQfaceUrl(emoji.id)"
+            v-if="getQfaceDisplayUrl(emoji.id)"
             class="emojiOptionImage"
-            :src="getQfaceUrl(emoji.id) || undefined"
+            :src="getQfaceDisplayUrl(emoji.id) || undefined"
             :alt="emoji.label"
           >
           <span class="emojiOptionTooltip" role="tooltip">{{ emoji.label }}</span>
@@ -54,9 +60,9 @@ const { t } = useI18n();
           @click="emit('select', emoji.id)"
         >
           <img
-            v-if="getQfaceUrl(emoji.id)"
+            v-if="getQfaceDisplayUrl(emoji.id)"
             class="emojiOptionImage"
-            :src="getQfaceUrl(emoji.id) || undefined"
+            :src="getQfaceDisplayUrl(emoji.id) || undefined"
             :alt="emoji.label"
           >
           <span class="emojiOptionTooltip" role="tooltip">{{ emoji.label }}</span>

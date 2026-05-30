@@ -123,7 +123,7 @@ export function useNativeVideoCore(options: {
     duration.value = video?.duration && Number.isFinite(video.duration) ? video.duration : 0;
     bufferedRanges.value = readBufferedRanges(video);
     seekableRanges.value = readSeekableRanges(video);
-    if (video) {
+    if (video && Math.abs(video.volume - volume.value / 100) > 0.005) {
       volume.value = Math.round(video.volume * 100);
     }
   }
@@ -167,6 +167,7 @@ export function useNativeVideoCore(options: {
     const video = videoRef.value;
     if (!video) return;
 
+    video.volume = volume.value / 100;
     setPlayerState("loading", "loadSource");
     setMediaHealthStalling("loadSource");
     options.writeLog("applySource", {

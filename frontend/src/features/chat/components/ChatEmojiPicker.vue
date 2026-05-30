@@ -42,12 +42,19 @@ const stickersStore = useStickersStore();
 const activeEmojiTab = ref<EmojiPickerTabKey>("qface");
 const isCompactViewport = ref(false);
 const hasRequestedStickerLibrary = ref(false);
+const emojiPanelBodyRef = ref<HTMLElement | null>(null);
+const tabScrollTop = ref<Record<EmojiPickerTabKey, number>>({
+  qface: 0,
+  unicode_emoji: 0,
+  stickers: 0,
+});
 const stickerUploadInputRef = ref<HTMLInputElement | null>(null);
 const stickerEditMode = ref(false);
 const stickerEditDraftIds = ref<number[]>([]);
 const stickerCancelConfirmOpen = ref(false);
 let viewportMediaQuery: MediaQueryList | null = null;
 let removeViewportListener: (() => void) | null = null;
+let restoreScrollFrame = 0;
 const qfaceCatalog = computed(() => qfaceStore.allQfaces);
 const unicodeEmojiCatalog = computed(() => unicodeEmojiStore.allUnicodeEmojis);
 const stickerLibrary = computed(() => stickersStore.library);
@@ -171,9 +178,23 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stickersStore.setLibraryEditing(false);
   removeViewportListener?.();
+  if (restoreScrollFrame) {
+    cancelAnimationFrame(restoreScrollFrame);
+  }
 });
 
 watch(activeEmojiTab, async (tab) => {
+  if (restoreScrollFrame) {
+    cancelAnimationFrame(restoreScrollFrame);
+  }
+
+  restoreScrollFrame = window.requestAnimationFrame(() => {
+    restoreScrollFrame = 0;
+    if (emojiPanelBodyRef.value) {
+      emojiPanelBodyRef.value.scrollTop = tabScrollTop.value[tab] ?? 0;
+    }
+  });
+
   if (tab !== "stickers" || hasRequestedStickerLibrary.value) return;
 
   hasRequestedStickerLibrary.value = true;
@@ -184,6 +205,11 @@ watch(activeEmojiTab, async (tab) => {
     // stickers.store keeps the latest error state for the panel
   }
 });
+
+function rememberActiveTabScroll() {
+  if (!emojiPanelBodyRef.value) return;
+  tabScrollTop.value[activeEmojiTab.value] = emojiPanelBodyRef.value.scrollTop;
+}
 
 function selectQface(qfaceId: string) {
   qfaceStore.markQfaceUsed(qfaceId);
@@ -316,7 +342,11 @@ function handleStickerAction(actionKey: string) {
       :aria-label="t('chat.emojiPanel.label')"
     />
 
-    <div class="emojiPanelBody">
+    <div
+      ref="emojiPanelBodyRef"
+      class="emojiPanelBody"
+      @scroll.passive="rememberActiveTabScroll"
+    >
       <ChatQfaceTab
         v-if="activeEmojiTab === 'qface'"
         :recent-qfaces="recentQfaces"

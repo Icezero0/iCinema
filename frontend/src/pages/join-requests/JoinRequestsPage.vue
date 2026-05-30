@@ -189,7 +189,6 @@ watch([scope, status], fetchItems);
 <template>
   <AppPageShell
     :title="t('joinRequests.title')"
-    :subtitle="t('joinRequests.pageHint')"
     :back-text="t('common.backHome')"
     :max-width="980"
   >

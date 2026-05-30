@@ -7,6 +7,10 @@ import {
 } from "@/infra/api/media.api";
 import type { QfaceDefinition } from "@/features/chat/emoji";
 import { readPersistedState, writePersistedState } from "@/stores/persistence";
+import {
+  clearMediaBlobCache,
+  ensureMediaBlobCached,
+} from "@/infra/media-asset-cache";
 
 const STORAGE_KEY = "icinema:assets-store";
 const MAX_PERSISTED_ASSETS = 240;
@@ -39,6 +43,8 @@ type PersistedState = {
 type State = PersistedState & {
   isUploadingImage: boolean;
   isUploadingSticker: boolean;
+  assetObjectUrls: Record<string, string>;
+  cachingAssetKeys: Record<string, boolean>;
   error: string | null;
 };
 
@@ -88,6 +94,8 @@ export const useAssetsStore = defineStore("assets", {
       ...persisted,
       isUploadingImage: false,
       isUploadingSticker: false,
+      assetObjectUrls: {},
+      cachingAssetKeys: {},
       error: null,
     };
   },
@@ -109,9 +117,52 @@ export const useAssetsStore = defineStore("assets", {
       return (id: string | null | undefined) =>
         id ? this.getAsset("qface", id) : null;
     },
+    getAssetDisplayUrl: (state) => {
+      return (kind: AssetKind, id: number | string | null | undefined) =>
+        id == null ? null : state.assetObjectUrls[createAssetKey(kind, id)] ?? null;
+    },
   },
 
   actions: {
+    setAssetObjectUrl(key: string, url: string) {
+      const previousUrl = this.assetObjectUrls[key];
+      if (previousUrl && previousUrl !== url) {
+        URL.revokeObjectURL(previousUrl);
+      }
+
+      this.assetObjectUrls[key] = url;
+    },
+
+    revokeAllAssetObjectUrls() {
+      Object.values(this.assetObjectUrls).forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+      this.assetObjectUrls = {};
+    },
+
+    async ensureAssetCached(asset: CachedAssetRecord | null | undefined) {
+      if (!asset?.url) return;
+      if (asset.kind !== "image" && asset.kind !== "sticker" && asset.kind !== "qface") return;
+      if (this.cachingAssetKeys[asset.key]) return;
+
+      this.cachingAssetKeys[asset.key] = true;
+
+      try {
+        const blob = await ensureMediaBlobCached(
+          asset.key,
+          asset.url,
+          asset.updated_at ?? asset.created_at ?? "",
+        );
+        if (!blob) return;
+
+        this.setAssetObjectUrl(asset.key, URL.createObjectURL(blob));
+      } catch {
+        // The remote URL remains available if local caching is unavailable.
+      } finally {
+        delete this.cachingAssetKeys[asset.key];
+      }
+    },
+
     persist() {
       this.assetsByKey = trimPersistedAssets(this.assetsByKey);
 
@@ -133,6 +184,7 @@ export const useAssetsStore = defineStore("assets", {
       };
 
       this.persist();
+      void this.ensureAssetCached(this.assetsByKey[key]);
       return this.assetsByKey[key];
     },
 
@@ -277,8 +329,11 @@ export const useAssetsStore = defineStore("assets", {
       this.assetsByKey = {};
       this.isUploadingImage = false;
       this.isUploadingSticker = false;
+      this.cachingAssetKeys = {};
+      this.revokeAllAssetObjectUrls();
       this.error = null;
       this.persist();
+      void clearMediaBlobCache();
     },
   },
 });

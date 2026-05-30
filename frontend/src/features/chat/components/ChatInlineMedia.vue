@@ -100,7 +100,17 @@ const messageMediaImageStyle = computed(() => {
   const naturalHeight = mediaNaturalHeight.value || image?.naturalHeight || 0;
 
   if (!naturalWidth || !naturalHeight) {
-    return undefined;
+    return props.displayMode === "block"
+      ? props.kind === "sticker"
+        ? {
+            width: "112px",
+            height: "112px",
+          }
+        : {
+            width: "min(280px, 100%)",
+            aspectRatio: "16 / 9",
+          }
+      : undefined;
   }
 
   const aspectRatio = naturalWidth / naturalHeight;
@@ -507,12 +517,16 @@ watch(contextMenuOpen, (isOpen) => {
 .chatInlineMedia__image--message.chatInlineMedia__image--image {
   width: auto;
   height: auto;
+  max-width: min(280px, 100%);
+  max-height: 180px;
   object-fit: contain;
 }
 
 .chatInlineMedia__image--message.chatInlineMedia__image--sticker {
   width: auto;
   height: auto;
+  max-width: 128px;
+  max-height: 128px;
   object-fit: contain;
   border: 0;
   border-radius: 12px;

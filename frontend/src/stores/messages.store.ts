@@ -260,6 +260,7 @@ function mapMessageToChatMessage(
   currentUserId: number | null | undefined,
   roomMemberRole: ChatMessage["role"],
   avatarUrl: string | null,
+  getMediaDisplayUrl: (kind: "image" | "sticker", id: number, fallbackUrl: string | null) => string | undefined,
 ): ChatMessage {
   const author =
     message.sender?.username ||
@@ -299,7 +300,7 @@ function mapMessageToChatMessage(
         id: `${message.id}-${index}`,
         type: "media",
         alt: segment.type === "sticker" ? "Sticker" : "Image",
-        src: resolveMediaUrl(segment.url) || undefined,
+        src: getMediaDisplayUrl(segment.type, segment.id, segment.url),
         kind: segment.type === "sticker" ? "sticker" : "image",
         assetId: String(segment.id),
       } satisfies ChatSegment;
@@ -336,12 +337,17 @@ export const useMessagesStore = defineStore("messages", {
         return items.map((message) => {
           const roomMember = entities.getRoomMember(roomId, message.sender_user_id);
           const senderUser = entities.getUser(message.sender_user_id);
+          const assets = useAssetsStore();
           const avatarUrl = resolveMediaUrl(message.sender?.avatar_url ?? senderUser?.avatar_url);
           return mapMessageToChatMessage(
             message,
             auth.me?.id,
             roomMember?.role ?? "member",
             avatarUrl,
+            (kind, id, fallbackUrl) =>
+              assets.getAssetDisplayUrl(kind, id) ||
+              resolveMediaUrl(fallbackUrl) ||
+              undefined,
           );
         });
       };

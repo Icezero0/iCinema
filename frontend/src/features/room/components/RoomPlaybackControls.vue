@@ -159,6 +159,15 @@ watch(
   },
 );
 
+const hasSourceDraft = computed(() => (
+  sourceExternalUrlDraft.value !== props.sourceUrl ||
+  sourceTypeDraft.value !== props.sourceType ||
+  sourceLocalActionDraft.value != null ||
+  sourceLocalMatchFileDraft.value != null ||
+  sourceLocalTargetFileDraft.value != null ||
+  sourceLocalTargetFileNameDraft.value.trim().length > 0
+));
+
 function readProgressInputValue(event: Event) {
   const target = event.target as HTMLInputElement;
   return normalizeProgress(Number(target.value));
@@ -240,14 +249,18 @@ function syncSourceDraftFromProps() {
 
 function openSourcePanel() {
   sourceOpen.value = true;
-  syncSourceDraftFromProps();
+  if (!props.sourceApplying && !hasSourceDraft.value) {
+    syncSourceDraftFromProps();
+  }
   volumeOpen.value = false;
 }
 
 function toggleSourcePanel() {
   sourceOpen.value = !sourceOpen.value;
   if (sourceOpen.value) {
-    syncSourceDraftFromProps();
+    if (!props.sourceApplying && !hasSourceDraft.value) {
+      syncSourceDraftFromProps();
+    }
     volumeOpen.value = false;
   }
 }
@@ -318,7 +331,7 @@ onBeforeUnmount(() => {
         </button>
 
         <Transition name="floating-fade">
-          <div v-if="sourceOpen" class="sourcePanel">
+          <div v-show="sourceOpen" class="sourcePanel">
             <RoomSourcePanel
               :title="sourcePanelTitle"
               :source-type="sourceTypeDraft"

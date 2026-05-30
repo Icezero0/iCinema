@@ -169,7 +169,6 @@ onMounted(() => {
 <template>
   <AppPageShell
     :title="t('publicRooms.title')"
-    :subtitle="t('publicRooms.hint')"
     :back-text="t('common.backHome')"
     :max-width="980"
   >

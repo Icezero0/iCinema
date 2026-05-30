@@ -111,9 +111,23 @@ const HEARTBEAT_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 15_000;
+const DEFAULT_BACKEND_PORT = "8000";
+
+function deriveApiOriginFromLocation() {
+  if (typeof window === "undefined") {
+    return `http://localhost:${DEFAULT_BACKEND_PORT}`;
+  }
+
+  const url = new URL(window.location.origin);
+  if (url.port) {
+    url.port = DEFAULT_BACKEND_PORT;
+  }
+
+  return url.origin;
+}
 
 function deriveWSOrigin() {
-  const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? window.location.origin;
+  const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? deriveApiOriginFromLocation();
 
   if (apiOrigin.startsWith("https://")) {
     return apiOrigin.replace("https://", "wss://");

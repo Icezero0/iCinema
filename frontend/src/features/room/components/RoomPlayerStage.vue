@@ -74,6 +74,9 @@ function toDisplayedResourceStatus(status: MediaHealthState, sourceAvailable: bo
 
 function setVideoRef(el: unknown) {
   videoRef.value = el instanceof HTMLVideoElement ? el : null;
+  if (videoRef.value) {
+    player.setVolume(props.volume);
+  }
 }
 
 async function loadCurrentSource() {
