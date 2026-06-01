@@ -16,11 +16,12 @@
 
 1. 克隆项目到本地
 2. 安装依赖
-   - 后端：`./backend/setup_backend.bat` 或 `./backend/setup_backend.sh`
-   - 前端：`./frontend/setup_front.bat` 或 `./frontend/setup_front.sh`
+   - 后端：`./backend/setup_backend.bat` （或.sh）
+   - 前端：`./frontend/setup_front.bat` （或.sh）
 3. 启动服务
-   - 后端：`./backend/run_backend.bat` 或 `./backend/run_backend.sh`
-   - 前端：`./frontend/run_frontend.bat` 或 `./frontend/run_frontend.sh`（DEV环境，PROD环境用Nginx）
+   - 后端：`./backend/run_backend.bat` （或.sh）
+   - 前端：`./frontend/run_frontend.bat` （或.sh）
+   （DEV环境，PROD环境用Nginx部属）
 
 ---
 
