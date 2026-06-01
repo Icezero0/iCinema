@@ -67,6 +67,8 @@ export default {
     home: "Home",
     publicRooms: "Public Rooms",
     notifications: "Notifications",
+    contact: "Contact & Feedback",
+    feedbackAdmin: "Feedback Admin",
     profile: "Profile",
     joinRequests: "Approvals",
   },
@@ -165,6 +167,93 @@ export default {
       hint: "New notifications will appear here.",
     },
     inviteYouToJoin: "invited you to join {room}",
+  },
+  contact: {
+    title: "Contact & Feedback",
+    heading: "Contact the author or administrator",
+    description:
+      "Use the configured contact channel for site feedback, account help, or room-related support.",
+    sections: {
+      contact: "Contact Author",
+      feedback: "Feedback",
+    },
+    methods: {
+      email: {
+        title: "Email",
+        action: "Send email",
+      },
+      github: {
+        title: "GitHub",
+        action: "Open repository",
+      },
+      qq: {
+        title: "QQ",
+        action: "Contact on QQ",
+      },
+    },
+    empty: {
+      title: "Contact details are not configured",
+      description:
+        "Set email, GitHub, or QQ in frontend/src/config/contact.ts to show contact methods here.",
+    },
+    feedback: {
+      types: {
+        bug: "Bug",
+        suggestion: "Suggestion",
+        experience: "Experience",
+        other: "Other",
+      },
+      pages: {
+        home: "Home",
+        room: "Room",
+        publicRooms: "Public Rooms",
+        joinRequests: "Approvals",
+        notifications: "Notifications",
+        profile: "Profile",
+        contact: "Contact & Feedback",
+        other: "Other",
+      },
+      form: {
+        type: "Type",
+        page: "Page",
+        title: "Title",
+        titlePlaceholder: "Briefly summarize the problem",
+        description: "Description",
+        descriptionPlaceholder: "Describe what happened, how to reproduce it, and what you expected.",
+        screenshot: "Screenshot",
+        screenshotLimit: "You can upload up to {count} screenshots.",
+        submit: "Submit feedback",
+        success: "Feedback submitted.",
+        failed: "Failed to submit feedback.",
+      },
+    },
+  },
+  feedbackAdmin: {
+    title: "Feedback Admin",
+    loadFailed: "Failed to load feedback.",
+    saveFailed: "Failed to save feedback.",
+    saved: "Saved.",
+    screenshotFailed: "Failed to open screenshot.",
+    screenshotRetry: "Load failed. Click to retry.",
+    filters: {
+      status: "Status",
+      allStatus: "All statuses",
+    },
+    status: {
+      open: "Open",
+      reviewing: "Reviewing",
+      resolved: "Resolved",
+      closed: "Closed",
+    },
+    edit: {
+      action: "Update",
+      status: "Status",
+      note: "Admin note",
+    },
+    empty: {
+      title: "No feedback",
+      hint: "User feedback will appear here.",
+    },
   },
   home: {
     headline: "Welcome back, {name}",

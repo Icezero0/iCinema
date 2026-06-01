@@ -6,6 +6,7 @@ class MediaAssetType(StrEnum):
     IMAGE = "image"
     STICKER = "sticker"
     VIDEO = "video"
+    FEEDBACK_IMAGE = "feedback_image"
 
 
 class MediaAssetStatus(StrEnum):

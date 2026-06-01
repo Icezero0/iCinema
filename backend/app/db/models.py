@@ -10,3 +10,4 @@ from app.modules.media.models import (
     UserEmojiUsage,
 )
 from app.modules.messages.models import Message
+from app.modules.feedback.models import Feedback, FeedbackScreenshot

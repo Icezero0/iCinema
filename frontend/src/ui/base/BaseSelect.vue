@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import BaseMenuItem from "@/ui/base/BaseMenuItem.vue";
@@ -35,7 +35,10 @@ const emit = defineEmits<{
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);
+const menuRef = ref<HTMLElement | null>(null);
 const open = ref(false);
+const menuPlacement = ref<"down" | "up">("down");
+const menuMaxHeight = ref<number | null>(null);
 
 const selectedOption = computed(() => {
   return props.options.find((option) => option.value === props.modelValue) ?? null;
@@ -56,13 +59,63 @@ const rootStyle = computed(() => {
   };
 });
 
+const menuStyle = computed(() => {
+  return menuMaxHeight.value
+    ? { maxHeight: `${menuMaxHeight.value}px` }
+    : {};
+});
+
+function getScrollParent(element: HTMLElement | null) {
+  let current = element?.parentElement ?? null;
+
+  while (current) {
+    const style = window.getComputedStyle(current);
+    const overflowY = style.overflowY;
+    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+async function updateMenuPlacement() {
+  await nextTick();
+
+  const root = rootRef.value;
+  const menu = menuRef.value;
+  if (!root || !menu) return;
+
+  const rootRect = root.getBoundingClientRect();
+  const scrollParent = getScrollParent(root);
+  const scrollParentRect = scrollParent?.getBoundingClientRect();
+  const viewportTop = Math.max(0, scrollParentRect?.top ?? 0);
+  const viewportBottom = Math.min(window.innerHeight, scrollParentRect?.bottom ?? window.innerHeight);
+  const gap = window.matchMedia("(max-width: 520px)").matches ? 6 : 10;
+  const availableBelow = Math.max(0, viewportBottom - rootRect.bottom - gap);
+  const availableAbove = Math.max(0, rootRect.top - viewportTop - gap);
+  const naturalHeight = menu.scrollHeight;
+  const shouldOpenUp = availableBelow < naturalHeight && availableAbove > availableBelow;
+  const availableHeight = shouldOpenUp ? availableAbove : availableBelow;
+
+  menuPlacement.value = shouldOpenUp ? "up" : "down";
+  menuMaxHeight.value = naturalHeight > availableHeight
+    ? Math.max(80, availableHeight)
+    : null;
+}
+
 function close() {
   open.value = false;
+  menuMaxHeight.value = null;
 }
 
 function toggle() {
   if (props.disabled) return;
   open.value = !open.value;
+  if (open.value) {
+    void updateMenuPlacement();
+  }
 }
 
 function selectOption(value: string) {
@@ -91,14 +144,24 @@ function onKeyDown(event: KeyboardEvent) {
   }
 }
 
+function onWindowChange() {
+  if (open.value) {
+    void updateMenuPlacement();
+  }
+}
+
 onMounted(() => {
   document.addEventListener("pointerdown", onDocPointerDown);
   document.addEventListener("keydown", onKeyDown);
+  window.addEventListener("resize", onWindowChange);
+  window.addEventListener("scroll", onWindowChange, true);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", onDocPointerDown);
   document.removeEventListener("keydown", onKeyDown);
+  window.removeEventListener("resize", onWindowChange);
+  window.removeEventListener("scroll", onWindowChange, true);
 });
 </script>
 
@@ -109,7 +172,7 @@ onBeforeUnmount(() => {
     <div
       ref="rootRef"
       class="selectRoot"
-      :class="{ open, disabled }"
+      :class="{ open, disabled, 'placement-up': menuPlacement === 'up' }"
       :style="rootStyle"
     >
       <button
@@ -124,7 +187,13 @@ onBeforeUnmount(() => {
       </button>
 
       <Transition name="menu-fade">
-        <div v-show="open" class="menu" role="listbox">
+        <div
+          v-show="open"
+          ref="menuRef"
+          class="menu"
+          role="listbox"
+          :style="menuStyle"
+        >
           <BaseMenuItem
             v-for="option in options"
             :key="option.value"
@@ -172,39 +241,33 @@ onBeforeUnmount(() => {
   padding: 0 12px;
   border: 1px solid var(--c-border);
   border-radius: 14px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--c-surface) 94%, white),
-      color-mix(in srgb, var(--c-surface) 90%, var(--c-bg))
-    );
+  background: color-mix(in srgb, var(--c-surface) 92%, var(--c-bg));
   color: var(--c-text);
   cursor: pointer;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
-    transform 160ms ease,
     background 160ms ease;
 }
 
 .trigger:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--c-primary) 26%, var(--c-border));
-  box-shadow: 0 10px 22px rgb(0 0 0 / 0.04);
+  background: color-mix(in srgb, var(--c-hover) 68%, var(--c-surface));
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.035);
 }
 
 .trigger:focus-visible,
 .selectRoot.open .trigger {
   outline: none;
   border-color: color-mix(in srgb, var(--c-primary) 42%, var(--c-border));
+  background: color-mix(in srgb, var(--c-surface) 96%, var(--c-primary));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 14%, transparent);
-  transform: translateY(-1px);
 }
 
 .trigger:disabled,
 .selectRoot.disabled .trigger {
   opacity: 0.6;
   cursor: not-allowed;
-  transform: none;
   box-shadow: none;
 }
 
@@ -236,9 +299,16 @@ onBeforeUnmount(() => {
   background: var(--c-surface);
   border-radius: 14px;
   padding: 6px;
+  overflow-y: auto;
   box-shadow: 0 18px 50px rgb(0 0 0 / 0.12);
   transform-origin: top center;
   z-index: 30;
+}
+
+.selectRoot.placement-up .menu {
+  top: auto;
+  bottom: calc(100% + 10px);
+  transform-origin: bottom center;
 }
 
 .menu-fade-enter-active,
@@ -250,6 +320,11 @@ onBeforeUnmount(() => {
 .menu-fade-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+.selectRoot.placement-up .menu-fade-enter-from,
+.selectRoot.placement-up .menu-fade-leave-to {
+  transform: translateY(6px);
 }
 
 .menu-fade-enter-to,
@@ -289,6 +364,11 @@ onBeforeUnmount(() => {
     top: calc(100% + 6px);
     border-radius: 12px;
     padding: 4px;
+  }
+
+  .selectRoot.placement-up .menu {
+    top: auto;
+    bottom: calc(100% + 6px);
   }
 }
 </style>

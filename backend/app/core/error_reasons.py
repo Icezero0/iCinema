@@ -13,6 +13,7 @@ class ErrorReason(StrEnum):
     INVALID_TOKEN_TYPE = "invalid_token_type"
     MISSING_AUTHORIZATION_TOKEN = "missing_authorization_token"
     USER_NOT_FOUND = "user_not_found"
+    SITE_PERMISSION_DENIED = "site_permission_denied"
 
     CANNOT_REMOVE_SELF_FROM_ROOM = "cannot_remove_self_from_room"
     INVALID_ROOM_ID = "invalid_room_id"
@@ -83,3 +84,6 @@ class ErrorReason(StrEnum):
     UNSUPPORTED_COMMAND_ACTION = "unsupported_command_action"
     UNSUPPORTED_ROOM_COMMAND_ACTION = "unsupported_room_command_action"
     UNSUPPORTED_ROOM_VIDEO_COMMAND_ACTION = "unsupported_room_video_command_action"
+
+    FEEDBACK_NOT_FOUND = "feedback_not_found"
+    FEEDBACK_PERMISSION_DENIED = "feedback_permission_denied"

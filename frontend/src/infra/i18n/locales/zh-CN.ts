@@ -68,6 +68,8 @@ export default {
     home: "首页",
     publicRooms: "公开房间",
     notifications: "通知",
+    contact: "联系与反馈",
+    feedbackAdmin: "反馈管理",
     profile: "个人资料",
     joinRequests: "请求",
   },
@@ -165,6 +167,93 @@ export default {
       hint: "新的通知会在这里显示。",
     },
     inviteYouToJoin: "邀请您加入 {room}",
+  },
+  contact: {
+    title: "联系与反馈",
+    heading: "联系作者或管理员",
+    description:
+      "可以通过这里配置的联系方式反馈站点问题、账号问题，或需要管理员协助处理的房间事项。",
+    sections: {
+      contact: "联系作者",
+      feedback: "反馈",
+    },
+    methods: {
+      email: {
+        title: "邮箱",
+        action: "发送邮件",
+      },
+      github: {
+        title: "GitHub",
+        action: "打开仓库",
+      },
+      qq: {
+        title: "QQ",
+        action: "通过 QQ 联系",
+      },
+    },
+    empty: {
+      title: "暂未配置联系方式",
+      description:
+        "在 frontend/src/config/contact.ts 中配置邮箱、GitHub 或 QQ 后，这里会显示对应的联系入口。",
+    },
+    feedback: {
+      types: {
+        bug: "Bug",
+        suggestion: "功能建议",
+        experience: "体验问题",
+        other: "其他",
+      },
+      pages: {
+        home: "首页",
+        room: "房间页",
+        publicRooms: "公开房间",
+        joinRequests: "请求",
+        notifications: "通知",
+        profile: "个人资料",
+        contact: "联系与反馈",
+        other: "其他",
+      },
+      form: {
+        type: "类型",
+        page: "页面",
+        title: "标题",
+        titlePlaceholder: "简要概括问题",
+        description: "描述",
+        descriptionPlaceholder: "描述发生了什么、如何复现，以及你期望的结果。",
+        screenshot: "截图",
+        screenshotLimit: "最多可以上传 {count} 张截图。",
+        submit: "提交反馈",
+        success: "反馈已提交。",
+        failed: "提交反馈失败。",
+      },
+    },
+  },
+  feedbackAdmin: {
+    title: "反馈管理",
+    loadFailed: "加载反馈失败。",
+    saveFailed: "保存反馈失败。",
+    saved: "已保存。",
+    screenshotFailed: "打开截图失败。",
+    screenshotRetry: "加载失败，点击重试。",
+    filters: {
+      status: "状态",
+      allStatus: "全部状态",
+    },
+    status: {
+      open: "待处理",
+      reviewing: "处理中",
+      resolved: "已解决",
+      closed: "已关闭",
+    },
+    edit: {
+      action: "处理",
+      status: "状态",
+      note: "处理备注",
+    },
+    empty: {
+      title: "暂无反馈",
+      hint: "用户提交的反馈会显示在这里。",
+    },
   },
   home: {
     headline: "{name}，欢迎回来",

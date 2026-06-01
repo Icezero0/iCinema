@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 type ViewerPayload = {
   src: string;
   alt?: string;
+  revokeOnClose?: boolean;
 };
 
 type State = {
@@ -10,6 +11,7 @@ type State = {
   src: string;
   alt: string;
   scale: number;
+  managedObjectUrl: string;
 };
 
 function clampScale(value: number) {
@@ -22,14 +24,23 @@ export const useMediaViewerStore = defineStore("mediaViewer", {
     src: "",
     alt: "",
     scale: 1,
+    managedObjectUrl: "",
   }),
 
   actions: {
+    revokeManagedObjectUrl() {
+      if (!this.managedObjectUrl) return;
+      URL.revokeObjectURL(this.managedObjectUrl);
+      this.managedObjectUrl = "";
+    },
+
     openViewer(payload: ViewerPayload) {
+      this.revokeManagedObjectUrl();
       this.open = true;
       this.src = payload.src;
       this.alt = payload.alt ?? "";
       this.scale = 1;
+      this.managedObjectUrl = payload.revokeOnClose ? payload.src : "";
     },
 
     closeViewer() {
@@ -37,6 +48,7 @@ export const useMediaViewerStore = defineStore("mediaViewer", {
       this.src = "";
       this.alt = "";
       this.scale = 1;
+      this.revokeManagedObjectUrl();
     },
 
     setScale(scale: number) {

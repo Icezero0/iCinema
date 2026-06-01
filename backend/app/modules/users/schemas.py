@@ -13,6 +13,8 @@ from app.core.validators import (
     normalize_optional_non_empty_str,
     normalize_required_str,
 )
+from app.modules.site.constants import SitePermission, SiteRole
+from app.modules.site.permissions import get_permissions_by_role
 
 settings = get_settings()
 
@@ -76,7 +78,12 @@ class UserResponse(UserBriefResponse):
 
 
 class UserMeResponse(UserResponse):
-    pass
+    site_role: SiteRole
+
+    @computed_field
+    @property
+    def site_permissions(self) -> list[SitePermission]:
+        return sorted(get_permissions_by_role(self.site_role), key=lambda item: item.value)
 
 
 class AvatarUploadResponse(BaseModel):

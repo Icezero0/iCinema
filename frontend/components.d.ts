@@ -30,6 +30,7 @@ declare module 'vue' {
     BasePill: typeof import('./src/ui/base/BasePill.vue')['default']
     BaseSelect: typeof import('./src/ui/base/BaseSelect.vue')['default']
     BaseToastViewport: typeof import('./src/ui/base/BaseToastViewport.vue')['default']
+    GitHubIcon: typeof import('./src/ui/icons/GitHubIcon.vue')['default']
     PanelSectionHeader: typeof import('./src/ui/layout/PanelSectionHeader.vue')['default']
     QfacePenguinIcon: typeof import('./src/ui/icons/QfacePenguinIcon.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

@@ -119,18 +119,6 @@ const activeSyncPermissionOptions = computed(() => [
       </label>
     </section>
 
-    <section class="settingsSection">
-      <div class="sectionTitle">{{ t("room.settings.localPlaybackSection") }}</div>
-
-      <label class="settingField">
-        <span class="settingLabel">{{ t("room.settings.localSyncStrategy") }}</span>
-        <BaseSelect
-          :model-value="localSyncStrategy"
-          :options="localSyncOptions"
-          @update:model-value="emit('update:localSyncStrategy', $event)"
-        />
-      </label>
-    </section>
   </div>
 </template>
 

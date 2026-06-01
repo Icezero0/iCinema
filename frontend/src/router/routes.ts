@@ -54,6 +54,17 @@ export default [
         component: () =>
           import("@/pages/notifications/NotificationsPage.vue"),
       },
+      {
+        path: "contact",
+        name: "contact",
+        component: () => import("@/pages/contact/ContactPage.vue"),
+      },
+      {
+        path: "feedback-admin",
+        name: "feedback-admin",
+        component: () =>
+          import("@/pages/feedback-admin/FeedbackAdminPage.vue"),
+      },
     ],
   },
 ];

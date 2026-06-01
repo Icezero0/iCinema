@@ -40,6 +40,8 @@ from app.modules.media.models import (
     UserEmojiUsage,
     UserStickerLibraryItem,
 )
+from app.modules.feedback.models import Feedback, FeedbackScreenshot
+from app.modules.feedback.constants import FeedbackPage, FeedbackStatus, FeedbackType
 from app.modules.notifications.constants import NotificationType
 from app.modules.notifications.models import Notification
 from app.modules.rooms.constants import (
@@ -56,6 +58,7 @@ from app.modules.rooms.constants import (
 from app.modules.rooms.models import Room, RoomJoinRequest, RoomMember, RoomSettings
 from app.modules.users.models import User
 from app.modules.messages.models import Message
+from app.modules.site.constants import SiteRole
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -131,6 +134,7 @@ async def factories(db_session):
         username: str | None = None,
         password: str = "Password123",
         auto_accept: bool = False,
+        site_role: SiteRole = SiteRole.USER,
     ) -> User:
         counters["user"] += 1
         user = User(
@@ -138,6 +142,7 @@ async def factories(db_session):
             username=username or f"user-{counters['user']}",
             hashed_password=hash_password(password),
             auto_accept=auto_accept,
+            site_role=site_role.value,
         )
         db_session.add(user)
         await db_session.flush()
@@ -323,6 +328,44 @@ async def factories(db_session):
         await db_session.flush()
         return message
 
+    async def create_feedback(
+        *,
+        creator: User,
+        feedback_type: FeedbackType = FeedbackType.BUG,
+        page: FeedbackPage = FeedbackPage.ROOM,
+        title: str = "Feedback title",
+        description: str = "Feedback description",
+        status: FeedbackStatus = FeedbackStatus.OPEN,
+        screenshot_assets: list[MediaAsset] | None = None,
+        handled_by: User | None = None,
+        admin_note: str | None = None,
+    ) -> Feedback:
+        feedback = Feedback(
+            creator_id=creator.id,
+            handled_by_id=handled_by.id if handled_by else None,
+            feedback_type=feedback_type.value,
+            page=page.value,
+            title=title,
+            description=description,
+            status=status.value,
+            admin_note=admin_note,
+        )
+        db_session.add(feedback)
+        await db_session.flush()
+
+        for index, asset in enumerate(screenshot_assets or []):
+            db_session.add(
+                FeedbackScreenshot(
+                    feedback_id=feedback.id,
+                    asset_id=asset.id,
+                    sort_order=index,
+                )
+            )
+        if screenshot_assets:
+            await db_session.flush()
+
+        return feedback
+
     async def add_message_resource_ref(*, message: Message, asset: MediaAsset) -> MessageResourceRef:
         ref = MessageResourceRef(message_id=message.id, media_asset_id=asset.id)
         db_session.add(ref)
@@ -353,6 +396,7 @@ async def factories(db_session):
         add_sticker_to_library=add_sticker_to_library,
         create_emoji_usage=create_emoji_usage,
         create_message=create_message,
+        create_feedback=create_feedback,
         add_message_resource_ref=add_message_resource_ref,
         commit=commit,
         refresh=refresh,

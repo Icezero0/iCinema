@@ -4,16 +4,20 @@ import { useI18n } from "vue-i18n";
 import {
   BellIcon,
   ClipboardDocumentCheckIcon,
+  InboxStackIcon,
   HomeIcon,
+  InformationCircleIcon,
   PlayCircleIcon,
   UserCircleIcon,
 } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
+import { useAuthStore } from "@/stores/auth.store";
 import { useNotificationsStore } from "@/stores/notifications.store";
 
 defineProps<{ open: boolean; mobile?: boolean }>();
 
 const { t } = useI18n();
+const auth = useAuthStore();
 const notifications = useNotificationsStore();
 
 const badgeText = computed(() => {
@@ -41,6 +45,16 @@ const items = computed(() => [
     badge: badgeText.value,
   },
   { to: "/profile", label: t("sidebar.profile"), icon: UserCircleIcon },
+  ...(auth.canManageFeedback
+    ? [
+        {
+          to: "/feedback-admin",
+          label: t("sidebar.feedbackAdmin"),
+          icon: InboxStackIcon,
+        },
+      ]
+    : []),
+  { to: "/contact", label: t("sidebar.contact"), icon: InformationCircleIcon },
 ]);
 </script>
 

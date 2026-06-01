@@ -8,7 +8,18 @@ export type UserResponse = {
   avatar_url: string | null
 }
 
-export type UserMeResponse = UserResponse
+export type SiteRole = 'user' | 'admin'
+export type SitePermission =
+  | 'create_feedback'
+  | 'view_own_feedback'
+  | 'view_all_feedback'
+  | 'update_feedback'
+  | 'delete_feedback'
+
+export type UserMeResponse = UserResponse & {
+  site_role: SiteRole
+  site_permissions: SitePermission[]
+}
 
 export type UserListResponse = {
   items: UserResponse[]

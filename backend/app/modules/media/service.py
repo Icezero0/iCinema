@@ -162,6 +162,38 @@ class MediaService:
         await db.commit()
         return asset
 
+    async def create_feedback_image_asset_in_tx(
+        self,
+        db: AsyncSession,
+        *,
+        file: UploadFile,
+        user: User,
+    ) -> MediaAsset:
+        # Feedback screenshots are part of the feedback record transaction and do not expire.
+        prepared = await self.storage.prepare_upload(
+            file=file,
+            asset_type=MediaAssetType.FEEDBACK_IMAGE,
+        )
+
+        saved = self.storage.save_prepared_upload(
+            prepared=prepared,
+            asset_type=MediaAssetType.FEEDBACK_IMAGE,
+        )
+        return await self.repo.create_media_asset(
+            db,
+            asset_type=MediaAssetType.FEEDBACK_IMAGE,
+            storage_key=saved.storage_key,
+            mime_type=saved.mime_type,
+            file_size=saved.file_size,
+            width=saved.width,
+            height=saved.height,
+            duration_seconds=saved.duration_seconds,
+            sha256=saved.sha256,
+            uploaded_by_user_id=user.id,
+            status=MediaAssetStatus.ACTIVE,
+            expires_at=None,
+        )
+
     async def create_sticker_asset(
         self,
         db: AsyncSession,

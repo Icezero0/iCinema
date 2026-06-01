@@ -14,6 +14,8 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isLoggedIn: (s) => s.status === 'authenticated',
+    canManageFeedback: (s) =>
+      Boolean(s.me?.site_permissions?.includes('view_all_feedback')),
   },
 
   actions: {

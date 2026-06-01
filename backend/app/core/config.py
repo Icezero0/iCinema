@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     image_subdir: str = Field("images", alias="IMAGE_SUBDIR")
     sticker_subdir: str = Field("stickers", alias="STICKER_SUBDIR")
     video_subdir: str = Field("videos", alias="VIDEO_SUBDIR")
+    feedback_image_subdir: str = Field("feedback", alias="FEEDBACK_IMAGE_SUBDIR")
 
     # JWT
     jwt_secret_key: str = Field(..., alias="JWT_SECRET_KEY")
@@ -113,6 +114,10 @@ class Settings(BaseSettings):
     @property
     def video_dir_path(self) -> Path:
         return (self.upload_dir_path / self.video_subdir).resolve()
+
+    @property
+    def feedback_image_dir_path(self) -> Path:
+        return (self.upload_dir_path / self.feedback_image_subdir).resolve()
 
 @lru_cache
 def get_settings() -> Settings:

@@ -47,6 +47,9 @@ class MediaStorageService:
     STICKER_ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
     STICKER_ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
+    FEEDBACK_IMAGE_ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
+    FEEDBACK_IMAGE_ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+
     def _get_base_dir(self, asset_type: str) -> Path:
         if asset_type == MediaAssetType.AVATAR:
             return settings.avatar_dir_path
@@ -56,6 +59,8 @@ class MediaStorageService:
             return settings.sticker_dir_path
         if asset_type == MediaAssetType.VIDEO:
             return settings.video_dir_path
+        if asset_type == MediaAssetType.FEEDBACK_IMAGE:
+            return settings.feedback_image_dir_path
         raise BadRequestError(
             "Unsupported media asset type",
             reason=ErrorReason.UNSUPPORTED_MEDIA_ASSET_TYPE,
@@ -69,6 +74,8 @@ class MediaStorageService:
             return self.IMAGE_ALLOWED_TYPES
         if asset_type == MediaAssetType.STICKER:
             return self.STICKER_ALLOWED_TYPES
+        if asset_type == MediaAssetType.FEEDBACK_IMAGE:
+            return self.FEEDBACK_IMAGE_ALLOWED_TYPES
         raise BadRequestError(
             "Unsupported upload media type",
             reason=ErrorReason.UNSUPPORTED_UPLOAD_MEDIA_TYPE,
@@ -82,6 +89,8 @@ class MediaStorageService:
             return self.IMAGE_ALLOWED_EXTS
         if asset_type == MediaAssetType.STICKER:
             return self.STICKER_ALLOWED_EXTS
+        if asset_type == MediaAssetType.FEEDBACK_IMAGE:
+            return self.FEEDBACK_IMAGE_ALLOWED_EXTS
         raise BadRequestError(
             "Unsupported upload media type",
             reason=ErrorReason.UNSUPPORTED_UPLOAD_MEDIA_TYPE,
