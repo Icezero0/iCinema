@@ -22,7 +22,7 @@ node_modules/
 .db
 
 # alembic
-backend/alembic/versions/
+backend/alembic/versions/__pycache__/
 
 # VS Code
 .vscode/

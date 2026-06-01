@@ -2,6 +2,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.core.config import get_settings
+
 
 TARGET_USER_ID = 1
 ADMIN_ROLE = "admin"
@@ -23,7 +27,7 @@ def column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 def main() -> int:
-    db = (Path(__file__).resolve().parents[2] / "data" / "iCinema.db").resolve()
+    db = get_settings().db_path
     print("DB:", db)
 
     if not db.exists():
