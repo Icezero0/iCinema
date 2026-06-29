@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
+  ComputerDesktopIcon,
   ExclamationTriangleIcon,
   FilmIcon,
   PauseCircleIcon,
@@ -24,13 +25,17 @@ const props = defineProps<{
   volume: number;
   videoFullscreenLabel: string;
   exitVideoFullscreenLabel: string;
+  webFullscreenLabel: string;
+  exitWebFullscreenLabel: string;
   theaterModeLabel: string;
   exitTheaterModeLabel: string;
+  isWebFullscreen?: boolean;
   isTheaterMode?: boolean;
   theaterModeAvailable?: boolean;
 }>();
 
 const emit = defineEmits<{
+  (e: "toggle-web-fullscreen"): void;
   (e: "toggle-theater-mode"): void;
   (e: "play-state-change", value: boolean): void;
   (e: "resource-status-change", value: "idle" | "ready" | "stalling" | "error"): void;
@@ -64,7 +69,7 @@ const showPausedState = computed(() =>
   player.playerState.value === "paused" &&
   !player.errorMessage.value);
 const shouldAutoHideActions = computed(() =>
-  isVideoFullscreen.value || Boolean(props.isTheaterMode));
+  isVideoFullscreen.value || Boolean(props.isWebFullscreen) || Boolean(props.isTheaterMode));
 
 function toDisplayedResourceStatus(status: MediaHealthState, sourceAvailable: boolean) {
   if (!sourceAvailable) return "idle";
@@ -326,7 +331,7 @@ defineExpose({
 
       <div class="playerQuickActions" :class="{ visible: controlsVisible }">
         <button
-          v-if="!isTheaterMode"
+          v-if="!isTheaterMode && !isWebFullscreen"
           class="playerActionBtn"
           type="button"
           :aria-label="isVideoFullscreen ? exitVideoFullscreenLabel : videoFullscreenLabel"
@@ -336,7 +341,17 @@ defineExpose({
           <AppIcon :icon="isVideoFullscreen ? ArrowsPointingInIcon : ArrowsPointingOutIcon" :size="18" />
         </button>
         <button
-          v-if="!isVideoFullscreen && (isTheaterMode || theaterModeAvailable)"
+          v-if="!isVideoFullscreen && !isTheaterMode"
+          class="playerActionBtn"
+          type="button"
+          :aria-label="isWebFullscreen ? exitWebFullscreenLabel : webFullscreenLabel"
+          :title="isWebFullscreen ? exitWebFullscreenLabel : webFullscreenLabel"
+          @click="emit('toggle-web-fullscreen')"
+        >
+          <AppIcon :icon="isWebFullscreen ? ArrowsPointingInIcon : ComputerDesktopIcon" :size="18" />
+        </button>
+        <button
+          v-if="!isVideoFullscreen && !isWebFullscreen && (isTheaterMode || theaterModeAvailable)"
           class="playerActionBtn"
           type="button"
           :aria-label="isTheaterMode ? exitTheaterModeLabel : theaterModeLabel"

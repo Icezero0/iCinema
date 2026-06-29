@@ -477,6 +477,8 @@ export default {
         source: "播放源",
         videoFullscreen: "视频全屏",
         exitVideoFullscreen: "退出视频全屏",
+        webFullscreen: "网页全屏",
+        exitWebFullscreen: "退出网页全屏",
         theaterMode: "剧场模式",
         exitTheaterMode: "退出剧场模式",
       },

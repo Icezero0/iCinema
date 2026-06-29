@@ -62,6 +62,7 @@ const membersLoading = ref(false);
 const membersError = ref("");
 const mainGridRef = ref<HTMLElement | null>(null);
 const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
+const isWebFullscreen = ref(false);
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -351,6 +352,29 @@ async function toggleTheaterMode() {
   await enterTheaterFullscreen();
 }
 
+async function setWebFullscreen(active: boolean) {
+  if (isWebFullscreen.value === active) return;
+
+  if (active && theaterLayout.isTheaterMode.value) {
+    await exitTheaterFullscreen();
+    theaterLayout.setTheaterMode(false);
+    activePanel.value = panelBeforeTheater.value;
+  }
+
+  isWebFullscreen.value = active;
+  document.body.classList.toggle("icinema-room-web-fullscreen-active", active);
+}
+
+function toggleWebFullscreen() {
+  void setWebFullscreen(!isWebFullscreen.value);
+}
+
+function handleRoomKeydown(event: KeyboardEvent) {
+  if (event.key !== "Escape" || !isWebFullscreen.value) return;
+  event.preventDefault();
+  void setWebFullscreen(false);
+}
+
 function syncTheaterFullscreenState() {
   if (!theaterLayout.isTheaterMode.value) return;
   if (document.fullscreenElement) return;
@@ -483,6 +507,7 @@ function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
 
 onMounted(() => {
   document.addEventListener("fullscreenchange", syncTheaterFullscreenState);
+  document.addEventListener("keydown", handleRoomKeydown);
   void fetchRoom();
   void fetchRoomMessages();
   void fetchRoomMembers();
@@ -490,6 +515,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", syncTheaterFullscreenState);
+  document.removeEventListener("keydown", handleRoomKeydown);
+  document.body.classList.remove("icinema-room-web-fullscreen-active");
 });
 watch(roomId, () => {
   currentUserRole.value = "unknown";
@@ -499,6 +526,7 @@ watch(roomId, () => {
   resetMemberActionState();
   resetPlaybackVolume();
   resetPlaybackState();
+  void setWebFullscreen(false);
   theaterLayout.setTheaterMode(false);
   void fetchRoom();
   void fetchRoomMessages();
@@ -539,7 +567,9 @@ watch(
   (active) => {
     if (!active) {
       void exitTheaterFullscreen();
+      return;
     }
+    void setWebFullscreen(false);
   },
 );
 watch(
@@ -576,6 +606,7 @@ watch(
           class="mainGrid"
           :class="{
             theaterMode: theaterLayout.isTheaterMode.value,
+            webFullscreen: isWebFullscreen,
           }"
           :style="effectiveMainGridStyle"
         >
@@ -600,10 +631,14 @@ watch(
                   :volume="playbackVolume"
                   :video-fullscreen-label="t('room.playback.controls.videoFullscreen')"
                   :exit-video-fullscreen-label="t('room.playback.controls.exitVideoFullscreen')"
+                  :web-fullscreen-label="t('room.playback.controls.webFullscreen')"
+                  :exit-web-fullscreen-label="t('room.playback.controls.exitWebFullscreen')"
                   :theater-mode-label="t('room.playback.controls.theaterMode')"
                   :exit-theater-mode-label="t('room.playback.controls.exitTheaterMode')"
+                  :is-web-fullscreen="isWebFullscreen"
                   :is-theater-mode="theaterLayout.isTheaterMode.value"
                   :theater-mode-available="theaterLayout.canUseTheaterMode.value"
+                  @toggle-web-fullscreen="toggleWebFullscreen"
                   @toggle-theater-mode="toggleTheaterMode"
                   @play-state-change="handlePlaybackPlayStateChange"
                   @resource-status-change="handleResourceStatusChange"
@@ -919,6 +954,53 @@ watch(
   width: 100%;
 }
 
+.mainGrid.webFullscreen .stageCard {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 0;
+  background: #05070a;
+  box-shadow: none;
+}
+
+.mainGrid.webFullscreen .stageContent {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.mainGrid.webFullscreen .playerStage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.mainGrid.webFullscreen .playerStage :deep(.playerShell) {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: #05070a;
+  box-shadow: none;
+}
+
+.mainGrid.webFullscreen .playerStage :deep(.playerSurface) {
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+.mainGrid.webFullscreen .playbackControls {
+  width: 100%;
+}
+
 .stageSyncGateOverlay {
   position: absolute;
   inset: 0;
@@ -1125,5 +1207,9 @@ watch(
 
 :global(body.icinema-room-theater-active .app > .body > .content) {
   z-index: 90;
+}
+
+:global(body.icinema-room-web-fullscreen-active) {
+  overflow: hidden;
 }
 </style>

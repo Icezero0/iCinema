@@ -477,6 +477,8 @@ export default {
         source: "Source",
         videoFullscreen: "Video fullscreen",
         exitVideoFullscreen: "Exit video fullscreen",
+        webFullscreen: "Web fullscreen",
+        exitWebFullscreen: "Exit web fullscreen",
         theaterMode: "Theater mode",
         exitTheaterMode: "Exit theater mode",
       },
