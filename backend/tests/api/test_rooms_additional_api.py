@@ -80,11 +80,12 @@ async def test_patch_room_settings_publishes_realtime_event(
 
     response = await api_client.patch(
         f"/api/v1/rooms/{room.id}/settings",
-        json={"sync_policy": "disabled"},
+        json={"sync_policy": "disabled", "seek_auto_pause": False},
         headers=auth_headers(owner),
     )
 
     assert response.status_code == 200
+    assert response.json()["seek_auto_pause"] is False
     app.state.realtime_publisher.publish_room_settings.assert_awaited_once_with(
         room_id=room.id
     )

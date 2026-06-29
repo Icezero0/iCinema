@@ -22,12 +22,14 @@ class RoomSettingsRepository:
         active_sync_permission: RoomActiveSyncPermission = (
             RoomActiveSyncPermission.OWNER_AND_MANAGER
         ),
+        seek_auto_pause: bool = True,
     ) -> RoomSettings:
         settings = RoomSettings(
             room_id=room_id,
             selected_room_video_source_type=selected_room_video_source_type,
             sync_policy=sync_policy,
             active_sync_permission=active_sync_permission,
+            seek_auto_pause=seek_auto_pause,
         )
         db.add(settings)
         await db.flush()

@@ -14,7 +14,7 @@ export type RoomPlayerStageHandle = {
   playVideo: () => Promise<void>;
   togglePlayback: () => Promise<void>;
   pauseVideo: () => void;
-  seekToPercent: (percent: number) => void;
+  seekToPercent: (percent: number, options?: { autoPause?: boolean }) => void;
   seekToSeconds: (seconds: number) => Promise<void>;
   captureCurrentFrame: () => Promise<Blob>;
 };
@@ -110,15 +110,18 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     void options.playerStageRef.value?.togglePlayback();
   }
 
-  function handlePlaybackProgressChange(value: number) {
+  function handlePlaybackProgressChange(value: number, seekOptions?: { autoPause?: boolean }) {
     if (!playbackCanSeek.value) return;
 
-    options.playerStageRef.value?.pauseVideo();
-    playbackIsPlaying.value = false;
+    const autoPause = seekOptions?.autoPause ?? true;
+    if (autoPause) {
+      options.playerStageRef.value?.pauseVideo();
+    }
+    playbackIsPlaying.value = !autoPause;
     const normalizedValue = Math.min(100, Math.max(0, value));
     pendingSeekProgress.value = normalizedValue;
     playbackProgress.value = normalizedValue;
-    options.playerStageRef.value?.seekToPercent(normalizedValue);
+    options.playerStageRef.value?.seekToPercent(normalizedValue, { autoPause });
   }
 
   function handlePlaybackDurationChange(value: number) {

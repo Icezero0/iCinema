@@ -11,6 +11,7 @@ class RoomSettingsPatch(BaseModel):
     selected_room_video_source_type: RoomVideoSourceType | None = None
     sync_policy: RoomSyncPolicy | None = None
     active_sync_permission: RoomActiveSyncPermission | None = None
+    seek_auto_pause: bool | None = None
 
 
 class RoomSettingsResponse(BaseModel):
@@ -20,3 +21,4 @@ class RoomSettingsResponse(BaseModel):
     selected_room_video_source_type: RoomVideoSourceType
     sync_policy: RoomSyncPolicy
     active_sync_permission: RoomActiveSyncPermission
+    seek_auto_pause: bool

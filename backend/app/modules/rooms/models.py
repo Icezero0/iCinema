@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -97,6 +97,12 @@ class RoomSettings(Base):
         nullable=False,
         default=RoomActiveSyncPermission.OWNER_AND_MANAGER,
         server_default=RoomActiveSyncPermission.OWNER_AND_MANAGER.value,
+    )
+    seek_auto_pause: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
     )
 
     created_at: Mapped[datetime | None] = mapped_column(

@@ -172,6 +172,9 @@ class RoomSettingsService:
         if "active_sync_permission" in updates:
             settings.active_sync_permission = updates["active_sync_permission"]
 
+        if "seek_auto_pause" in updates:
+            settings.seek_auto_pause = updates["seek_auto_pause"]
+
         settings = await self.repo.save_settings(db, settings)
         await db.commit()
         await db.refresh(settings)

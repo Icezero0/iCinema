@@ -118,13 +118,14 @@ async function togglePlayback() {
   await playVideo();
 }
 
-function seekToPercent(percent: number) {
+function seekToPercent(percent: number, options: { autoPause?: boolean } = {}) {
   const nextTime = player.seekToPercent(percent);
   if (nextTime === null) return;
 
   const video = videoRef.value;
+  const autoPause = options.autoPause ?? true;
   void player.applyPlayback({
-    status: "paused",
+    status: autoPause ? "paused" : "playing",
     position_seconds: nextTime,
     playback_rate: video?.playbackRate || 1,
   }, { syncPosition: false });

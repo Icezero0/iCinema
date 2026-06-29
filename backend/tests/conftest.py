@@ -183,6 +183,7 @@ async def factories(db_session):
                     selected_room_video_source_type=RoomVideoSourceType.EXTERNAL_URL,
                     sync_policy=RoomSyncPolicy.AUTO_SYNC,
                     active_sync_permission=RoomActiveSyncPermission.OWNER_AND_MANAGER,
+                    seek_auto_pause=True,
                 )
             )
 

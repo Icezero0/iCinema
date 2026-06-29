@@ -34,6 +34,7 @@ type RoomSettingsSavePayload = {
   joinAuditMode: RoomJoinAuditMode;
   syncPolicy: RoomSyncPolicy;
   activeSyncPermission: RoomActiveSyncPermission;
+  seekAutoPause: boolean;
   localSyncStrategy: LocalRoomSyncStrategy;
 };
 
@@ -45,6 +46,7 @@ type RoomSettingsDraft = {
   joinAuditMode: RoomJoinAuditMode;
   syncPolicy: RoomSyncPolicy;
   activeSyncPermission: RoomActiveSyncPermission;
+  seekAutoPause: boolean;
   localSyncStrategy: LocalRoomSyncStrategy;
 };
 
@@ -52,6 +54,7 @@ type RoomSettingsDraftKey = keyof RoomSettingsDraft;
 
 const defaultSyncPolicy: RoomSyncPolicy = "auto_sync";
 const defaultActiveSyncPermission: RoomActiveSyncPermission = "owner_and_manager";
+const defaultSeekAutoPause = true;
 
 const draft = reactive<RoomSettingsDraft>({
   name: props.room.name,
@@ -59,6 +62,7 @@ const draft = reactive<RoomSettingsDraft>({
   joinAuditMode: props.room.join_audit_mode ?? "manual_review",
   syncPolicy: props.roomSettings?.sync_policy ?? defaultSyncPolicy,
   activeSyncPermission: props.roomSettings?.active_sync_permission ?? defaultActiveSyncPermission,
+  seekAutoPause: props.roomSettings?.seek_auto_pause ?? defaultSeekAutoPause,
   localSyncStrategy: props.localSyncStrategy,
 });
 const dirty = reactive<Record<RoomSettingsDraftKey, boolean>>({
@@ -67,6 +71,7 @@ const dirty = reactive<Record<RoomSettingsDraftKey, boolean>>({
   joinAuditMode: false,
   syncPolicy: false,
   activeSyncPermission: false,
+  seekAutoPause: false,
   localSyncStrategy: false,
 });
 
@@ -77,6 +82,7 @@ const saved = computed<RoomSettingsDraft>(() => ({
   joinAuditMode: props.room.join_audit_mode ?? "manual_review",
   syncPolicy: props.roomSettings?.sync_policy ?? defaultSyncPolicy,
   activeSyncPermission: props.roomSettings?.active_sync_permission ?? defaultActiveSyncPermission,
+  seekAutoPause: props.roomSettings?.seek_auto_pause ?? defaultSeekAutoPause,
   localSyncStrategy: props.localSyncStrategy,
 }));
 
@@ -92,6 +98,7 @@ const hasRoomSettingsChanges = computed(() =>
   hasLoadedRoomSettings.value &&
   (
     draft.syncPolicy !== saved.value.syncPolicy ||
+    draft.seekAutoPause !== saved.value.seekAutoPause ||
     (props.isOwner && draft.activeSyncPermission !== saved.value.activeSyncPermission)
   ));
 const hasLocalChanges = computed(() =>
@@ -113,6 +120,7 @@ function save() {
     joinAuditMode: draft.joinAuditMode,
     syncPolicy: draft.syncPolicy,
     activeSyncPermission: draft.activeSyncPermission,
+    seekAutoPause: draft.seekAutoPause,
     localSyncStrategy: draft.localSyncStrategy,
   });
 }
@@ -157,6 +165,7 @@ watch(
     if (!props.roomSettings) return;
     reconcileDraftField("syncPolicy");
     reconcileDraftField("activeSyncPermission");
+    reconcileDraftField("seekAutoPause");
   },
   { immediate: true },
 );
@@ -178,6 +187,7 @@ watch(
         :join-audit-mode="draft.joinAuditMode"
         :sync-policy="draft.syncPolicy"
         :active-sync-permission="draft.activeSyncPermission"
+        :seek-auto-pause="draft.seekAutoPause"
         :settings-loading="settingsLoading"
         :settings-error="settingsError"
         :can-manage-room-settings="canManageRoomSettings"
@@ -189,6 +199,7 @@ watch(
         @update:join-audit-mode="setDraftField('joinAuditMode', $event)"
         @update:sync-policy="setDraftField('syncPolicy', $event)"
         @update:active-sync-permission="setDraftField('activeSyncPermission', $event)"
+        @update:seek-auto-pause="setDraftField('seekAutoPause', $event)"
         @update:local-sync-strategy="setDraftField('localSyncStrategy', $event as LocalRoomSyncStrategy)"
       />
     </div>

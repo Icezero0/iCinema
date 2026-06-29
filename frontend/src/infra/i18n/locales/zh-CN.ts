@@ -448,6 +448,7 @@ export default {
       syncAuto: "自动同步",
       syncManual: "手动同步",
       activeSyncPermission: "主动同步权限",
+      seekAutoPause: "跳转后自动暂停",
       activeSyncOwnerOnly: "仅房主",
       activeSyncOwnerAndManager: "房主和管理员",
       activeSyncAllMembers: "所有成员",

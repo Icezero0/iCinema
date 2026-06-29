@@ -104,12 +104,14 @@ export type RoomSettings = {
   selected_room_video_source_type: RoomVideoSourceType;
   sync_policy: RoomSyncPolicy;
   active_sync_permission: RoomActiveSyncPermission;
+  seek_auto_pause: boolean;
 };
 
 export type RoomSettingsPatchPayload = {
   selected_room_video_source_type?: RoomVideoSourceType | null;
   sync_policy?: RoomSyncPolicy | null;
   active_sync_permission?: RoomActiveSyncPermission | null;
+  seek_auto_pause?: boolean | null;
 };
 
 type RoomResponse = {

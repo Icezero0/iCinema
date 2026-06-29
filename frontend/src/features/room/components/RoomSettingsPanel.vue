@@ -14,6 +14,7 @@ defineProps<{
   joinAuditMode: RoomJoinAuditMode;
   syncPolicy: RoomSyncPolicy;
   activeSyncPermission: RoomActiveSyncPermission;
+  seekAutoPause: boolean;
   settingsLoading?: boolean;
   settingsError?: string;
   canManageRoomSettings?: boolean;
@@ -28,6 +29,7 @@ const emit = defineEmits<{
   (e: "update:joinAuditMode", value: RoomJoinAuditMode): void;
   (e: "update:syncPolicy", value: RoomSyncPolicy): void;
   (e: "update:activeSyncPermission", value: RoomActiveSyncPermission): void;
+  (e: "update:seekAutoPause", value: boolean): void;
   (e: "update:localSyncStrategy", value: string): void;
 }>();
 
@@ -51,6 +53,10 @@ const activeSyncPermissionOptions = computed(() => [
   { value: "owner_and_manager", label: t("room.settings.activeSyncOwnerAndManager") },
   { value: "all_members", label: t("room.settings.activeSyncAllMembers") },
 ]);
+
+function handleSeekAutoPauseChange(event: Event) {
+  emit("update:seekAutoPause", (event.target as HTMLInputElement).checked);
+}
 </script>
 
 <template>
@@ -116,6 +122,20 @@ const activeSyncPermissionOptions = computed(() => [
           :disabled="settingsLoading"
           @update:model-value="emit('update:activeSyncPermission', $event as RoomActiveSyncPermission)"
         />
+      </label>
+
+      <label class="settingField checkboxField">
+        <span class="settingLabel">{{ t("room.settings.seekAutoPause") }}</span>
+        <span class="checkboxControl">
+          <input
+            class="checkboxInput"
+            type="checkbox"
+            :checked="seekAutoPause"
+            :disabled="settingsLoading"
+            @change="handleSeekAutoPauseChange"
+          />
+          <span class="checkboxVisual" aria-hidden="true" />
+        </span>
       </label>
     </section>
 
@@ -200,6 +220,81 @@ const activeSyncPermissionOptions = computed(() => [
 
 .settingField :deep(.fieldRoot) {
   gap: 5px;
+}
+
+.checkboxField {
+  min-height: 34px;
+}
+
+.checkboxControl {
+  position: relative;
+  justify-self: start;
+  width: 42px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.checkboxInput {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.checkboxInput:disabled {
+  cursor: not-allowed;
+}
+
+.checkboxVisual {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--c-border);
+  background: color-mix(in srgb, var(--c-surface) 72%, var(--c-bg));
+  box-shadow: inset 0 1px 2px rgb(15 23 42 / 0.08);
+  pointer-events: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.checkboxVisual::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-text-muted) 68%, white);
+  box-shadow: 0 2px 5px rgb(15 23 42 / 0.18);
+  transition:
+    background-color 160ms ease,
+    transform 180ms ease;
+}
+
+.checkboxInput:checked + .checkboxVisual {
+  border-color: color-mix(in srgb, var(--c-primary) 52%, var(--c-border));
+  background: color-mix(in srgb, var(--c-primary) 24%, var(--c-surface));
+  box-shadow:
+    inset 0 1px 2px rgb(15 23 42 / 0.08),
+    0 0 0 3px color-mix(in srgb, var(--c-primary) 10%, transparent);
+}
+
+.checkboxInput:checked + .checkboxVisual::after {
+  background: var(--c-primary);
+  transform: translateX(18px);
+}
+
+.checkboxInput:focus-visible + .checkboxVisual {
+  outline: 2px solid color-mix(in srgb, var(--c-primary) 54%, transparent);
+  outline-offset: 2px;
+}
+
+.checkboxInput:disabled + .checkboxVisual {
+  opacity: 0.62;
 }
 
 .readonlyValue {

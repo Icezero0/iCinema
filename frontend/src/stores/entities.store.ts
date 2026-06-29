@@ -67,6 +67,7 @@ type EntityRoom = {
   selected_room_video_source_type?: RoomSettings["selected_room_video_source_type"];
   sync_policy?: RoomSettings["sync_policy"];
   active_sync_permission?: RoomSettings["active_sync_permission"];
+  seek_auto_pause?: RoomSettings["seek_auto_pause"];
   local_sync_strategy?: LocalRoomSyncStrategy;
   local_volume?: number;
 };
@@ -204,6 +205,7 @@ export const useEntitiesStore = defineStore("entities", {
         selected_room_video_source_type: settings.selected_room_video_source_type,
         sync_policy: settings.sync_policy,
         active_sync_permission: settings.active_sync_permission,
+        seek_auto_pause: settings.seek_auto_pause,
       });
     },
 

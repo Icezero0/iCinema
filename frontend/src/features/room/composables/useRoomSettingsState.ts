@@ -28,6 +28,7 @@ export type RoomSettingsSavePayload = {
   joinAuditMode: RoomJoinAuditMode;
   syncPolicy: RoomSyncPolicy;
   activeSyncPermission: RoomActiveSyncPermission;
+  seekAutoPause: boolean;
   localSyncStrategy: LocalRoomSyncStrategy;
 };
 
@@ -140,6 +141,7 @@ export function useRoomSettingsState(options: UseRoomSettingsStateOptions) {
       const settingsPatch: {
         sync_policy?: RoomSyncPolicy;
         active_sync_permission?: RoomActiveSyncPermission;
+        seek_auto_pause?: boolean;
       } = {};
 
       if (options.canManageRoomSettings.value) {
@@ -152,6 +154,9 @@ export function useRoomSettingsState(options: UseRoomSettingsStateOptions) {
             (roomSettings.value?.active_sync_permission ?? "owner_and_manager")
         ) {
           settingsPatch.active_sync_permission = payload.activeSyncPermission;
+        }
+        if (payload.seekAutoPause !== (roomSettings.value?.seek_auto_pause ?? true)) {
+          settingsPatch.seek_auto_pause = payload.seekAutoPause;
         }
       }
 

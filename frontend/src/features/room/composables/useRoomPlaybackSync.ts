@@ -47,7 +47,7 @@ type UseRoomPlaybackSyncOptions = {
     playbackSourceFile: Ref<File | null>;
     playbackSourceFileHash: Ref<string>;
     toggleLocalPlayback: () => void;
-    handleLocalPlaybackProgressChange: (value: number) => void;
+    handleLocalPlaybackProgressChange: (value: number, options?: { autoPause?: boolean }) => void;
     applyLocalPlaybackSource: (payload: PlaybackSourcePayload & { localFileHash?: string | null }) => void;
     applyRealtimeVideoSource: (source: RoomRealtimeVideoSourceState | null) => unknown;
     applyRealtimePlaybackState: (
@@ -519,7 +519,9 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
     }
 
     if (!canUseRoomRuntimePlaybackCommands() || options.playback.playbackDuration.value <= 0) {
-      options.playback.handleLocalPlaybackProgressChange(value);
+      options.playback.handleLocalPlaybackProgressChange(value, {
+        autoPause: options.roomSettings.value?.seek_auto_pause ?? true,
+      });
       return;
     }
 
@@ -527,12 +529,25 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
 
     const normalizedValue = Math.min(100, Math.max(0, value));
     const positionSeconds = options.playback.playbackDuration.value * (normalizedValue / 100);
-    void sendRoomRealtimePlaybackSeek({
-      position_seconds: positionSeconds,
-      anchor_ts_ms: Date.now(),
-    }).then((response) => {
-      void options.playback.applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
-    }).catch(showRealtimePlaybackError);
+    const anchorTsMs = Date.now();
+    const autoPause = options.roomSettings.value?.seek_auto_pause ?? true;
+
+    void (async () => {
+      const seekResponse = await sendRoomRealtimePlaybackSeek({
+        position_seconds: positionSeconds,
+        anchor_ts_ms: anchorTsMs,
+      });
+      await options.playback.applyRealtimePlaybackState(seekResponse.playback ?? null, { syncPosition: true });
+
+      if (autoPause) return;
+
+      const playResponse = await sendRoomRealtimePlaybackPlay({
+        position_seconds: positionSeconds,
+        anchor_ts_ms: Date.now(),
+        playback_rate: 1,
+      });
+      await options.playback.applyRealtimePlaybackState(playResponse.playback ?? null, { syncPosition: true });
+    })().catch(showRealtimePlaybackError);
   }
 
   function reportDisplayedResourceStatus(status: DisplayResourceStatus) {

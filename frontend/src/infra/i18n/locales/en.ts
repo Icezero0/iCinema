@@ -448,6 +448,7 @@ export default {
       syncAuto: "Auto sync",
       syncManual: "Manual sync",
       activeSyncPermission: "Active sync permission",
+      seekAutoPause: "Pause after seeking",
       activeSyncOwnerOnly: "Owner only",
       activeSyncOwnerAndManager: "Owner/Manager",
       activeSyncAllMembers: "All members",

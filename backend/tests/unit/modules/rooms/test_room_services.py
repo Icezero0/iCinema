@@ -39,6 +39,7 @@ async def test_create_room_creates_owner_membership_and_settings(db_session, fac
     assert len(settings_list) == 1
     assert settings_list[0].room_id == room.id
     assert settings_list[0].sync_policy == RoomSyncPolicy.AUTO_SYNC
+    assert settings_list[0].seek_auto_pause is True
 
 
 # 验证非成员无法访问私有房间。
@@ -192,6 +193,7 @@ async def test_get_accessible_room_settings_creates_default_settings_for_public_
 
     assert settings.room_id == room.id
     assert settings.sync_policy == RoomSyncPolicy.AUTO_SYNC
+    assert settings.seek_auto_pause is True
 
 
 # 验证更新房间设置时会持久化传入的配置变更。
@@ -204,10 +206,14 @@ async def test_patch_room_settings_updates_selected_fields(db_session, factories
         db_session,
         room_id=room.id,
         user=owner,
-        payload=RoomSettingsPatch(sync_policy=RoomSyncPolicy.DISABLED),
+        payload=RoomSettingsPatch(
+            sync_policy=RoomSyncPolicy.DISABLED,
+            seek_auto_pause=False,
+        ),
     )
 
     assert settings.sync_policy == RoomSyncPolicy.DISABLED
+    assert settings.seek_auto_pause is False
 
 
 # 验证自动通过模式会直接把申请人加入房间而不创建申请记录。
