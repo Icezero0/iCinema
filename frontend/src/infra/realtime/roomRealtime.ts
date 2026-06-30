@@ -70,6 +70,13 @@ export type RoomRealtimePlaybackCommandPayload = {
   playback_rate?: number;
 };
 
+export type RoomRealtimePlaybackSeekPayload = Omit<
+  RoomRealtimePlaybackCommandPayload,
+  "playback_rate"
+> & {
+  resume_after_seek?: boolean;
+};
+
 export type RoomRealtimeResourceStatusPayload = {
   status: RoomRealtimeResourceStatus;
   reported_at_ms: number;
@@ -145,7 +152,7 @@ export function sendRoomRealtimePlaybackPause(payload: RoomRealtimePlaybackComma
   });
 }
 
-export function sendRoomRealtimePlaybackSeek(payload: Omit<RoomRealtimePlaybackCommandPayload, "playback_rate">) {
+export function sendRoomRealtimePlaybackSeek(payload: RoomRealtimePlaybackSeekPayload) {
   return wsClient.command<RoomRealtimePlaybackResponse>("playback_seek", payload);
 }
 

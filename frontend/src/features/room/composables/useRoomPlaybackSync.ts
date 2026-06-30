@@ -532,22 +532,13 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
     const anchorTsMs = Date.now();
     const autoPause = options.roomSettings.value?.seek_auto_pause ?? true;
 
-    void (async () => {
-      const seekResponse = await sendRoomRealtimePlaybackSeek({
-        position_seconds: positionSeconds,
-        anchor_ts_ms: anchorTsMs,
-      });
-      await options.playback.applyRealtimePlaybackState(seekResponse.playback ?? null, { syncPosition: true });
-
-      if (autoPause) return;
-
-      const playResponse = await sendRoomRealtimePlaybackPlay({
-        position_seconds: positionSeconds,
-        anchor_ts_ms: Date.now(),
-        playback_rate: 1,
-      });
-      await options.playback.applyRealtimePlaybackState(playResponse.playback ?? null, { syncPosition: true });
-    })().catch(showRealtimePlaybackError);
+    void sendRoomRealtimePlaybackSeek({
+      position_seconds: positionSeconds,
+      anchor_ts_ms: anchorTsMs,
+      resume_after_seek: !autoPause,
+    }).then((response) => {
+        void options.playback.applyRealtimePlaybackState(response.playback ?? null, { syncPosition: true });
+      }).catch(showRealtimePlaybackError);
   }
 
   function reportDisplayedResourceStatus(status: DisplayResourceStatus) {

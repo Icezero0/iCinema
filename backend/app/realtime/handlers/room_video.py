@@ -321,12 +321,17 @@ class RoomVideoCommandHandler:
             data.get("anchor_ts_ms"),
             field_name="anchor_ts_ms",
         )
+        resume_after_seek = self._parse_optional_bool(
+            data.get("resume_after_seek"),
+            field_name="resume_after_seek",
+        )
 
         playback = await self.video_runtime_service.seek(
             room_id=room_id,
             position_seconds=position_seconds,
             anchor_ts_ms=anchor_ts_ms,
             sync_policy=sync_policy,
+            resume_after_seek=resume_after_seek,
         )
 
         logger.info(
@@ -564,6 +569,21 @@ class RoomVideoCommandHandler:
         if value is None:
             return None
         return RoomVideoCommandHandler._parse_positive_int(value, field_name=field_name)
+
+    @staticmethod
+    def _parse_optional_bool(value: Any, *, field_name: str) -> bool:
+        if value is None:
+            return False
+        if not isinstance(value, bool):
+            raise BadRequestError(
+                f"{field_name} must be a boolean",
+                reason=ErrorReason.REQUEST_VALIDATION_FAILED,
+                details={
+                    "field": field_name,
+                    "constraint": "boolean",
+                },
+            )
+        return value
 
     @staticmethod
     def _parse_positive_int(value: Any, *, field_name: str) -> int:

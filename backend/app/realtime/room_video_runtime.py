@@ -259,6 +259,7 @@ class RoomVideoRuntimeService:
         position_seconds: float,
         anchor_ts_ms: int,
         sync_policy: RoomSyncPolicy,
+        resume_after_seek: bool = False,
     ) -> PlaybackState:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
@@ -266,20 +267,35 @@ class RoomVideoRuntimeService:
 
             current = state.playback
             playback_rate = current.playback_rate if current is not None else 1.0
+            should_hold_for_stalling = (
+                resume_after_seek
+                and sync_policy == RoomSyncPolicy.AUTO_SYNC
+                and bool(state.stalling_user_ids)
+            )
+            should_resume_now = resume_after_seek and not should_hold_for_stalling
 
             playback = PlaybackState(
                 room_id=room_id,
-                status=PlaybackStatusType.PAUSED,
+                status=(
+                    PlaybackStatusType.PLAYING
+                    if should_resume_now
+                    else PlaybackStatusType.PAUSED
+                ),
                 position_seconds=position_seconds,
                 anchor_ts_ms=anchor_ts_ms,
                 playback_rate=playback_rate,
             )
             state.playback = playback
-            state.playback_hold_reason = (
-                PlaybackHoldReason.MANUAL
-                if sync_policy == RoomSyncPolicy.AUTO_SYNC
-                else PlaybackHoldReason.NONE
-            )
+            if should_hold_for_stalling:
+                state.playback_hold_reason = PlaybackHoldReason.STALL
+            elif should_resume_now:
+                state.playback_hold_reason = PlaybackHoldReason.NONE
+            else:
+                state.playback_hold_reason = (
+                    PlaybackHoldReason.MANUAL
+                    if sync_policy == RoomSyncPolicy.AUTO_SYNC
+                    else PlaybackHoldReason.NONE
+                )
             return self._copy_playback(playback)
 
     async def report_user_resource_status(

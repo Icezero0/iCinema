@@ -303,7 +303,11 @@ async def test_handle_seek_calls_runtime_and_publishes_seek(monkeypatch) -> None
     command = WsCommandPayload(
         request_id="req-6",
         action=WsCommandAction.PLAYBACK_SEEK,
-        data={"position_seconds": 12.0, "anchor_ts_ms": 4000},
+        data={
+            "position_seconds": 12.0,
+            "anchor_ts_ms": 4000,
+            "resume_after_seek": True,
+        },
     )
     playback = PlaybackState(
         room_id=61,
@@ -314,6 +318,7 @@ async def test_handle_seek_calls_runtime_and_publishes_seek(monkeypatch) -> None
     )
 
     async def fake_seek(**kwargs):  # noqa: ANN001
+        assert kwargs["resume_after_seek"] is True
         return playback
 
     monkeypatch.setattr(handler.video_runtime_service, "seek", fake_seek)

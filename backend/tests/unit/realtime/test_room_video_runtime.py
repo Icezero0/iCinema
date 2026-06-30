@@ -145,6 +145,48 @@ async def test_manual_seek_in_auto_sync_mode_pauses_until_manual_play() -> None:
     assert playback.position_seconds == 42.0
 
 
+async def test_seek_with_resume_after_seek_waits_for_stalling_users_in_auto_sync_mode() -> None:
+    service = RoomVideoRuntimeService()
+    room_id = 405
+
+    await service.set_room_video_source(
+        room_id=room_id,
+        source_type=RoomVideoSourceType.EXTERNAL_URL,
+        external_url="https://example.com/video.mp4",
+    )
+    await service.report_user_resource_status(
+        room_id=room_id,
+        user_id=1,
+        status=ResourceHealthStatusType.STALLING,
+        reported_at_ms=1000,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
+    )
+
+    playback = await service.seek(
+        room_id=room_id,
+        position_seconds=42.0,
+        anchor_ts_ms=2000,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
+        resume_after_seek=True,
+    )
+
+    assert playback.status == PlaybackStatusType.PAUSED
+    assert playback.position_seconds == 42.0
+
+    recovered_result = await service.report_user_resource_status(
+        room_id=room_id,
+        user_id=1,
+        status=ResourceHealthStatusType.READY,
+        reported_at_ms=3000,
+        sync_policy=RoomSyncPolicy.AUTO_SYNC,
+    )
+
+    assert recovered_result.auto_action == AutoPlaybackAction.PLAY
+    assert recovered_result.auto_playback is not None
+    assert recovered_result.auto_playback.status == PlaybackStatusType.PLAYING
+    assert recovered_result.auto_playback.position_seconds == 42.0
+
+
 # AUTO_SYNC 模式下只要仍有用户 STALLING 就不能手动恢复播放
 async def test_manual_play_is_rejected_while_someone_is_stalling_in_auto_sync_mode() -> None:
     service = RoomVideoRuntimeService()
