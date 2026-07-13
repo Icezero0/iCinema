@@ -21,6 +21,9 @@ defineProps<{
   isOwner?: boolean;
   localSyncStrategy: string;
   localSyncOptions: { value: string; label: string }[];
+  danmakuEnabled: boolean;
+  danmakuOpacity: number;
+  danmakuSpeed: number;
 }>();
 
 const emit = defineEmits<{
@@ -31,6 +34,9 @@ const emit = defineEmits<{
   (e: "update:activeSyncPermission", value: RoomActiveSyncPermission): void;
   (e: "update:seekAutoPause", value: boolean): void;
   (e: "update:localSyncStrategy", value: string): void;
+  (e: "update:danmakuEnabled", value: boolean): void;
+  (e: "update:danmakuOpacity", value: number): void;
+  (e: "update:danmakuSpeed", value: number): void;
 }>();
 
 const { t } = useI18n();
@@ -56,6 +62,18 @@ const activeSyncPermissionOptions = computed(() => [
 
 function handleSeekAutoPauseChange(event: Event) {
   emit("update:seekAutoPause", (event.target as HTMLInputElement).checked);
+}
+
+function handleDanmakuEnabledChange(event: Event) {
+  emit("update:danmakuEnabled", (event.target as HTMLInputElement).checked);
+}
+
+function handleDanmakuOpacityChange(event: Event) {
+  emit("update:danmakuOpacity", Number((event.target as HTMLInputElement).value));
+}
+
+function handleDanmakuSpeedChange(event: Event) {
+  emit("update:danmakuSpeed", Number((event.target as HTMLInputElement).value));
 }
 </script>
 
@@ -135,6 +153,55 @@ function handleSeekAutoPauseChange(event: Event) {
             @change="handleSeekAutoPauseChange"
           />
           <span class="checkboxVisual" aria-hidden="true" />
+        </span>
+      </label>
+    </section>
+
+    <section class="settingsSection">
+      <div class="sectionTitle">{{ t("room.settings.danmakuSection") }}</div>
+
+      <label class="settingField checkboxField">
+        <span class="settingLabel">{{ t("room.settings.danmakuEnabled") }}</span>
+        <span class="checkboxControl">
+          <input
+            class="checkboxInput"
+            type="checkbox"
+            :checked="danmakuEnabled"
+            @change="handleDanmakuEnabledChange"
+          />
+          <span class="checkboxVisual" aria-hidden="true" />
+        </span>
+      </label>
+
+      <label class="settingField rangeField">
+        <span class="settingLabel">{{ t("room.settings.danmakuOpacity") }}</span>
+        <span class="rangeControl">
+          <input
+            class="rangeInput"
+            type="range"
+            min="0.35"
+            max="1"
+            step="0.05"
+            :value="danmakuOpacity"
+            @input="handleDanmakuOpacityChange"
+          />
+          <span class="rangeValue">{{ Math.round(danmakuOpacity * 100) }}%</span>
+        </span>
+      </label>
+
+      <label class="settingField rangeField">
+        <span class="settingLabel">{{ t("room.settings.danmakuSpeed") }}</span>
+        <span class="rangeControl">
+          <input
+            class="rangeInput"
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            :value="danmakuSpeed"
+            @input="handleDanmakuSpeedChange"
+          />
+          <span class="rangeValue">{{ danmakuSpeed.toFixed(1) }}x</span>
         </span>
       </label>
     </section>
@@ -295,6 +362,73 @@ function handleSeekAutoPauseChange(event: Event) {
 
 .checkboxInput:disabled + .checkboxVisual {
   opacity: 0.62;
+}
+
+.rangeField {
+  min-height: 34px;
+}
+
+.rangeControl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.rangeInput {
+  width: 100%;
+  min-width: 0;
+  height: 18px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rangeInput::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 16%, var(--c-border));
+  background: color-mix(in srgb, var(--c-surface) 48%, var(--c-bg));
+}
+
+.rangeInput::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--c-surface) 80%, white);
+  background: var(--c-primary);
+  box-shadow: 0 4px 10px rgb(15 23 42 / 0.18);
+}
+
+.rangeInput::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 16%, var(--c-border));
+  background: color-mix(in srgb, var(--c-surface) 48%, var(--c-bg));
+}
+
+.rangeInput::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--c-surface) 80%, white);
+  background: var(--c-primary);
+  box-shadow: 0 4px 10px rgb(15 23 42 / 0.18);
+}
+
+.rangeInput:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--c-primary) 54%, transparent);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+
+.rangeValue {
+  color: var(--c-text-muted);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .readonlyValue {

@@ -25,7 +25,10 @@ import type { MemberStatus, RoomPanelKey, RoomRole } from "@/features/room/types
 import type { ChatSegment } from "@/features/chat/types";
 import { useRoomTheaterLayout } from "@/features/room/composables/useRoomTheaterLayout";
 import { useRoomWorkspaceLayout } from "@/features/room/composables/useRoomWorkspaceLayout";
-import { useRoomSettingsState } from "@/features/room/composables/useRoomSettingsState";
+import {
+  useRoomSettingsState,
+  type RoomSettingsSavePayload,
+} from "@/features/room/composables/useRoomSettingsState";
 import {
   useRoomPlaybackState,
   type RoomPlayerStageHandle,
@@ -41,9 +44,19 @@ import { type RoomRealtimeSessionClosed } from "@/infra/realtime/roomRealtime";
 import { useMessagesStore } from "@/stores/messages.store";
 import { useEntitiesStore } from "@/stores/entities.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { useAssetsStore } from "@/stores/assets.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
 import { getBackendErrorMessage } from "@/infra/http/client";
+import type { MessageResponse } from "@/infra/api/messages.api";
+import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
+import { stripChatTextCursorAnchors } from "@/features/chat/segments";
+import { useRoomDanmakuSettings } from "@/features/room/composables/useRoomDanmakuSettings";
+import {
+  ROOM_DANMAKU_LANES,
+  type ChatDanmakuItem,
+  type ChatDanmakuSegment,
+} from "@/features/room/danmaku/types";
 
 const { t, te } = useI18n();
 const route = useRoute();
@@ -51,6 +64,7 @@ const router = useRouter();
 const auth = useAuthStore();
 const entitiesStore = useEntitiesStore();
 const messagesStore = useMessagesStore();
+const assetsStore = useAssetsStore();
 const toasts = useToastsStore();
 
 type RoomRoleState = RoomRole | "unknown";
@@ -63,6 +77,8 @@ const membersError = ref("");
 const mainGridRef = ref<HTMLElement | null>(null);
 const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
 const isWebFullscreen = ref(false);
+const danmakuItems = ref<ChatDanmakuItem[]>([]);
+let danmakuSequence = 0;
 
 const roomId = computed(() => {
   const raw = route.params.id;
@@ -104,6 +120,12 @@ const panelOptions = computed(() => {
 const roomMessagesState = computed(() => messagesStore.getRoomState(roomId.value));
 const roomChatMessages = computed(() => messagesStore.getRoomChatMessages(roomId.value));
 const entityRoomMembers = computed(() => entitiesStore.getRoomMembers(roomId.value));
+const {
+  danmakuSettings,
+  setDanmakuEnabled,
+  setDanmakuOpacity,
+  setDanmakuSpeed,
+} = useRoomDanmakuSettings(roomId);
 const playback = useRoomPlaybackState({
   roomId,
   playerStageRef,
@@ -217,6 +239,7 @@ const realtime = useRoomRealtimeSession({
   refreshRoomRequests: () => fetchRoomRequests({ force: true }),
   refreshRoomSettings: fetchRoomSettings,
   onSessionClosed: handleRealtimeSessionClosed,
+  onRealtimeMessage: handleRealtimeMessage,
 });
 const playbackSync = useRoomPlaybackSync({
   roomId,
@@ -494,6 +517,141 @@ async function handleSend(segments: ChatSegment[]) {
   }
 }
 
+async function handleSaveSettings(payload: RoomSettingsSavePayload) {
+  const saved = await handleSaveRoomSettings(payload);
+  if (!saved) return;
+
+  setDanmakuEnabled(payload.danmakuEnabled);
+  setDanmakuOpacity(payload.danmakuOpacity);
+  setDanmakuSpeed(payload.danmakuSpeed);
+}
+
+function mapChatSegmentsToDanmakuSegments(segments: ChatSegment[]) {
+  const result: ChatDanmakuSegment[] = [];
+
+  segments.forEach((segment) => {
+    if (segment.type === "text") {
+      const text = stripChatTextCursorAnchors(segment.content);
+      if (text) {
+        result.push({ type: "text", text });
+      }
+      return;
+    }
+
+    if (segment.type === "emoji") {
+      const src = assetsStore.getAssetDisplayUrl("qface", segment.emojiId) || getQfaceUrl(segment.emojiId);
+      if (src) {
+        result.push({
+          type: "qface",
+          emojiId: segment.emojiId,
+          src,
+          alt: getQfaceLabel(segment.emojiId),
+        });
+      } else {
+        result.push({ type: "text", text: getQfaceLabel(segment.emojiId) });
+      }
+      return;
+    }
+
+    result.push({
+      type: "text",
+      text: segment.kind === "sticker"
+        ? t("room.danmaku.stickerTag")
+        : t("room.danmaku.imageTag"),
+    });
+  });
+
+  return result;
+}
+
+function estimateDanmakuWidth(segments: ChatDanmakuSegment[]) {
+  const textWidth = segments.reduce((total, segment) => {
+    if (segment.type === "qface") return total + 26;
+    return total + Array.from(segment.text).reduce((sum, char) => {
+      return sum + (/[\u3400-\u9fff\uff00-\uffef]/.test(char) ? 15 : 8);
+    }, 0);
+  }, 0);
+
+  return Math.min(640, Math.max(96, 58 + textWidth));
+}
+
+function getDanmakuDurationMs() {
+  return Math.round(9000 / Math.max(0.5, Math.min(2, danmakuSettings.value.speed)));
+}
+
+function canUseDanmakuLane(lane: number, now: number) {
+  const duration = getDanmakuDurationMs();
+  const viewportWidth = Math.max(320, window.innerWidth || 0);
+  const spacing = 28;
+
+  return !danmakuItems.value.some((item) => {
+    if (item.lane !== lane) return false;
+
+    const elapsed = now - item.createdAt;
+    if (elapsed >= duration) return false;
+
+    const totalDistance = viewportWidth + item.estimatedWidth;
+    const moved = totalDistance * (elapsed / duration);
+    const itemRightEdge = viewportWidth + item.estimatedWidth - moved;
+
+    return itemRightEdge > viewportWidth - spacing || elapsed < 260;
+  });
+}
+
+function chooseDanmakuLane(now: number) {
+  for (let lane = 0; lane < ROOM_DANMAKU_LANES; lane += 1) {
+    if (canUseDanmakuLane(lane, now)) {
+      return lane;
+    }
+  }
+
+  const laneCounts = Array.from({ length: ROOM_DANMAKU_LANES }, (_, lane) => ({
+    lane,
+    count: danmakuItems.value.filter((item) => item.lane === lane).length,
+  }));
+
+  laneCounts.sort((a, b) => a.count - b.count || a.lane - b.lane);
+  return laneCounts[0]?.lane ?? 0;
+}
+
+function pushChatDanmaku(messageId: number) {
+  if (!danmakuSettings.value.enabled) return;
+
+  const message = messagesStore
+    .getRoomChatMessages(roomId.value)
+    .find((item) => item.id === messageId);
+  if (!message) return;
+
+  const segments = mapChatSegmentsToDanmakuSegments(message.segments);
+  if (segments.length === 0) return;
+
+  const now = Date.now();
+  const estimatedWidth = estimateDanmakuWidth(segments);
+  const lane = chooseDanmakuLane(now);
+  danmakuSequence += 1;
+  danmakuItems.value = [
+    ...danmakuItems.value.slice(-48),
+    {
+      id: `${message.id}-${danmakuSequence}`,
+      lane,
+      createdAt: now,
+      estimatedWidth,
+      avatarUrl: message.avatarUrl,
+      avatarName: message.author,
+      segments,
+    },
+  ];
+}
+
+function handleRealtimeMessage(payload: MessageResponse) {
+  if (payload.room_id !== roomId.value) return;
+  pushChatDanmaku(payload.id);
+}
+
+function removeDanmaku(id: string) {
+  danmakuItems.value = danmakuItems.value.filter((item) => item.id !== id);
+}
+
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
   toasts.push({
     message: t(`room.realtime.sessionClosed.${payload.reason}`),
@@ -526,6 +684,7 @@ watch(roomId, () => {
   resetMemberActionState();
   resetPlaybackVolume();
   resetPlaybackState();
+  danmakuItems.value = [];
   void setWebFullscreen(false);
   theaterLayout.setTheaterMode(false);
   void fetchRoom();
@@ -638,8 +797,15 @@ watch(
                   :is-web-fullscreen="isWebFullscreen"
                   :is-theater-mode="theaterLayout.isTheaterMode.value"
                   :theater-mode-available="theaterLayout.canUseTheaterMode.value"
+                  :danmaku-items="danmakuItems"
+                  :danmaku-opacity="danmakuSettings.opacity"
+                  :danmaku-speed="danmakuSettings.speed"
+                  :chat-send-label="t('room.chat.send')"
+                  :chat-sending="roomMessagesState.isSending"
+                  :send-chat-message="handleSend"
                   @toggle-web-fullscreen="toggleWebFullscreen"
                   @toggle-theater-mode="toggleTheaterMode"
+                  @danmaku-expired="removeDanmaku"
                   @play-state-change="handlePlaybackPlayStateChange"
                   @resource-status-change="handleResourceStatusChange"
                   @duration-change="handlePlaybackDurationChange"
@@ -793,7 +959,10 @@ watch(
                 :is-owner="currentUserIsOwner"
                 :local-sync-strategy="localSyncStrategy"
                 :local-sync-options="localSyncOptions"
-                @save="handleSaveRoomSettings"
+                :danmaku-enabled="danmakuSettings.enabled"
+                :danmaku-opacity="danmakuSettings.opacity"
+                :danmaku-speed="danmakuSettings.speed"
+                @save="handleSaveSettings"
               />
             </BaseCard>
           </aside>
@@ -961,11 +1130,27 @@ watch(
   width: 100vw;
   height: 100dvh;
   min-height: 0;
-  padding: 14px;
+  padding: 16px;
   border: 0;
   border-radius: 0;
-  background: #05070a;
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--c-primary) 14%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--c-bg) 92%, var(--c-surface)),
+      color-mix(in srgb, var(--c-surface) 84%, var(--c-bg))
+    );
   box-shadow: none;
+}
+
+:global([data-theme="dark"]) .mainGrid.webFullscreen .stageCard {
+  background:
+    radial-gradient(circle at top left, rgb(65 93 126 / 0.26), transparent 32%),
+    linear-gradient(145deg, rgb(10 14 20), rgb(18 24 34));
 }
 
 .mainGrid.webFullscreen .stageContent {
@@ -986,15 +1171,21 @@ watch(
 .mainGrid.webFullscreen .playerStage :deep(.playerShell) {
   height: 100%;
   border: 0;
-  border-radius: 0;
+  border-radius: 16px;
   background: #05070a;
   box-shadow: none;
+  overflow: hidden;
 }
 
 .mainGrid.webFullscreen .playerStage :deep(.playerSurface) {
   height: 100%;
   aspect-ratio: auto;
-  border-radius: 0;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.mainGrid.webFullscreen .playerStage :deep(.playerVideo) {
+  border-radius: inherit;
 }
 
 .mainGrid.webFullscreen .playbackControls {
@@ -1207,6 +1398,23 @@ watch(
 
 :global(body.icinema-room-theater-active .app > .body > .content) {
   z-index: 90;
+}
+
+:global(body.icinema-room-web-fullscreen-active .app > .header) {
+  display: none;
+}
+
+:global(body.icinema-room-web-fullscreen-active .app > .body) {
+  grid-template-columns: 1fr;
+  min-height: 100dvh;
+}
+
+:global(body.icinema-room-web-fullscreen-active .app > .body > .sidebar) {
+  display: none;
+}
+
+:global(body.icinema-room-web-fullscreen-active .app > .body > .content) {
+  z-index: 130;
 }
 
 :global(body.icinema-room-web-fullscreen-active) {

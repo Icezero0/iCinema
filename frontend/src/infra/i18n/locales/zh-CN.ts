@@ -431,6 +431,7 @@ export default {
     settings: {
       infoSection: "房间信息",
       policySection: "房间策略",
+      danmakuSection: "弹幕",
       localPlaybackSection: "本地播放设置",
       loadFailed: "加载房间设置失败。",
       saveSuccess: "设置已保存。",
@@ -449,6 +450,9 @@ export default {
       syncManual: "手动同步",
       activeSyncPermission: "主动同步权限",
       seekAutoPause: "跳转后自动暂停",
+      danmakuEnabled: "开启弹幕",
+      danmakuOpacity: "弹幕透明度",
+      danmakuSpeed: "弹幕播放速度",
       activeSyncOwnerOnly: "仅房主",
       activeSyncOwnerAndManager: "房主和管理员",
       activeSyncAllMembers: "所有成员",
@@ -456,6 +460,10 @@ export default {
       localSyncAdaptiveSpeed: "自适应加速",
       localSyncAutoSeek: "自动跳转",
       localSyncManual: "手动同步",
+    },
+    danmaku: {
+      imageTag: "[图片]",
+      stickerTag: "[贴纸]",
     },
     playback: {
       syncPolicyLoading: "同步策略加载中",

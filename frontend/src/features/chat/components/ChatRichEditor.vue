@@ -38,6 +38,16 @@ const emit = defineEmits<{
   "submit-request": [];
 }>();
 
+const props = withDefaults(defineProps<{
+  variant?: "default" | "compact";
+  allowMedia?: boolean;
+  singleLine?: boolean;
+}>(), {
+  variant: "default",
+  allowMedia: true,
+  singleLine: false,
+});
+
 const editorVersion = ref(0);
 const assetsStore = useAssetsStore();
 
@@ -184,9 +194,11 @@ const editor = useEditor({
 
       const html = clipboardData.getData("text/html");
 
-      const mediaContent = parseClipboardHtmlToContent(
-        html,
-      );
+      const mediaContent = props.allowMedia
+        ? parseClipboardHtmlToContent(
+          html,
+        )
+        : null;
 
       if (mediaContent && editor.value) {
         editor.value
@@ -196,6 +208,10 @@ const editor = useEditor({
           .run();
         syncEditorState();
         return true;
+      }
+
+      if (!props.allowMedia) {
+        return false;
       }
 
       const imageFiles = Array.from(clipboardData.items)
@@ -214,7 +230,7 @@ const editor = useEditor({
       if (!editor.value) return false;
       if (event.isComposing) return false;
 
-      if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
+      if (event.key === "Enter" && (props.singleLine || (!event.shiftKey && !event.altKey))) {
         event.preventDefault();
         emit("submit-request");
         return true;
@@ -222,6 +238,9 @@ const editor = useEditor({
 
       return handleTrailingInlineCursorKeyDown(editor.value, event);
     },
+    transformPastedText: (text) => (
+      props.singleLine ? text.replace(/\s*\r?\n\s*/g, " ") : text
+    ),
   },
   onUpdate: () => {
     syncEditorState();
@@ -255,7 +274,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="inputRow">
+  <div class="inputRow" :class="{ compact: props.variant === 'compact', singleLine: props.singleLine }">
     <EditorContent v-if="editor" :editor="editor" class="field" />
   </div>
 </template>
@@ -316,5 +335,55 @@ onBeforeUnmount(() => {
 .field :deep(.tiptapEditor .chatInlineMedia--selected-range),
 .field :deep(.tiptapEditor .chatInlineMedia--selected-node) {
   isolation: isolate;
+}
+
+.inputRow.compact .field {
+  min-height: 38px;
+  max-height: 92px;
+  border-radius: 12px;
+  background: rgb(6 10 16 / 0.72);
+  border-color: rgb(255 255 255 / 0.18);
+  color: rgb(245 248 252 / 0.96);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+.inputRow.compact .field:focus-within {
+  border-color: rgb(255 255 255 / 0.32);
+}
+
+.inputRow.compact .field :deep(.tiptapEditor) {
+  min-height: 38px;
+  max-height: 92px;
+  padding: 9px 11px;
+  line-height: 1.4;
+}
+
+.inputRow.singleLine .field {
+  height: 38px;
+  min-height: 38px;
+  max-height: 38px;
+  overflow: hidden;
+}
+
+.inputRow.singleLine .field :deep(.tiptapEditor) {
+  height: 38px;
+  min-height: 38px;
+  max-height: 38px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.inputRow.singleLine .field :deep(.tiptapEditor p) {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.inputRow.singleLine .field :deep(.ProseMirror) {
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.inputRow.singleLine .field :deep(.ProseMirror::-webkit-scrollbar) {
+  display: none;
 }
 </style>

@@ -431,6 +431,7 @@ export default {
     settings: {
       infoSection: "Room info",
       policySection: "Room policy",
+      danmakuSection: "Danmaku",
       localPlaybackSection: "Local playback",
       loadFailed: "Failed to load room settings.",
       saveSuccess: "Settings saved.",
@@ -449,6 +450,9 @@ export default {
       syncManual: "Manual sync",
       activeSyncPermission: "Active sync permission",
       seekAutoPause: "Pause after seeking",
+      danmakuEnabled: "Enable danmaku",
+      danmakuOpacity: "Danmaku opacity",
+      danmakuSpeed: "Danmaku speed",
       activeSyncOwnerOnly: "Owner only",
       activeSyncOwnerAndManager: "Owner/Manager",
       activeSyncAllMembers: "All members",
@@ -456,6 +460,10 @@ export default {
       localSyncAdaptiveSpeed: "Adaptive speed",
       localSyncAutoSeek: "Auto seek",
       localSyncManual: "Manual sync",
+    },
+    danmaku: {
+      imageTag: "[Image]",
+      stickerTag: "[Sticker]",
     },
     playback: {
       syncPolicyLoading: "Loading sync policy",

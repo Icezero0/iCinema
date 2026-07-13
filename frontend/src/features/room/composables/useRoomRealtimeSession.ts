@@ -25,6 +25,7 @@ type UseRoomRealtimeSessionOptions = {
   refreshRoomRequests: () => void | Promise<void>;
   refreshRoomSettings: () => void | Promise<void>;
   onSessionClosed?: (payload: RoomRealtimeSessionClosed) => void;
+  onRealtimeMessage?: (payload: MessageResponse) => void;
 };
 
 type RoomRealtimePlaybackEventAction =
@@ -202,6 +203,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   function handleMessage(payload: MessageResponse) {
     if (!payload?.room_id || payload.room_id !== options.roomId.value) return;
     messagesStore.appendRealtimeMessage(payload);
+    options.onRealtimeMessage?.(payload);
   }
 
   function handleRoomVideoSource(payload: RoomRealtimeVideoSourceState) {

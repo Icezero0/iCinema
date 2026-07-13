@@ -11,6 +11,10 @@ import {
 } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import ChatComposer from "@/features/chat/components/ChatComposer.vue";
+import type { ChatSegment } from "@/features/chat/types";
+import ChatDanmakuOverlay from "@/features/room/components/danmaku/ChatDanmakuOverlay.vue";
+import type { ChatDanmakuItem } from "@/features/room/danmaku/types";
 import { toMediaEngineLoadInput } from "@/features/room/video/mediaEngineTypes";
 import { useRoomMediaEngine } from "@/features/room/video/useRoomMediaEngine";
 import type { MediaHealthState } from "@/features/room/video/types";
@@ -32,6 +36,12 @@ const props = defineProps<{
   isWebFullscreen?: boolean;
   isTheaterMode?: boolean;
   theaterModeAvailable?: boolean;
+  danmakuItems: ChatDanmakuItem[];
+  danmakuOpacity: number;
+  danmakuSpeed: number;
+  chatSendLabel?: string;
+  chatSending?: boolean;
+  sendChatMessage?: (segments: ChatSegment[]) => Promise<void> | void;
 }>();
 
 const emit = defineEmits<{
@@ -46,12 +56,14 @@ const emit = defineEmits<{
   (e: "seek-capability-change", value: boolean): void;
   (e: "waiting-change", value: boolean): void;
   (e: "error", value: string): void;
+  (e: "danmaku-expired", value: string): void;
 }>();
 
 const shellRef = ref<HTMLElement | null>(null);
 const isVideoFullscreen = ref(false);
 const controlsVisible = ref(false);
 const pointerIdle = ref(false);
+const fullscreenComposerActive = ref(false);
 let controlsHideTimer = 0;
 
 const player = useRoomMediaEngine({
@@ -70,6 +82,10 @@ const showPausedState = computed(() =>
   !player.errorMessage.value);
 const shouldAutoHideActions = computed(() =>
   isVideoFullscreen.value || Boolean(props.isWebFullscreen) || Boolean(props.isTheaterMode));
+const showFullscreenComposer = computed(() =>
+  isVideoFullscreen.value || Boolean(props.isWebFullscreen));
+const showFullscreenComposerControls = computed(() =>
+  controlsVisible.value || fullscreenComposerActive.value);
 
 function toDisplayedResourceStatus(status: MediaHealthState, sourceAvailable: boolean) {
   if (!sourceAvailable) return "idle";
@@ -171,17 +187,22 @@ function showPlayerActions() {
     window.clearTimeout(controlsHideTimer);
   }
 
-  if (shouldAutoHideActions.value) {
+  if (shouldAutoHideActions.value && !fullscreenComposerActive.value) {
     controlsHideTimer = window.setTimeout(() => {
       controlsVisible.value = false;
       pointerIdle.value = true;
       controlsHideTimer = 0;
-    }, 1800);
+    }, 1000);
   }
+}
+
+function focusPlayerShell() {
+  shellRef.value?.focus({ preventScroll: true });
 }
 
 function hidePlayerActions(event?: PointerEvent) {
   if (event?.pointerType === "touch") return;
+  if (fullscreenComposerActive.value) return;
 
   if (controlsHideTimer) {
     window.clearTimeout(controlsHideTimer);
@@ -189,6 +210,23 @@ function hidePlayerActions(event?: PointerEvent) {
   }
   controlsVisible.value = false;
   pointerIdle.value = false;
+}
+
+function handleFullscreenComposerActiveChange(value: boolean) {
+  fullscreenComposerActive.value = value;
+  if (value) {
+    if (controlsHideTimer) {
+      window.clearTimeout(controlsHideTimer);
+      controlsHideTimer = 0;
+    }
+    controlsVisible.value = true;
+    pointerIdle.value = false;
+    return;
+  }
+
+  if (shouldAutoHideActions.value) {
+    showPlayerActions();
+  }
 }
 
 function hidePlayerActionsFromOutside(event: PointerEvent) {
@@ -246,6 +284,20 @@ watch(player.canSeek, (value) => emit("seek-capability-change", value), { immedi
 watch(player.errorMessage, (value) => {
   if (value) emit("error", value);
 });
+watch(shouldAutoHideActions, (active) => {
+  if (!active) {
+    pointerIdle.value = false;
+    fullscreenComposerActive.value = false;
+    if (controlsHideTimer) {
+      window.clearTimeout(controlsHideTimer);
+      controlsHideTimer = 0;
+    }
+    return;
+  }
+
+  focusPlayerShell();
+  showPlayerActions();
+});
 
 onMounted(() => {
   document.addEventListener("fullscreenchange", syncFullscreenState);
@@ -275,6 +327,7 @@ defineExpose({
     ref="shellRef"
     class="playerShell"
     :class="{ pointerIdle }"
+    tabindex="-1"
     role="presentation"
     @pointerenter="showPlayerActions"
     @pointermove="showPlayerActions"
@@ -306,6 +359,14 @@ defineExpose({
         @error="player.handleVideoError"
       />
 
+      <ChatDanmakuOverlay
+        v-if="danmakuItems.length > 0"
+        :items="danmakuItems"
+        :opacity="danmakuOpacity"
+        :speed="danmakuSpeed"
+        @expired="emit('danmaku-expired', $event)"
+      />
+
       <div v-if="showEmptyState" class="playerEmptyState">
         <div class="emptyIcon">
           <AppIcon :icon="FilmIcon" :size="28" />
@@ -328,6 +389,21 @@ defineExpose({
         <div class="overlayIcon">
           <AppIcon :icon="PauseCircleIcon" :size="44" />
         </div>
+      </div>
+
+      <div
+        v-if="showFullscreenComposer"
+        class="playerFullscreenComposer"
+        :class="{ visible: showFullscreenComposerControls }"
+      >
+        <ChatComposer
+          variant="fullscreen"
+          :send-label="chatSendLabel"
+          :sending="chatSending"
+          :send-message="sendChatMessage"
+          :show-screenshot="false"
+          @active-change="handleFullscreenComposerActiveChange"
+        />
       </div>
 
       <div class="playerQuickActions" :class="{ visible: controlsVisible }">
@@ -378,6 +454,10 @@ defineExpose({
     linear-gradient(145deg, rgb(17 23 31), rgb(37 50 68)),
     radial-gradient(circle at top left, rgb(255 255 255 / 0.06), transparent 30%);
   box-shadow: 0 20px 60px rgb(0 0 0 / 0.18);
+}
+
+.playerShell:focus {
+  outline: none;
 }
 
 .playerShell.pointerIdle {
@@ -524,11 +604,38 @@ defineExpose({
     transform 180ms ease;
 }
 
-.playerQuickActions.visible,
-.playerShell:focus-within .playerQuickActions {
+.playerQuickActions.visible {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+}
+
+.playerFullscreenComposer {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(calc(80% + 96px), calc(100% - 128px), 980px);
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 160ms ease,
+    transform 180ms ease;
+  pointer-events: none;
+}
+
+.playerFullscreenComposer.visible,
+.playerFullscreenComposer:focus-within {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.playerShell:fullscreen .playerFullscreenComposer {
+  width: min(calc(80% + 96px), calc(100% - 128px));
 }
 
 .playerActionBtn {
@@ -578,6 +685,15 @@ defineExpose({
   .playerQuickActions {
     right: 10px;
     bottom: 10px;
+  }
+
+  .playerFullscreenComposer {
+    bottom: 10px;
+    width: min(calc(100% - 74px), 640px);
+  }
+
+  .playerShell:fullscreen .playerFullscreenComposer {
+    width: min(calc(80% + 88px), calc(100% - 74px));
   }
 
   .playerActionBtn {

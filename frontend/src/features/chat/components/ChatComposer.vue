@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   CameraIcon,
   FaceSmileIcon,
@@ -13,20 +13,27 @@ import type { ChatEmojiPickerSelection } from "./emoji-picker/types";
 import ChatEmojiPicker from "./ChatEmojiPicker.vue";
 import ChatRichEditor from "./ChatRichEditor.vue";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   sendLabel?: string;
   sending?: boolean;
   sendMessage?: (segments: ChatSegment[]) => Promise<void> | void;
   captureScreenshot?: () => Promise<void> | void;
-}>();
+  variant?: "default" | "fullscreen";
+  showScreenshot?: boolean;
+}>(), {
+  variant: "default",
+  showScreenshot: true,
+});
 
 const emit = defineEmits<{
   send: [segments: ChatSegment[]];
+  "active-change": [value: boolean];
 }>();
 
 const { t } = useI18n();
 
 const rootRef = ref<HTMLElement | null>(null);
+const emojiAnchorRef = ref<HTMLElement | null>(null);
 const emojiPanelOpen = ref(false);
 const canSend = ref(false);
 const sendPending = ref(false);
@@ -45,12 +52,26 @@ const editorRef = ref<{
   clearAndFocus: () => void;
 } | null>(null);
 let pickerPositionFrame = 0;
+const showScreenshotButton = computed(() =>
+  props.variant !== "fullscreen" && props.showScreenshot);
+
+function isComposerFocused() {
+  const root = rootRef.value;
+  return Boolean(root && root.matches(":focus-within"));
+}
+
+function emitActiveState() {
+  emit("active-change", emojiPanelOpen.value || isComposerFocused());
+}
 
 function updateEmojiPanelPosition() {
   const root = rootRef.value;
   if (!root) return;
 
-  const rect = root.getBoundingClientRect();
+  const anchor = props.variant === "fullscreen" && emojiAnchorRef.value
+    ? emojiAnchorRef.value
+    : root;
+  const rect = anchor.getBoundingClientRect();
   const left = rect.left + (rect.width / 2);
   const top = rect.top;
   const horizontalPadding = 32;
@@ -86,6 +107,7 @@ function syncEmojiTeleportTarget() {
 
 function toggleEmojiPanel() {
   emojiPanelOpen.value = !emojiPanelOpen.value;
+  emitActiveState();
   if (emojiPanelOpen.value) {
     syncEmojiTeleportTarget();
     emojiPanelStyle.value = {
@@ -103,10 +125,44 @@ function handleCanSendChange(value: boolean) {
   canSend.value = value;
 }
 
+async function sendSegmentsDirect(segments: ChatSegment[]) {
+  if (segments.length === 0) return;
+  if (props.sending || sendPending.value) return;
+
+  sendPending.value = true;
+  try {
+    if (props.sendMessage) {
+      await props.sendMessage(segments);
+    } else {
+      emit("send", segments);
+    }
+  } catch {
+    // Keep the draft or picker state in place so the user can retry.
+  } finally {
+    sendPending.value = false;
+  }
+}
+
 function handleSelectEmoji(selection: ChatEmojiPickerSelection) {
   if (selection.kind === "qface") {
     editorRef.value?.insertQfaceById(selection.emojiId);
   } else if (selection.kind === "sticker") {
+    if (props.variant === "fullscreen") {
+      void sendSegmentsDirect([
+        {
+          id: `sticker-${selection.stickerId}-${Date.now()}`,
+          type: "media",
+          alt: selection.alt || `Sticker ${selection.stickerId}`,
+          kind: "sticker",
+          src: selection.url,
+          assetId: String(selection.stickerId),
+        },
+      ]);
+      emojiPanelOpen.value = false;
+      emitActiveState();
+      return;
+    }
+
     editorRef.value?.insertSticker({
       id: selection.stickerId,
       url: selection.url,
@@ -116,6 +172,7 @@ function handleSelectEmoji(selection: ChatEmojiPickerSelection) {
     editorRef.value?.insertText(selection.value);
   }
   emojiPanelOpen.value = false;
+  emitActiveState();
 }
 
 function onDocumentPointerDown(event: PointerEvent) {
@@ -130,11 +187,13 @@ function onDocumentPointerDown(event: PointerEvent) {
   if (stickerDragActive) return;
   if (!root || !target || root.contains(target) || panelTarget) return;
   emojiPanelOpen.value = false;
+  emitActiveState();
 }
 
 function onDocumentKeyDown(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
   emojiPanelOpen.value = false;
+  emitActiveState();
 }
 
 async function sendMessage() {
@@ -172,6 +231,16 @@ async function captureScreenshot() {
   }
 }
 
+function handleFocusIn() {
+  emitActiveState();
+}
+
+function handleFocusOut() {
+  void nextTick(() => {
+    emitActiveState();
+  });
+}
+
 onMounted(() => {
   document.addEventListener("pointerdown", onDocumentPointerDown);
   document.addEventListener("keydown", onDocumentKeyDown);
@@ -181,6 +250,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  emit("active-change", false);
   document.removeEventListener("pointerdown", onDocumentPointerDown);
   document.removeEventListener("keydown", onDocumentKeyDown);
   document.removeEventListener("fullscreenchange", syncEmojiTeleportTarget);
@@ -193,9 +263,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootRef" class="composer">
+  <div
+    ref="rootRef"
+    class="composer"
+    :class="{ fullscreenComposer: props.variant === 'fullscreen' }"
+    @focusin="handleFocusIn"
+    @focusout="handleFocusOut"
+  >
     <div class="toolbar">
-      <div class="popoverWrap">
+      <div ref="emojiAnchorRef" class="popoverWrap">
         <BaseIconButton
           class="toolButton"
           :aria-label="t('chat.toolbar.emoji')"
@@ -217,7 +293,19 @@ onBeforeUnmount(() => {
         </Teleport>
       </div>
 
+      <ChatRichEditor
+        v-if="props.variant === 'fullscreen'"
+        ref="editorRef"
+        variant="compact"
+        single-line
+        :allow-media="false"
+        class="fullscreenEditor"
+        @can-send-change="handleCanSendChange"
+        @submit-request="sendMessage"
+      />
+
       <BaseIconButton
+        v-if="showScreenshotButton"
         class="toolButton"
         :aria-label="t('chat.toolbar.screenshot')"
         :disabled="screenshotPending"
@@ -237,6 +325,7 @@ onBeforeUnmount(() => {
     </div>
 
     <ChatRichEditor
+      v-if="props.variant !== 'fullscreen'"
       ref="editorRef"
       @can-send-change="handleCanSendChange"
       @submit-request="sendMessage"
@@ -251,6 +340,16 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+.composer.fullscreenComposer {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -259,12 +358,35 @@ onBeforeUnmount(() => {
   margin-top: -2px;
 }
 
+.fullscreenComposer .toolbar {
+  gap: 8px;
+  margin-top: 0;
+}
+
+.fullscreenEditor {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .toolButton {
   width: 28px;
   height: 28px;
   min-width: 28px;
   opacity: 0.82;
   border-radius: 10px;
+}
+
+.fullscreenComposer .toolButton {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  color: rgb(238 244 252 / 0.94);
+  background: rgb(11 16 23 / 0.72);
+  border: 1px solid rgb(255 255 255 / 0.14);
+}
+
+.fullscreenComposer .toolButton:hover:not(:disabled) {
+  background: rgb(22 31 44 / 0.86);
 }
 
 .disabledTool {
@@ -284,6 +406,20 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--c-primary) 8%, var(--c-surface));
   color: var(--c-primary);
   border-radius: 12px;
+}
+
+.fullscreenComposer .sendButton {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  margin-left: 0;
+  color: rgb(238 244 252 / 0.96);
+  background: color-mix(in srgb, var(--c-primary) 36%, rgb(11 16 23));
+  border: 1px solid color-mix(in srgb, var(--c-primary) 44%, rgb(255 255 255 / 0.16));
+}
+
+.fullscreenComposer .sendButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--c-primary) 46%, rgb(22 31 44));
 }
 
 .sendButton:hover {
@@ -312,6 +448,10 @@ onBeforeUnmount(() => {
 }
 
 :global(body.icinema-room-theater-active [data-emoji-panel-root="true"]) {
+  z-index: 180;
+}
+
+:global(body.icinema-room-web-fullscreen-active [data-emoji-panel-root="true"]) {
   z-index: 180;
 }
 </style>

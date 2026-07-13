@@ -30,6 +30,9 @@ export type RoomSettingsSavePayload = {
   activeSyncPermission: RoomActiveSyncPermission;
   seekAutoPause: boolean;
   localSyncStrategy: LocalRoomSyncStrategy;
+  danmakuEnabled: boolean;
+  danmakuOpacity: number;
+  danmakuSpeed: number;
 };
 
 type UseRoomSettingsStateOptions = {
@@ -104,14 +107,14 @@ export function useRoomSettingsState(options: UseRoomSettingsStateOptions) {
   }
 
   async function handleSaveRoomSettings(payload: RoomSettingsSavePayload) {
-    if (!options.room.value || !options.roomId.value || roomSettingsSaving.value) return;
+    if (!options.room.value || !options.roomId.value || roomSettingsSaving.value) return false;
 
     if (!payload.name) {
       toasts.push({
         message: t("room.settings.nameRequired"),
         tone: "danger",
       });
-      return;
+      return false;
     }
 
     roomSettingsSaving.value = true;
@@ -180,6 +183,7 @@ export function useRoomSettingsState(options: UseRoomSettingsStateOptions) {
         message: t("room.settings.saveSuccess"),
         tone: "success",
       });
+      return true;
     } catch (e: any) {
       toasts.push({
         message:
@@ -187,6 +191,7 @@ export function useRoomSettingsState(options: UseRoomSettingsStateOptions) {
           t("room.settings.saveFailed"),
         tone: "danger",
       });
+      return false;
     } finally {
       roomSettingsSaving.value = false;
     }

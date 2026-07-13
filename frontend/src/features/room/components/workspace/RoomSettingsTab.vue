@@ -22,6 +22,9 @@ const props = defineProps<{
   isOwner?: boolean;
   localSyncStrategy: LocalRoomSyncStrategy;
   localSyncOptions: { value: LocalRoomSyncStrategy; label: string }[];
+  danmakuEnabled: boolean;
+  danmakuOpacity: number;
+  danmakuSpeed: number;
 }>();
 
 const emit = defineEmits<{
@@ -36,6 +39,9 @@ type RoomSettingsSavePayload = {
   activeSyncPermission: RoomActiveSyncPermission;
   seekAutoPause: boolean;
   localSyncStrategy: LocalRoomSyncStrategy;
+  danmakuEnabled: boolean;
+  danmakuOpacity: number;
+  danmakuSpeed: number;
 };
 
 const { t } = useI18n();
@@ -48,6 +54,9 @@ type RoomSettingsDraft = {
   activeSyncPermission: RoomActiveSyncPermission;
   seekAutoPause: boolean;
   localSyncStrategy: LocalRoomSyncStrategy;
+  danmakuEnabled: boolean;
+  danmakuOpacity: number;
+  danmakuSpeed: number;
 };
 
 type RoomSettingsDraftKey = keyof RoomSettingsDraft;
@@ -64,6 +73,9 @@ const draft = reactive<RoomSettingsDraft>({
   activeSyncPermission: props.roomSettings?.active_sync_permission ?? defaultActiveSyncPermission,
   seekAutoPause: props.roomSettings?.seek_auto_pause ?? defaultSeekAutoPause,
   localSyncStrategy: props.localSyncStrategy,
+  danmakuEnabled: props.danmakuEnabled,
+  danmakuOpacity: props.danmakuOpacity,
+  danmakuSpeed: props.danmakuSpeed,
 });
 const dirty = reactive<Record<RoomSettingsDraftKey, boolean>>({
   name: false,
@@ -73,6 +85,9 @@ const dirty = reactive<Record<RoomSettingsDraftKey, boolean>>({
   activeSyncPermission: false,
   seekAutoPause: false,
   localSyncStrategy: false,
+  danmakuEnabled: false,
+  danmakuOpacity: false,
+  danmakuSpeed: false,
 });
 
 const hasLoadedRoomSettings = computed(() => Boolean(props.roomSettings));
@@ -84,6 +99,9 @@ const saved = computed<RoomSettingsDraft>(() => ({
   activeSyncPermission: props.roomSettings?.active_sync_permission ?? defaultActiveSyncPermission,
   seekAutoPause: props.roomSettings?.seek_auto_pause ?? defaultSeekAutoPause,
   localSyncStrategy: props.localSyncStrategy,
+  danmakuEnabled: props.danmakuEnabled,
+  danmakuOpacity: props.danmakuOpacity,
+  danmakuSpeed: props.danmakuSpeed,
 }));
 
 const hasRoomInfoChanges = computed(() =>
@@ -102,7 +120,10 @@ const hasRoomSettingsChanges = computed(() =>
     (props.isOwner && draft.activeSyncPermission !== saved.value.activeSyncPermission)
   ));
 const hasLocalChanges = computed(() =>
-  draft.localSyncStrategy !== saved.value.localSyncStrategy);
+  draft.localSyncStrategy !== saved.value.localSyncStrategy ||
+  draft.danmakuEnabled !== saved.value.danmakuEnabled ||
+  draft.danmakuOpacity !== saved.value.danmakuOpacity ||
+  draft.danmakuSpeed !== saved.value.danmakuSpeed);
 const hasChanges = computed(() =>
   hasRoomInfoChanges.value || hasRoomSettingsChanges.value || hasLocalChanges.value);
 const actionsDisabled = computed(() => !hasChanges.value || props.settingsSaving);
@@ -122,6 +143,9 @@ function save() {
     activeSyncPermission: draft.activeSyncPermission,
     seekAutoPause: draft.seekAutoPause,
     localSyncStrategy: draft.localSyncStrategy,
+    danmakuEnabled: draft.danmakuEnabled,
+    danmakuOpacity: draft.danmakuOpacity,
+    danmakuSpeed: draft.danmakuSpeed,
   });
 }
 
@@ -176,6 +200,15 @@ watch(
     reconcileDraftField("localSyncStrategy");
   },
 );
+
+watch(
+  () => [props.danmakuEnabled, props.danmakuOpacity, props.danmakuSpeed] as const,
+  () => {
+    reconcileDraftField("danmakuEnabled");
+    reconcileDraftField("danmakuOpacity");
+    reconcileDraftField("danmakuSpeed");
+  },
+);
 </script>
 
 <template>
@@ -194,6 +227,9 @@ watch(
         :is-owner="isOwner"
         :local-sync-strategy="draft.localSyncStrategy"
         :local-sync-options="localSyncOptions"
+        :danmaku-enabled="draft.danmakuEnabled"
+        :danmaku-opacity="draft.danmakuOpacity"
+        :danmaku-speed="draft.danmakuSpeed"
         @update:room-name="setDraftField('name', $event)"
         @update:visibility="setDraftField('visibility', $event)"
         @update:join-audit-mode="setDraftField('joinAuditMode', $event)"
@@ -201,6 +237,9 @@ watch(
         @update:active-sync-permission="setDraftField('activeSyncPermission', $event)"
         @update:seek-auto-pause="setDraftField('seekAutoPause', $event)"
         @update:local-sync-strategy="setDraftField('localSyncStrategy', $event as LocalRoomSyncStrategy)"
+        @update:danmaku-enabled="setDraftField('danmakuEnabled', $event)"
+        @update:danmaku-opacity="setDraftField('danmakuOpacity', $event)"
+        @update:danmaku-speed="setDraftField('danmakuSpeed', $event)"
       />
     </div>
 
