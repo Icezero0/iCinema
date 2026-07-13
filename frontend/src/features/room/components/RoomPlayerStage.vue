@@ -536,9 +536,8 @@ defineExpose({
   height: 36px;
   border: 1px solid rgb(255 255 255 / 0.16);
   border-radius: 12px;
-  background: rgb(11 16 23 / 0.72);
+  background: rgb(11 16 23 / 0.88);
   color: rgb(238 244 252 / 0.94);
-  backdrop-filter: blur(10px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
