@@ -55,6 +55,11 @@ let pickerPositionFrame = 0;
 const showScreenshotButton = computed(() =>
   props.variant !== "fullscreen" && props.showScreenshot);
 
+function isNarrowViewport() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 640px)").matches;
+}
+
 function isComposerFocused() {
   const root = rootRef.value;
   return Boolean(root && root.matches(":focus-within"));
@@ -74,10 +79,14 @@ function updateEmojiPanelPosition() {
   const rect = anchor.getBoundingClientRect();
   const left = rect.left + (rect.width / 2);
   const top = rect.top;
-  const horizontalPadding = 32;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const horizontalMargin = 8;
+  const viewportInset = viewportWidth <= 520 ? 28 : 64;
+  const panelWidth = Math.max(0, Math.min(320, viewportWidth - viewportInset));
+  const horizontalPadding = (panelWidth / 2) + horizontalMargin;
   const clampedLeft = Math.min(
     Math.max(left, horizontalPadding),
-    window.innerWidth - horizontalPadding,
+    viewportWidth - horizontalPadding,
   );
 
   emojiPanelStyle.value = {
@@ -147,7 +156,7 @@ function handleSelectEmoji(selection: ChatEmojiPickerSelection) {
   if (selection.kind === "qface") {
     editorRef.value?.insertQfaceById(selection.emojiId);
   } else if (selection.kind === "sticker") {
-    if (props.variant === "fullscreen") {
+    if (props.variant === "fullscreen" || isNarrowViewport()) {
       void sendSegmentsDirect([
         {
           id: `sticker-${selection.stickerId}-${Date.now()}`,

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { ChevronDownIcon, EnvelopeOpenIcon } from "@heroicons/vue/24/outline";
 import type { Notification } from "@/infra/api/notifications.api";
 import { useNotificationsStore } from "@/stores/notifications.store";
 import { formatLocalDateTime } from "@/utils/datetime";
 
 const { t } = useI18n();
+const router = useRouter();
 const notifications = useNotificationsStore();
 
 const filter = ref<"all" | "unread" | "read">("unread");
@@ -89,6 +91,13 @@ function toggleExpanded(id: number) {
     : [...expandedIds.value, id];
 }
 
+function isJoinRequestWorkflowNotification(item: Notification) {
+  return (
+    item.notification_type === "workflow" &&
+    item.related_type === "room_join_request"
+  );
+}
+
 function setBodyRef(id: number, el: unknown) {
   if (el instanceof HTMLElement) {
     bodyRefs.set(id, el);
@@ -116,6 +125,11 @@ async function measureTruncation() {
 async function handleOpen(item: Notification) {
   if (!item.is_read) {
     await notifications.markAsRead(item.id);
+  }
+
+  if (isJoinRequestWorkflowNotification(item)) {
+    await router.push({ name: "join-requests" });
+    return;
   }
 
   if (isTruncated(item.id)) {

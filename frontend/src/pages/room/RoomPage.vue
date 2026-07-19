@@ -205,6 +205,8 @@ const layout = useRoomWorkspaceLayout({
   isLoading,
 });
 const theaterLayout = useRoomTheaterLayout(roomId);
+const isMobileTheaterMode = computed(() =>
+  theaterLayout.isTheaterMode.value && theaterLayout.isNarrowTheaterViewport.value);
 const mainGridStyle = computed(() => layout.mainGridStyle.value);
 const workspaceCardStyle = computed(() => layout.workspaceCardStyle.value);
 const effectiveMainGridStyle = computed(() =>
@@ -400,6 +402,7 @@ function handleRoomKeydown(event: KeyboardEvent) {
 
 function syncTheaterFullscreenState() {
   if (!theaterLayout.isTheaterMode.value) return;
+  if (theaterLayout.isNarrowTheaterViewport.value) return;
   if (document.fullscreenElement) return;
 
   theaterLayout.setTheaterMode(false);
@@ -765,6 +768,7 @@ watch(
           class="mainGrid"
           :class="{
             theaterMode: theaterLayout.isTheaterMode.value,
+            mobileTheaterMode: isMobileTheaterMode,
             webFullscreen: isWebFullscreen,
           }"
           :style="effectiveMainGridStyle"
@@ -797,6 +801,7 @@ watch(
                   :is-web-fullscreen="isWebFullscreen"
                   :is-theater-mode="theaterLayout.isTheaterMode.value"
                   :theater-mode-available="theaterLayout.canUseTheaterMode.value"
+                  :flush-layout="isMobileTheaterMode"
                   :danmaku-items="danmakuItems"
                   :danmaku-opacity="danmakuSettings.opacity"
                   :danmaku-speed="danmakuSettings.speed"
@@ -843,6 +848,7 @@ watch(
                   :source-message-tone="sourcePanelMessageTone"
                   :source-hash-progress="sourceHashProgress"
                   :source-applying="sourceApplying"
+                  :flush-layout="isMobileTheaterMode"
                   :volume-label="t('room.playback.controls.volume')"
                   @toggle-play="togglePlayback"
                   @sync-now="handleManualSyncNow"
@@ -866,7 +872,7 @@ watch(
           </section>
 
           <div
-            v-if="theaterLayout.isTheaterMode.value"
+            v-if="theaterLayout.isTheaterMode.value && !theaterLayout.isNarrowTheaterViewport.value"
             class="theaterDivider"
             :class="{ resizing: theaterLayout.isResizing.value }"
             role="separator"
@@ -912,6 +918,7 @@ watch(
               />
 
               <RoomMembersTab
+                v-if="!theaterLayout.isTheaterMode.value || !theaterLayout.isNarrowTheaterViewport.value"
                 v-show="activePanel === 'members'"
                 :members="roomMemberItems"
                 :search-placeholder="t('room.members.searchPlaceholder')"
@@ -938,6 +945,7 @@ watch(
               />
 
               <RoomRequestsTab
+                v-if="!theaterLayout.isTheaterMode.value || !theaterLayout.isNarrowTheaterViewport.value"
                 v-show="activePanel === 'requests'"
                 :loading="requestsLoading"
                 :error="requestsError"
@@ -949,6 +957,7 @@ watch(
               />
 
               <RoomSettingsTab
+                v-if="!theaterLayout.isTheaterMode.value || !theaterLayout.isNarrowTheaterViewport.value"
                 v-show="activePanel === 'settings'"
                 :room="room"
                 :room-settings="roomSettings"
@@ -1083,7 +1092,8 @@ watch(
   padding: 16px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--c-surface) 92%, white), color-mix(in srgb, var(--c-surface) 86%, var(--c-bg)));
-  overflow: hidden;
+  overflow: visible;
+  z-index: 2;
 }
 
 .stageContent {
@@ -1098,6 +1108,7 @@ watch(
   border: 0;
   border-radius: 0;
   background: transparent;
+  overflow: hidden;
 }
 
 .mainGrid.theaterMode .stageContent {
@@ -1145,6 +1156,7 @@ watch(
       color-mix(in srgb, var(--c-surface) 84%, var(--c-bg))
     );
   box-shadow: none;
+  overflow: hidden;
 }
 
 :global([data-theme="dark"]) .mainGrid.webFullscreen .stageCard {
@@ -1346,6 +1358,112 @@ watch(
   .workspaceColumn {
     min-height: 0;
     overflow: hidden;
+  }
+
+  .mainGrid.mobileTheaterMode {
+    --room-mobile-statusbar-height: max(env(safe-area-inset-top, 0px), 24px);
+    --room-mobile-bottom-safe-height: max(env(safe-area-inset-bottom, 0px), 10px);
+    position: fixed;
+    top: var(--room-visual-viewport-offset-top, 0px);
+    right: 0;
+    bottom: auto;
+    left: 0;
+    z-index: 80;
+    height: var(--room-visual-viewport-height, 100dvh);
+    min-height: 0;
+    padding:
+      var(--room-mobile-statusbar-height)
+      0
+      calc(var(--room-keyboard-inset, 0px) + var(--room-mobile-bottom-safe-height));
+    gap: 0;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  .mainGrid.mobileTheaterMode::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--room-mobile-statusbar-height);
+    background: #05070a;
+    pointer-events: none;
+  }
+
+  .mainGrid.mobileTheaterMode .stageColumn {
+    position: relative;
+    z-index: 3;
+    align-self: start;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .mainGrid.mobileTheaterMode .stageCard {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .mainGrid.mobileTheaterMode .stageContent {
+    height: auto;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  .mainGrid.mobileTheaterMode .playerStage {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+  }
+
+  .mainGrid.mobileTheaterMode .playerStage :deep(.playerSurface) {
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+
+  .mainGrid.mobileTheaterMode .playbackControls {
+    position: relative;
+    z-index: 4;
+    width: 100%;
+  }
+
+  .mainGrid.mobileTheaterMode .workspaceColumn {
+    position: relative;
+    z-index: 1;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    display: grid;
+    padding: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .mainGrid.mobileTheaterMode .workspaceCard {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: color-mix(in srgb, var(--c-surface) 92%, rgb(18 24 34));
+    overflow: hidden;
+  }
+
+  .mainGrid.mobileTheaterMode :deep(.chatPanelBody) {
+    padding: 0 10px 10px;
   }
 }
 

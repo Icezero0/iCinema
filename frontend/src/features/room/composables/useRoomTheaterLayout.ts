@@ -26,20 +26,36 @@ export function useRoomTheaterLayout(roomId: Ref<number>) {
   const workspaceWidth = ref(DEFAULT_WORKSPACE_WIDTH);
   const viewportWidth = ref(typeof window === "undefined" ? 1440 : window.innerWidth);
   const viewportHeight = ref(typeof window === "undefined" ? 900 : window.innerHeight);
+  const keyboardInset = ref(0);
   const isResizing = ref(false);
   let previousBodyOverflow: string | null = null;
-  const canUseTheaterMode = computed(() => viewportWidth.value > 760);
+  const isNarrowTheaterViewport = computed(() => viewportWidth.value <= 760);
+  const canUseTheaterMode = computed(() => true);
 
   const theaterMainGridStyle = computed(() => ({
-    gridTemplateColumns: `minmax(0, 1fr) 10px ${workspaceWidth.value}px`,
-    gridTemplateRows: "minmax(0, 1fr)",
+    gridTemplateColumns: isNarrowTheaterViewport.value
+      ? "minmax(0, 1fr)"
+      : `minmax(0, 1fr) 10px ${workspaceWidth.value}px`,
+    gridTemplateRows: isNarrowTheaterViewport.value
+      ? "auto minmax(0, 1fr)"
+      : "minmax(0, 1fr)",
     "--room-visual-viewport-height": `${viewportHeight.value}px`,
     "--room-visual-viewport-offset-top": "0px",
+    "--room-keyboard-inset": `${keyboardInset.value}px`,
   }));
 
   function syncViewportSize() {
     if (typeof window === "undefined") return;
     viewportHeight.value = window.innerHeight;
+
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) {
+      keyboardInset.value = 0;
+      return;
+    }
+
+    const nextInset = window.innerHeight - visualViewport.height - visualViewport.offsetTop;
+    keyboardInset.value = Math.max(0, Math.round(nextInset));
   }
 
   function handleViewportResize() {
@@ -115,6 +131,9 @@ export function useRoomTheaterLayout(roomId: Ref<number>) {
 
   onMounted(() => {
     window.addEventListener("resize", handleViewportResize, { passive: true });
+    window.visualViewport?.addEventListener("resize", syncViewportSize, { passive: true });
+    window.visualViewport?.addEventListener("scroll", syncViewportSize, { passive: true });
+    handleViewportResize();
   });
 
   watch(isTheaterMode, (active) => {
@@ -137,6 +156,8 @@ export function useRoomTheaterLayout(roomId: Ref<number>) {
   onBeforeUnmount(() => {
     stopResize();
     window.removeEventListener("resize", handleViewportResize);
+    window.visualViewport?.removeEventListener("resize", syncViewportSize);
+    window.visualViewport?.removeEventListener("scroll", syncViewportSize);
     if (previousBodyOverflow != null) {
       document.body.style.overflow = previousBodyOverflow;
     }
@@ -146,6 +167,7 @@ export function useRoomTheaterLayout(roomId: Ref<number>) {
   return {
     isTheaterMode,
     canUseTheaterMode,
+    isNarrowTheaterViewport,
     isResizing,
     theaterMainGridStyle,
     setTheaterMode,

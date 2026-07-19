@@ -40,6 +40,7 @@ const props = defineProps<{
   sourceMessageTone?: "muted" | "error";
   sourceHashProgress?: number | null;
   sourceApplying?: boolean;
+  flushLayout?: boolean;
   volumeLabel: string;
 }>();
 
@@ -57,7 +58,10 @@ const emit = defineEmits<{
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);
+const sourceWrapRef = ref<HTMLElement | null>(null);
 const sourceOpen = ref(false);
+const sourcePanelPlacement = ref<"up" | "down">("up");
+const sourcePanelMaxHeight = ref("min(520px, calc(100dvh - 24px))");
 const sourceTypeDraft = ref<RoomVideoSourceType>(props.sourceType);
 const sourceExternalUrlDraft = ref(props.sourceUrl);
 const sourceLocalActionDraft = ref<LocalFileSourceAction | null>(null);
@@ -249,6 +253,7 @@ function syncSourceDraftFromProps() {
 
 function openSourcePanel() {
   sourceOpen.value = true;
+  updateSourcePanelPlacement();
   if (!props.sourceApplying && !hasSourceDraft.value) {
     syncSourceDraftFromProps();
   }
@@ -258,11 +263,34 @@ function openSourcePanel() {
 function toggleSourcePanel() {
   sourceOpen.value = !sourceOpen.value;
   if (sourceOpen.value) {
+    updateSourcePanelPlacement();
     if (!props.sourceApplying && !hasSourceDraft.value) {
       syncSourceDraftFromProps();
     }
     volumeOpen.value = false;
   }
+}
+
+function updateSourcePanelPlacement() {
+  const sourceWrap = sourceWrapRef.value;
+  if (!sourceWrap || typeof window === "undefined") return;
+
+  const rect = sourceWrap.getBoundingClientRect();
+  const margin = 12;
+  const minUsablePanelHeight = 220;
+  const estimatedPanelHeight = 340;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const spaceAbove = Math.max(0, rect.top - margin);
+  const spaceBelow = Math.max(0, viewportHeight - rect.bottom - margin);
+  const shouldOpenDown =
+    spaceAbove < estimatedPanelHeight &&
+    spaceBelow >= minUsablePanelHeight &&
+    spaceBelow > spaceAbove;
+
+  sourcePanelPlacement.value = shouldOpenDown ? "down" : "up";
+  const availableSpace = shouldOpenDown ? spaceBelow : spaceAbove;
+  const maxHeight = Math.max(180, Math.floor(availableSpace));
+  sourcePanelMaxHeight.value = `${maxHeight}px`;
 }
 
 function toggleVolumePanel() {
@@ -306,18 +334,20 @@ function onDocumentKeyDown(event: KeyboardEvent) {
 onMounted(() => {
   document.addEventListener("pointerdown", onDocumentPointerDown);
   document.addEventListener("keydown", onDocumentKeyDown);
+  window.addEventListener("resize", updateSourcePanelPlacement, { passive: true });
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", onDocumentPointerDown);
   document.removeEventListener("keydown", onDocumentKeyDown);
+  window.removeEventListener("resize", updateSourcePanelPlacement);
 });
 </script>
 
 <template>
-  <div ref="rootRef" class="controlDock">
+  <div ref="rootRef" class="controlDock" :class="{ flushLayout }">
     <div class="controlGroup">
-      <div class="popoverWrap sourceWrap">
+      <div ref="sourceWrapRef" class="popoverWrap sourceWrap">
         <button
           class="iconControlBtn"
           type="button"
@@ -331,7 +361,12 @@ onBeforeUnmount(() => {
         </button>
 
         <Transition name="floating-fade">
-          <div v-show="sourceOpen" class="sourcePanel">
+          <div
+            v-show="sourceOpen"
+            class="sourcePanel"
+            :class="`placement-${sourcePanelPlacement}`"
+            :style="{ maxHeight: sourcePanelMaxHeight }"
+          >
             <RoomSourcePanel
               :title="sourcePanelTitle"
               :source-type="sourceTypeDraft"
@@ -459,6 +494,12 @@ onBeforeUnmount(() => {
   border: 1px solid var(--c-border);
   border-radius: 18px;
   background: color-mix(in srgb, var(--c-surface) 72%, var(--c-bg));
+}
+
+.controlDock.flushLayout {
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
 }
 
 .controlGroup {
@@ -653,6 +694,8 @@ onBeforeUnmount(() => {
   left: 0;
   bottom: calc(100% + 12px);
   width: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--c-border);
   border-radius: 16px;
   background:
@@ -664,6 +707,11 @@ onBeforeUnmount(() => {
   box-shadow: 0 18px 40px rgb(0 0 0 / 0.12);
   padding: 12px;
   z-index: 4;
+}
+
+.sourcePanel.placement-down {
+  top: calc(100% + 12px);
+  bottom: auto;
 }
 
 .volumeTrigger {

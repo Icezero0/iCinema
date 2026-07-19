@@ -386,4 +386,18 @@ onBeforeUnmount(() => {
 .inputRow.singleLine .field :deep(.ProseMirror::-webkit-scrollbar) {
   display: none;
 }
+
+@media (max-width: 640px) {
+  .inputRow:not(.compact):not(.singleLine) .field {
+    min-height: 40px;
+    max-height: 72px;
+    overflow: hidden;
+  }
+
+  .inputRow:not(.compact):not(.singleLine) .field :deep(.tiptapEditor) {
+    min-height: 40px;
+    max-height: 72px;
+    padding: 9px 12px;
+  }
+}
 </style>

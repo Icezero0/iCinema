@@ -36,6 +36,7 @@ const props = defineProps<{
   isWebFullscreen?: boolean;
   isTheaterMode?: boolean;
   theaterModeAvailable?: boolean;
+  flushLayout?: boolean;
   danmakuItems: ChatDanmakuItem[];
   danmakuOpacity: number;
   danmakuSpeed: number;
@@ -326,7 +327,7 @@ defineExpose({
   <div
     ref="shellRef"
     class="playerShell"
-    :class="{ pointerIdle }"
+    :class="{ pointerIdle, flushLayout }"
     tabindex="-1"
     role="presentation"
     @pointerenter="showPlayerActions"
@@ -419,7 +420,7 @@ defineExpose({
         </button>
         <button
           v-if="!isVideoFullscreen && !isTheaterMode"
-          class="playerActionBtn"
+          class="playerActionBtn playerActionBtnWebFullscreen"
           type="button"
           :aria-label="isWebFullscreen ? exitWebFullscreenLabel : webFullscreenLabel"
           :title="isWebFullscreen ? exitWebFullscreenLabel : webFullscreenLabel"
@@ -473,6 +474,12 @@ defineExpose({
   box-shadow: none;
 }
 
+.playerShell.flushLayout {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .playerSurface {
   position: relative;
   width: 100%;
@@ -481,6 +488,10 @@ defineExpose({
   place-items: center;
   border-radius: inherit;
   overflow: hidden;
+}
+
+.playerShell.flushLayout .playerSurface {
+  border-radius: 0;
 }
 
 .playerShell:fullscreen .playerSurface {
@@ -497,6 +508,10 @@ defineExpose({
   object-fit: contain;
   background: #05070a;
   border-radius: inherit;
+}
+
+.playerShell.flushLayout .playerVideo {
+  border-radius: 0;
 }
 
 .playerShell:fullscreen .playerVideo {
@@ -700,6 +715,10 @@ defineExpose({
     width: 32px;
     height: 32px;
     border-radius: 10px;
+  }
+
+  .playerActionBtnWebFullscreen {
+    display: none;
   }
 }
 
