@@ -39,3 +39,12 @@ button, input, textarea {
   font: inherit;
 }
 
+button,
+a,
+[role="button"],
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
