@@ -28,6 +28,8 @@ const toasts = useToastsStore();
 const contactEmail = contactConfig.email.trim();
 const contactGithub = contactConfig.github.trim();
 const contactQQ = contactConfig.qq.trim();
+const encodedQQ = encodeURIComponent(contactQQ);
+const qqDesktopProfileHref = contactQQ ? getQQDesktopProfileHref() : "";
 const feedbackType = ref<FeedbackType>("bug");
 const feedbackPage = ref<FeedbackPage>("room");
 const feedbackTitle = ref("");
@@ -40,6 +42,63 @@ const {
   removePreview: removeScreenshot,
   clearPreviews: clearScreenshots,
 } = useLocalImagePreviews({ maxCount: MAX_FEEDBACK_SCREENSHOT_COUNT });
+
+function isMobileBrowser() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
+}
+
+function getQQSource() {
+  const site =
+    typeof window !== "undefined" && window.location.hostname
+      ? window.location.hostname
+      : "iCinema";
+  return encodeURIComponent(site);
+}
+
+function getQQDesktopProfileHref() {
+  const actionParams = encodeURIComponent(
+    JSON.stringify({
+      uin: contactQQ,
+      sourceType: "QrCodeShareBuddyLink",
+    }),
+  );
+  return `tencent://ntqq-open?subCmd=profile&action=openMiniBuddyProfile&actionParams=${actionParams}`;
+}
+
+function getQQMobileCardHref() {
+  return `mqqapi://card/show_pslcard?src_type=internal&version=1&uin=${encodedQQ}&web_src=${getQQSource()}`;
+}
+
+function handleQQContactClick(event: MouseEvent) {
+  if (!isMobileBrowser() || !qqDesktopProfileHref) return;
+
+  event.preventDefault();
+
+  let fallbackTimer: number | undefined;
+  const clearFallback = () => {
+    if (fallbackTimer !== undefined) {
+      window.clearTimeout(fallbackTimer);
+      fallbackTimer = undefined;
+    }
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("pagehide", clearFallback);
+  };
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") {
+      clearFallback();
+    }
+  };
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("pagehide", clearFallback, { once: true });
+  fallbackTimer = window.setTimeout(() => {
+    clearFallback();
+    window.location.href = qqDesktopProfileHref;
+  }, 1000);
+
+  window.location.href = getQQMobileCardHref();
+}
 
 const methods = computed<ContactMethodItem[]>(() => {
   const items: ContactMethodItem[] = [];
@@ -71,9 +130,10 @@ const methods = computed<ContactMethodItem[]>(() => {
       key: "qq",
       title: t("contact.methods.qq.title"),
       value: contactQQ,
-      href: `tencent://message/?uin=${encodeURIComponent(contactQQ)}`,
+      href: qqDesktopProfileHref,
       action: t("contact.methods.qq.action"),
       icon: QfacePenguinIcon,
+      onClick: handleQQContactClick,
     });
   }
 
@@ -145,7 +205,11 @@ async function submitFeedback() {
 </script>
 
 <template>
-  <AppPageShell :title="t('contact.title')" :show-back="false" :max-width="860">
+  <AppPageShell
+    :title="t('contact.title')"
+    :back-text="t('common.backHome')"
+    :max-width="860"
+  >
     <div class="contactPage">
       <section class="contactSection">
         <h2 class="sectionTitle">{{ t("contact.sections.contact") }}</h2>

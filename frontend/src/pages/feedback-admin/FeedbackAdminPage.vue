@@ -206,7 +206,11 @@ onMounted(refresh);
 </script>
 
 <template>
-  <AppPageShell :title="t('feedbackAdmin.title')" :show-back="false" :max-width="1040">
+  <AppPageShell
+    :title="t('feedbackAdmin.title')"
+    :back-text="t('common.backHome')"
+    :max-width="1040"
+  >
     <template #toolbar>
       <BaseCard class="toolbarCard">
         <div class="filters">

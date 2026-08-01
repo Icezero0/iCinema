@@ -242,6 +242,7 @@ const realtime = useRoomRealtimeSession({
   refreshRoomSettings: fetchRoomSettings,
   onSessionClosed: handleRealtimeSessionClosed,
   onRealtimeMessage: handleRealtimeMessage,
+  onRealtimeReconnected: fetchRoomMessages,
 });
 const playbackSync = useRoomPlaybackSync({
   roomId,

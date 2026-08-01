@@ -10,6 +10,10 @@ import { PauseIcon, PlayIcon } from "@heroicons/vue/24/solid";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import RoomSourcePanel from "@/features/room/components/RoomSourcePanel.vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import type {
+  LocalFileHandle,
+  LocalFileSelection,
+} from "@/features/room/video/localFileHandleCache";
 
 type LocalFileSourceAction = "match_room_target" | "set_room_target";
 
@@ -53,6 +57,7 @@ const emit = defineEmits<{
     sourceType: RoomVideoSourceType;
     externalUrl: string;
     localFile: File | null;
+    localFileHandle?: LocalFileHandle | null;
     localFileAction?: LocalFileSourceAction | null;
   }): void;
 }>();
@@ -66,7 +71,9 @@ const sourceTypeDraft = ref<RoomVideoSourceType>(props.sourceType);
 const sourceExternalUrlDraft = ref(props.sourceUrl);
 const sourceLocalActionDraft = ref<LocalFileSourceAction | null>(null);
 const sourceLocalMatchFileDraft = ref<File | null>(null);
+const sourceLocalMatchFileHandleDraft = ref<LocalFileHandle | null>(null);
 const sourceLocalTargetFileDraft = ref<File | null>(null);
+const sourceLocalTargetFileHandleDraft = ref<LocalFileHandle | null>(null);
 const sourceLocalTargetFileNameDraft = ref("");
 const volumeOpen = ref(false);
 const syncAnimating = ref(false);
@@ -210,18 +217,33 @@ function onProgressPointerUp(event: PointerEvent) {
   });
 }
 
-function handleLocalMatchFileSelected(file: File | null) {
+function handleLocalMatchFileSelected(selection: LocalFileSelection | null) {
   sourceLocalActionDraft.value = "match_room_target";
-  if (file) {
-    sourceLocalMatchFileDraft.value = file;
+  if (!selection) {
+    sourceLocalMatchFileDraft.value = null;
+    sourceLocalMatchFileHandleDraft.value = null;
+    return;
+  }
+
+  if (selection) {
+    sourceLocalMatchFileDraft.value = selection.file;
+    sourceLocalMatchFileHandleDraft.value = selection.handle ?? null;
   }
 }
 
-function handleLocalTargetFileSelected(file: File | null) {
+function handleLocalTargetFileSelected(selection: LocalFileSelection | null) {
   sourceLocalActionDraft.value = "set_room_target";
-  if (file) {
-    sourceLocalTargetFileDraft.value = file;
-    sourceLocalTargetFileNameDraft.value = file.name;
+  if (!selection) {
+    sourceLocalTargetFileDraft.value = null;
+    sourceLocalTargetFileHandleDraft.value = null;
+    sourceLocalTargetFileNameDraft.value = "";
+    return;
+  }
+
+  if (selection) {
+    sourceLocalTargetFileDraft.value = selection.file;
+    sourceLocalTargetFileHandleDraft.value = selection.handle ?? null;
+    sourceLocalTargetFileNameDraft.value = selection.file.name;
   }
 }
 
@@ -230,11 +252,16 @@ function handleApplySourceDraft() {
     sourceLocalActionDraft.value === "match_room_target"
       ? sourceLocalMatchFileDraft.value
       : sourceLocalTargetFileDraft.value;
+  const localFileHandle =
+    sourceLocalActionDraft.value === "match_room_target"
+      ? sourceLocalMatchFileHandleDraft.value
+      : sourceLocalTargetFileHandleDraft.value;
 
   emit("apply-source", {
     sourceType: sourceTypeDraft.value,
     externalUrl: sourceExternalUrlDraft.value,
     localFile,
+    localFileHandle,
     localFileAction: sourceTypeDraft.value === "local_file" ? sourceLocalActionDraft.value : null,
   });
   if (sourceTypeDraft.value === "external_url") {
@@ -247,7 +274,9 @@ function syncSourceDraftFromProps() {
   sourceExternalUrlDraft.value = props.sourceUrl;
   sourceLocalActionDraft.value = null;
   sourceLocalMatchFileDraft.value = null;
+  sourceLocalMatchFileHandleDraft.value = null;
   sourceLocalTargetFileDraft.value = null;
+  sourceLocalTargetFileHandleDraft.value = null;
   sourceLocalTargetFileNameDraft.value = "";
 }
 

@@ -7,4 +7,5 @@ export type ContactMethodItem = {
   href: string;
   action: string;
   icon: Component;
+  onClick?: (event: MouseEvent) => void;
 };

@@ -31,6 +31,7 @@ defineProps<{
           rel="noreferrer"
           :aria-label="method.action"
           :title="method.action"
+          @click="method.onClick?.($event)"
         >
           <AppIcon :icon="ArrowTopRightOnSquareIcon" :size="18" />
           <span>{{ method.action }}</span>

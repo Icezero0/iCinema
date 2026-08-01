@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef, type Ref } from "vue";
+import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import type {
   RoomRole,
   RoomSettings,
@@ -16,6 +16,11 @@ import {
 } from "@/infra/realtime/roomRealtime";
 import { useToastsStore } from "@/stores/toasts.store";
 import { computeFileSha256 } from "@/features/room/video/fileHash";
+import {
+  cacheRoomLocalFileHandle,
+  getCachedRoomLocalFile,
+  type LocalFileHandle,
+} from "@/features/room/video/localFileHandleCache";
 import type { useRoomRealtimeSession } from "@/features/room/composables/useRoomRealtimeSession";
 
 export type DisplayResourceStatus = "idle" | RoomRealtimeResourceStatus;
@@ -29,6 +34,7 @@ type PlaybackSourcePayload = {
   sourceType: RoomVideoSourceType;
   externalUrl: string;
   localFile: File | null;
+  localFileHandle?: LocalFileHandle | null;
   localFileAction?: LocalFileSourceAction | null;
 };
 
@@ -84,6 +90,8 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
   const sourcePanelCloseKey = ref(0);
   const sourceApplying = ref(false);
   const sourceHashProgress = ref<number | null>(null);
+  let cachedRestoreAttemptKey = "";
+  let cachedRestoreInFlightKey = "";
 
   const canControlRealtimePlayback = computed(() => {
     const permission = options.roomSettings.value?.active_sync_permission;
@@ -167,6 +175,7 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
   function syncRoomLocalFileRequirement() {
     if (!roomRuntimeLocalFileHash.value) {
       localFileSourceIssue.value = "none";
+      cachedRestoreAttemptKey = "";
       return true;
     }
 
@@ -177,6 +186,61 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
 
     markRoomLocalFilePending("select_required");
     return false;
+  }
+
+  async function tryRestoreCachedRoomLocalFile() {
+    const roomId = options.roomId.value;
+    const targetHash = roomRuntimeLocalFileHash.value;
+    if (!isSyncGateUnlocked() || !roomId || !targetHash || hasMatchingRoomLocalFile.value) {
+      return;
+    }
+
+    const restoreKey = `${roomId}:${targetHash}`;
+    if (
+      cachedRestoreAttemptKey === restoreKey ||
+      cachedRestoreInFlightKey === restoreKey
+    ) {
+      return;
+    }
+
+    cachedRestoreAttemptKey = restoreKey;
+    cachedRestoreInFlightKey = restoreKey;
+
+    try {
+      const selection = await getCachedRoomLocalFile(roomId, targetHash);
+      if (
+        cachedRestoreInFlightKey !== restoreKey ||
+        options.roomId.value !== roomId ||
+        roomRuntimeLocalFileHash.value !== targetHash
+      ) {
+        return;
+      }
+
+      if (!selection) {
+        syncRoomLocalFileRequirement();
+        return;
+      }
+
+      options.playback.applyLocalPlaybackSource({
+        sourceType: "local_file",
+        externalUrl: "",
+        localFile: selection.file,
+        localFileHash: targetHash,
+      });
+      localFileSourceIssue.value = "none";
+      closeSourcePanelAfterApply();
+
+      if (options.realtime.roomPlayback.value) {
+        await options.playback.applyRealtimePlaybackState(
+          options.realtime.roomPlayback.value,
+          { syncPosition: true },
+        );
+      }
+    } finally {
+      if (cachedRestoreInFlightKey === restoreKey) {
+        cachedRestoreInFlightKey = "";
+      }
+    }
   }
 
   function canUseRoomRuntimePlaybackCommands() {
@@ -398,6 +462,12 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
             localFile: selectedLocalFile,
             localFileHash,
           });
+          void cacheRoomLocalFileHandle({
+            roomId: options.roomId.value,
+            fileHash: localFileHash,
+            file: selectedLocalFile,
+            handle: payload.localFileHandle,
+          });
           localFileSourceIssue.value = "none";
 
           if (options.realtime.roomPlayback.value) {
@@ -418,6 +488,12 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
           ...payload,
           localFile: selectedLocalFile,
           localFileHash,
+        });
+        void cacheRoomLocalFileHandle({
+          roomId: options.roomId.value,
+          fileHash: localFileHash,
+          file: selectedLocalFile,
+          handle: payload.localFileHandle,
         });
         if ("room_video_source" in response) {
           options.playback.applyRealtimeVideoSource(response.room_video_source ?? null);
@@ -627,7 +703,22 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
     sourceHashProgress.value = null;
     sourcePanelOpenKey.value = 0;
     sourcePanelCloseKey.value = 0;
+    cachedRestoreAttemptKey = "";
+    cachedRestoreInFlightKey = "";
   }
+
+  watch(
+    () => [
+      options.roomId.value,
+      roomRuntimeLocalFileHash.value,
+      syncGateState.value,
+      hasMatchingRoomLocalFile.value,
+    ] as const,
+    () => {
+      void tryRestoreCachedRoomLocalFile();
+    },
+    { immediate: true },
+  );
 
   return {
     syncGateState,

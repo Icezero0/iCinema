@@ -8,6 +8,11 @@ import {
 } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import {
+  canUseFileSystemAccessPicker,
+  pickLocalVideoFileWithHandle,
+  type LocalFileSelection,
+} from "@/features/room/video/localFileHandleCache";
 
 const props = defineProps<{
   title: string;
@@ -26,8 +31,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:sourceType", value: RoomVideoSourceType): void;
   (e: "update:externalUrl", value: string): void;
-  (e: "select-local-match-file", value: File | null): void;
-  (e: "select-local-target-file", value: File | null): void;
+  (e: "select-local-match-file", value: LocalFileSelection | null): void;
+  (e: "select-local-target-file", value: LocalFileSelection | null): void;
   (e: "apply"): void;
 }>();
 
@@ -135,25 +140,54 @@ const shouldShowHashProgress = computed(() =>
   props.applying &&
   typeof props.hashProgress === "number");
 
-function openMatchFilePicker() {
+async function pickLocalFile() {
+  try {
+    return await pickLocalVideoFileWithHandle();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function openMatchFilePicker() {
   if (!props.localRoomTargetSet) return;
+  if (canUseFileSystemAccessPicker()) {
+    const selection = await pickLocalFile();
+    if (selection) {
+      emit("select-local-match-file", selection);
+    }
+    return;
+  }
+
   matchFileInputRef.value?.click();
 }
 
-function openTargetFilePicker() {
+async function openTargetFilePicker() {
   if (!props.canSetLocalRoomTarget) return;
+  if (canUseFileSystemAccessPicker()) {
+    const selection = await pickLocalFile();
+    if (selection) {
+      emit("select-local-target-file", selection);
+    }
+    return;
+  }
+
   targetFileInputRef.value?.click();
 }
 
 function onMatchFileChange(event: Event) {
   const target = event.target as HTMLInputElement;
-  emit("select-local-match-file", target.files?.[0] ?? null);
+  const file = target.files?.[0] ?? null;
+  emit("select-local-match-file", file ? { file, handle: null } : null);
   target.value = "";
 }
 
 function onTargetFileChange(event: Event) {
   const target = event.target as HTMLInputElement;
-  emit("select-local-target-file", target.files?.[0] ?? null);
+  const file = target.files?.[0] ?? null;
+  emit("select-local-target-file", file ? { file, handle: null } : null);
   target.value = "";
 }
 

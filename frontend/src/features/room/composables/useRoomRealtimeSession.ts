@@ -26,6 +26,7 @@ type UseRoomRealtimeSessionOptions = {
   refreshRoomSettings: () => void | Promise<void>;
   onSessionClosed?: (payload: RoomRealtimeSessionClosed) => void;
   onRealtimeMessage?: (payload: MessageResponse) => void;
+  onRealtimeReconnected?: () => void | Promise<void>;
 };
 
 type RoomRealtimePlaybackEventAction =
@@ -49,6 +50,7 @@ type RoomRealtimeVideoSourceEvent = {
 };
 
 const ROOM_REALTIME_DEBUG = false;
+const ROOM_REALTIME_RESUME_CHECK_THROTTLE_MS = 2500;
 
 function payloadRoomId(payload: unknown) {
   if (!payload || typeof payload !== "object") return null;
@@ -109,6 +111,8 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   let enteredRoomId: number | null = null;
   let enteringRoomId: number | null = null;
   let enterAttempt = 0;
+  let shouldRefreshAfterReconnect = false;
+  let lastResumeCheckAt = 0;
 
   async function ensureConnectionReady() {
     auth.syncTokensFromStorage();
@@ -137,6 +141,8 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
       const snapshot = await enterRoomRealtime(roomId);
       if (attempt !== enterAttempt || roomId !== options.roomId.value) return;
 
+      const wasRecovering = shouldRefreshAfterReconnect;
+      shouldRefreshAfterReconnect = false;
       enteredRoomId = roomId;
       isRealtimeActive.value = true;
       presentUserIds.value = normalizePresentUserIds(snapshot);
@@ -151,6 +157,10 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
         ? { action: "snapshot", state: snapshot.playback }
         : null;
       userResourceStates.value = normalizeUserResourceStates(snapshot.user_resource_states);
+
+      if (wasRecovering) {
+        void options.onRealtimeReconnected?.();
+      }
     } catch (error) {
       if (attempt !== enterAttempt) return;
       isRealtimeActive.value = false;
@@ -161,6 +171,30 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
         enteringRoomId = null;
       }
     }
+  }
+
+  function markRealtimeSessionDisconnected() {
+    if (
+      !enteredRoomId &&
+      !enteringRoomId &&
+      !isRealtimeActive.value &&
+      !hasPresenceSnapshot.value
+    ) {
+      return;
+    }
+
+    enterAttempt += 1;
+    shouldRefreshAfterReconnect = true;
+    enteredRoomId = null;
+    enteringRoomId = null;
+    isRealtimeActive.value = false;
+    presentUserIds.value = [];
+    hasPresenceSnapshot.value = false;
+    roomVideoSource.value = null;
+    roomVideoSourceEvent.value = null;
+    roomPlayback.value = null;
+    roomPlaybackEvent.value = null;
+    userResourceStates.value = [];
   }
 
   async function leaveEnteredRoom(roomId = enteredRoomId) {
@@ -320,10 +354,50 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     ];
   }
 
+  function handlePageResume() {
+    const now = Date.now();
+    if (now - lastResumeCheckAt < ROOM_REALTIME_RESUME_CHECK_THROTTLE_MS) return;
+    lastResumeCheckAt = now;
+
+    auth.syncTokensFromStorage();
+    if (!options.roomId.value || !auth.isLoggedIn || !auth.accessToken) return;
+
+    if (
+      wsClient.connectionStatus === "closed" ||
+      wsClient.connectionStatus === "error" ||
+      wsClient.connectionStatus === "idle"
+    ) {
+      markRealtimeSessionDisconnected();
+      void enterCurrentRoom();
+      return;
+    }
+
+    if (
+      wsClient.connectionStatus === "ready" &&
+      (enteredRoomId !== options.roomId.value || !isRealtimeActive.value)
+    ) {
+      markRealtimeSessionDisconnected();
+      void enterCurrentRoom();
+    }
+  }
+
+  function handleVisibilityChange() {
+    if (document.visibilityState !== "visible") return;
+    handlePageResume();
+  }
+
   onMounted(() => {
     bindEvents();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pageshow", handlePageResume);
+    window.addEventListener("focus", handlePageResume);
     stopStatusSubscription = wsClient.onStatusChange((status) => {
       realtimeStatus.value = status;
+      if (status === "closed" || status === "error" || status === "reconnecting") {
+        markRealtimeSessionDisconnected();
+        return;
+      }
+
       if (
         status === "ready" &&
         enteredRoomId !== options.roomId.value &&
@@ -362,6 +436,9 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
 
   onBeforeUnmount(() => {
     enterAttempt += 1;
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("pageshow", handlePageResume);
+    window.removeEventListener("focus", handlePageResume);
     stopStatusSubscription?.();
     stopEventSubscriptions.forEach((stop) => stop());
     stopEventSubscriptions = [];
