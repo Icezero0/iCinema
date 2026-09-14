@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     video_subdir: str = Field("videos", alias="VIDEO_SUBDIR")
     feedback_image_subdir: str = Field("feedback", alias="FEEDBACK_IMAGE_SUBDIR")
 
+    max_request_bytes: int = Field(64 * 1024 * 1024, alias="MAX_REQUEST_BYTES", ge=1)
+    max_upload_bytes: int = Field(10 * 1024 * 1024, alias="MAX_UPLOAD_BYTES", ge=1)
+    user_media_quota_bytes: int = Field(1024 * 1024 * 1024, alias="USER_MEDIA_QUOTA_BYTES", ge=1)
+
     # JWT
     jwt_secret_key: str = Field(..., alias="JWT_SECRET_KEY")
     jwt_algorithm: str = "HS256"

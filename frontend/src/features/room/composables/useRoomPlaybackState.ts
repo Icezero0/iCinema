@@ -9,6 +9,7 @@ import {
   useEntitiesStore,
 } from "@/stores/entities.store";
 import { useToastsStore } from "@/stores/toasts.store";
+import { projectedPlaybackPosition } from "@/infra/realtime/playbackClock";
 
 export type RoomPlayerStageHandle = {
   playVideo: () => Promise<void>;
@@ -17,6 +18,7 @@ export type RoomPlayerStageHandle = {
   seekToPercent: (percent: number, options?: { autoPause?: boolean }) => void;
   seekToSeconds: (seconds: number) => Promise<void>;
   captureCurrentFrame: () => Promise<Blob>;
+  setPlaybackRate: (rate: number) => void;
 };
 
 type UseRoomPlaybackStateOptions = {
@@ -94,8 +96,10 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       logRealtimePlaybackApply("seekForRealtimeState", {
         positionSeconds: state.position_seconds,
       });
-      await options.playerStageRef.value?.seekToSeconds(state.position_seconds);
+      await options.playerStageRef.value?.seekToSeconds(projectedPlaybackPosition(state));
     }
+
+    options.playerStageRef.value?.setPlaybackRate(state.playback_rate);
 
     if (state.status === "playing") {
       logRealtimePlaybackApply("playForRealtimeState", { state });
@@ -257,7 +261,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     pendingSeekProgress.value = null;
 
     if (syncPosition) {
-      playbackCurrentTime.value = state.position_seconds;
+      playbackCurrentTime.value = projectedPlaybackPosition(state);
       updatePlaybackProgress();
     }
 

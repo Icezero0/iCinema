@@ -28,6 +28,14 @@ class MediaService:
         self.storage = MediaStorageService()
         self.emoji_catalog = EmojiCatalogService()
 
+    async def _save_upload(self, db: AsyncSession, *, prepared, asset_type: str, user: User):
+        await self.repo.check_storage_quota(db, user_id=user.id, additional_bytes=prepared.file_size)
+        saved = self.storage.save_prepared_upload(prepared=prepared, asset_type=asset_type)
+        db.info.setdefault("new_media_files", []).append(self.storage.get_file_path(
+            asset_type=asset_type, storage_key=saved.storage_key,
+        ))
+        return saved
+
     def _normalize_datetime_to_utc_aware(self, value: datetime | None) -> datetime | None:
         if value is None:
             return None
@@ -82,8 +90,8 @@ class MediaService:
             sha256=prepared.sha256,
         )
         if asset is None:
-            saved = self.storage.save_prepared_upload(
-                prepared=prepared,
+            saved = await self._save_upload(
+                db, user=user, prepared=prepared,
                 asset_type=MediaAssetType.AVATAR,
             )
             asset = await self.repo.create_media_asset(
@@ -124,13 +132,15 @@ class MediaService:
         )
 
         expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+        await self.repo.lock_media_writes(db)
 
-        asset = await self.repo.find_media_asset_by_type_and_sha256(
+        asset = await self.repo.find_active_media_asset_by_type_and_sha256(
             db,
             asset_type=MediaAssetType.IMAGE,
             sha256=prepared.sha256,
         )
-        if asset is not None:
+        if (asset is not None and not self.is_asset_expired(asset)
+                and self.storage.get_file_path(asset_type=asset.asset_type, storage_key=asset.storage_key).is_file()):
             await self.repo.touch_image_asset_expiry(
                 db,
                 asset_id=asset.id,
@@ -140,8 +150,8 @@ class MediaService:
             await db.refresh(asset)
             return asset
 
-        saved = self.storage.save_prepared_upload(
-            prepared=prepared,
+        saved = await self._save_upload(
+            db, user=user, prepared=prepared,
             asset_type=MediaAssetType.IMAGE,
         )
         asset = await self.repo.create_media_asset(
@@ -175,8 +185,8 @@ class MediaService:
             asset_type=MediaAssetType.FEEDBACK_IMAGE,
         )
 
-        saved = self.storage.save_prepared_upload(
-            prepared=prepared,
+        saved = await self._save_upload(
+            db, user=user, prepared=prepared,
             asset_type=MediaAssetType.FEEDBACK_IMAGE,
         )
         return await self.repo.create_media_asset(
@@ -232,8 +242,8 @@ class MediaService:
             await db.commit()
             return existing
 
-        saved = self.storage.save_prepared_upload(
-            prepared=prepared,
+        saved = await self._save_upload(
+            db, user=user, prepared=prepared,
             asset_type=MediaAssetType.STICKER,
         )
         asset = await self.repo.create_media_asset(
@@ -312,6 +322,7 @@ class MediaService:
         image_id: int,
         user: User,
     ) -> MediaAsset:
+        await self.repo.lock_media_writes(db)
         image = await self.find_media_asset_by_id(db, image_id)
         if image is None or image.asset_type != MediaAssetType.IMAGE:
             raise NotFoundError(
@@ -337,6 +348,7 @@ class MediaService:
             )
 
         if sticker is None:
+            await self.repo.check_storage_quota(db, user_id=user.id, additional_bytes=image.file_size)
             try:
                 storage_key = self.storage.copy_media_file(
                     source_asset_type=MediaAssetType.IMAGE,
@@ -350,6 +362,9 @@ class MediaService:
                     details={"asset_id": image.id},
                 ) from exc
 
+            db.info.setdefault("new_media_files", []).append(self.storage.get_file_path(
+                asset_type=MediaAssetType.STICKER, storage_key=storage_key,
+            ))
             sticker = await self.repo.create_media_asset(
                 db,
                 asset_type=MediaAssetType.STICKER,
@@ -573,6 +588,7 @@ class MediaService:
         *,
         batch_size: int = 100,
     ) -> int:
+        await self.repo.lock_media_writes(db)
         now = datetime.now(timezone.utc)
         assets = await self.repo.get_expired_active_image_assets(
             db,
@@ -580,6 +596,7 @@ class MediaService:
             limit=batch_size,
         )
         if not assets:
+            await db.commit()
             return 0
 
         asset_ids: list[int] = []
@@ -597,9 +614,10 @@ class MediaService:
                 continue
 
         if not asset_ids:
+            await db.commit()
             return 0
 
-        await self.repo.mark_media_assets_expired(
+        await self.repo.mark_media_files_deleted(
             db,
             asset_ids=asset_ids,
         )

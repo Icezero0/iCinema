@@ -8,7 +8,8 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.error_reasons import ErrorReason
-from app.core.exceptions import AppError, BadRequestError
+from app.core.exceptions import AppError, BadRequestError, UnauthorizedError
+from app.modules.users.repository import UserRepository
 from app.core.logging import log_extra
 from app.realtime.constants import WsCommandAction, WsErrorCode, WsMessageType
 from app.realtime.handlers.auth import AuthHandler
@@ -60,6 +61,11 @@ class RealtimeMessageHandler:
 
         try:
             message = WsMessage.model_validate(raw_message)
+
+            if connection is not None and connection.token_version is not None:
+                user = await UserRepository().get_by_id(db, connection.user_id)
+                if user is None or user.token_version != connection.token_version:
+                    raise UnauthorizedError("Session has been revoked", reason="session_revoked")
 
             if message.type == WsMessageType.AUTH:
                 return await self.auth_handler.handle(
@@ -127,6 +133,8 @@ class RealtimeMessageHandler:
                     details=e.details,
                 ).model_dump(mode="json"),
             )
+            if isinstance(e, UnauthorizedError):
+                await websocket.close(code=1008, reason="Session revoked")
             return connection
 
         except ValidationError as e:

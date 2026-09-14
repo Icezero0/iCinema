@@ -313,7 +313,12 @@ onBeforeUnmount(() => {
   }
 });
 
+function setPlaybackRate(rate: number) {
+  if (videoRef.value && Number.isFinite(rate) && rate > 0) videoRef.value.playbackRate = rate;
+}
+
 defineExpose({
+  setPlaybackRate,
   playVideo,
   pauseVideo,
   togglePlayback,

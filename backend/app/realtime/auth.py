@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.error_reasons import ErrorReason
 from app.core.exceptions import UnauthorizedError
-from app.core.security import decode_token
+from app.core.security import decode_token, require_token_version
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 
@@ -44,4 +44,5 @@ async def authenticate_websocket_token(
     user = await UserRepository().get_by_id(db, user_id)
     if not user:
         raise UnauthorizedError("User not found", reason=ErrorReason.USER_NOT_FOUND)
+    require_token_version(payload, user.token_version)
     return user

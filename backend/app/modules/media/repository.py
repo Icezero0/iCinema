@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import delete, desc, func, select, update
+from sqlalchemy import delete, desc, func, select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.media.constants import MediaAssetStatus, MediaAssetType
@@ -10,9 +10,28 @@ from app.modules.media.models import (
     UserEmojiUsage,
     UserStickerLibraryItem,
 )
+from app.modules.users.models import User
+from app.core.config import get_settings
+from app.core.exceptions import AppError
 
 
 class MediaRepository:
+    async def lock_media_writes(self, db: AsyncSession) -> None:
+        # A no-op write serializes file lifecycle changes across SQLite processes.
+        await db.execute(update(MediaAsset).where(MediaAsset.id == -1).values(id=MediaAsset.id))
+
+    async def check_storage_quota(self, db: AsyncSession, *, user_id: int, additional_bytes: int) -> None:
+        # SQLite is the supported database. Acquire its write lock before SUM so
+        # concurrent processes cannot both spend the same remaining quota.
+        await db.execute(update(User).where(User.id == user_id).values(id=User.id))
+        used = await db.scalar(select(func.coalesce(func.sum(MediaAsset.file_size), 0)).where(
+            MediaAsset.uploaded_by_user_id == user_id,
+            MediaAsset.status != MediaAssetStatus.DELETED,
+        ))
+        if used + additional_bytes > get_settings().user_media_quota_bytes:
+            raise AppError("Media storage quota exceeded", code="storage_quota_exceeded",
+                           status_code=413, reason="media_storage_quota_exceeded")
+
     async def find_media_asset_by_id(self, db: AsyncSession, asset_id: int) -> MediaAsset | None:
         result = await db.execute(select(MediaAsset).where(MediaAsset.id == asset_id))
         return result.scalar_one_or_none()
@@ -47,6 +66,9 @@ class MediaRepository:
                 MediaAsset.asset_type == asset_type,
                 MediaAsset.sha256 == sha256,
                 MediaAsset.status == MediaAssetStatus.ACTIVE,
+                or_(MediaAsset.asset_type != MediaAssetType.IMAGE,
+                    MediaAsset.expires_at.is_(None),
+                    MediaAsset.expires_at > datetime.datetime.now(datetime.timezone.utc)),
             )
             .order_by(MediaAsset.id.asc())
         )
@@ -417,9 +439,10 @@ class MediaRepository:
             select(MediaAsset)
             .where(
                 MediaAsset.asset_type == MediaAssetType.IMAGE,
-                MediaAsset.status == MediaAssetStatus.ACTIVE,
-                MediaAsset.expires_at.is_not(None),
-                MediaAsset.expires_at <= now,
+                or_(MediaAsset.status == MediaAssetStatus.EXPIRED,
+                    (MediaAsset.status == MediaAssetStatus.ACTIVE)
+                    & MediaAsset.expires_at.is_not(None)
+                    & (MediaAsset.expires_at <= now)),
             )
             .order_by(MediaAsset.id.asc())
             .limit(limit)
@@ -440,6 +463,12 @@ class MediaRepository:
             .where(MediaAsset.id.in_(asset_ids))
             .values(status=MediaAssetStatus.EXPIRED)
         )
+
+    async def mark_media_files_deleted(self, db: AsyncSession, *, asset_ids: list[int]) -> None:
+        if asset_ids:
+            await db.execute(update(MediaAsset).where(MediaAsset.id.in_(asset_ids)).values(
+                status=MediaAssetStatus.DELETED,
+            ))
 
     async def find_user_emoji_usage(
         self,

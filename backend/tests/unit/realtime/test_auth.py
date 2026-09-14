@@ -20,7 +20,7 @@ class FakeManager:
     def __init__(self) -> None:
         self.register_calls: list[dict] = []
 
-    async def register_connection(self, *, user_id: int, websocket) -> WsConnection:
+    async def register_connection(self, *, user_id: int, websocket, token_version=0) -> WsConnection:
         self.register_calls.append({"user_id": user_id, "websocket": websocket})
         return WsConnection(
             connection_id="conn-auth",
@@ -32,7 +32,7 @@ class FakeManager:
 # authenticate_websocket_token 会把合法 access token 解析为用户对象
 async def test_authenticate_websocket_token_returns_user_for_valid_access_token(monkeypatch) -> None:
     async def fake_get_by_id(self, db, user_id):  # noqa: ANN001
-        return SimpleNamespace(id=user_id)
+        return SimpleNamespace(id=user_id, token_version=0)
 
     monkeypatch.setattr("app.realtime.auth.decode_token", lambda token: {"type": "access", "sub": "42"})
     monkeypatch.setattr("app.realtime.auth.UserRepository.get_by_id", fake_get_by_id)
@@ -91,7 +91,7 @@ async def test_auth_handler_registers_connection_after_successful_authentication
 
     async def fake_authenticate(db, *, token):  # noqa: ANN001
         assert token == "access-token"
-        return SimpleNamespace(id=99)
+        return SimpleNamespace(id=99, token_version=0)
 
     monkeypatch.setattr(
         "app.realtime.handlers.auth.authenticate_websocket_token",

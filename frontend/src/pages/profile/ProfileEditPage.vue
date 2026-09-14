@@ -180,12 +180,17 @@ async function onSave() {
       profilePayload.password = form.newPassword;
     }
 
+    if (avatarFile.value) {
+      await patchMyAvatar(avatarFile.value);
+    }
+
     if (Object.keys(profilePayload).length > 0) {
       await patchMe(profilePayload);
     }
-
-    if (avatarFile.value) {
-      await patchMyAvatar(avatarFile.value);
+    if (profilePayload.password) {
+      auth.logout();
+      await router.replace("/auth/login");
+      return;
     }
 
     await auth.fetchMe();

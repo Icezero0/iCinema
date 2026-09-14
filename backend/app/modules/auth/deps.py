@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.core.error_reasons import ErrorReason
 from app.core.exceptions import UnauthorizedError
 from app.core.logging import set_log_context
-from app.core.security import decode_token
+from app.core.security import decode_token, require_token_version
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 
@@ -59,6 +59,7 @@ async def get_current_user(
     if not user:
         raise UnauthorizedError("User not found", reason=ErrorReason.USER_NOT_FOUND)
 
+    require_token_version(payload, user.token_version)
     request.state.user_id = user.id
     set_log_context(user_id=user.id)
     return user

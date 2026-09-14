@@ -21,11 +21,14 @@ async def test_create_image_asset_reuses_sha_and_refreshes_expiry(
         uploaded_by=user,
         sha256="dup-sha",
     )
-    old_expiry = datetime.now(timezone.utc) - timedelta(days=1)
+    old_expiry = datetime.now(timezone.utc) + timedelta(days=1)
     existing.expires_at = old_expiry
     await factories.commit()
 
     service = MediaService()
+    path = service.storage.get_file_path(asset_type=existing.asset_type, storage_key=existing.storage_key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"png")
 
     async def fake_prepare_upload(**kwargs):
         return SimpleNamespace(

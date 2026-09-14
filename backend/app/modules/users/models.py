@@ -16,6 +16,7 @@ class User(Base):
     )
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     avatar_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     site_role: Mapped[str] = mapped_column(
         String(16),

@@ -1,3 +1,7 @@
+import { observeServerTime } from "./playbackClock";
+import axios from "axios";
+import { refreshAccessTokenOnce, expireAuthSession, onSessionReset } from "@/infra/auth/session";
+
 type WSMessageType = "auth" | "heartbeat" | "command" | "event" | "error" | "ack";
 
 export type WSCommandAction =
@@ -46,6 +50,7 @@ type EnvelopeBase<T extends WSMessageType, P> = {
   v: 1;
   type: T;
   payload: P;
+  server_ts_ms?: number;
 };
 
 type AuthPayload = {
@@ -189,6 +194,8 @@ class WSClient {
   private lastPongAt = 0;
   private connectPromise: Promise<void> | null = null;
   private authRequestId: string | null = null;
+  private connectionGeneration = 0;
+  private recoveringAuth = false;
 
   private pendingRequests = new Map<string, PendingRequest>();
   private eventHandlers = new Map<WSEventName, Set<EventHandler>>();
@@ -224,6 +231,7 @@ class WSClient {
   }
 
   async connect(token: string) {
+    if (this.recoveringAuth && this.connectPromise) return this.connectPromise;
     if (!token) {
       throw new Error("WS access token is required");
     }
@@ -244,11 +252,49 @@ class WSClient {
 
     this.token = token;
     this.shouldReconnect = true;
-    this.connectPromise = this.openConnection();
+    this.connectPromise = this.connectWithRefresh();
     return this.connectPromise;
   }
 
+  private async connectWithRefresh() {
+    const generation = this.connectionGeneration;
+    try {
+      try {
+        await this.openConnection();
+      } catch (error) {
+        if (!(error instanceof WSProtocolError) || error.code !== "unauthorized"
+          || !this.shouldReconnect || generation !== this.connectionGeneration) throw error;
+        this.recoveringAuth = true;
+        const token = await refreshAccessTokenOnce();
+        if (!this.shouldReconnect || generation !== this.connectionGeneration) throw new Error("Session changed");
+        this.token = token;
+        await this.openConnection();
+      }
+    } catch (error) {
+      if (generation !== this.connectionGeneration) throw error;
+      const invalidSession = (error instanceof WSProtocolError && error.code === "unauthorized")
+        || (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0))
+        || !localStorage.getItem("refresh_token");
+      if (invalidSession) {
+        this.disconnect();
+        expireAuthSession();
+      } else {
+        const socket = this.ws;
+        this.ws = null;
+        socket?.close();
+        this.stopHeartbeat();
+        this.updateStatus("closed");
+        this.scheduleReconnect();
+      }
+      throw error;
+    } finally {
+      if (generation === this.connectionGeneration) this.recoveringAuth = false;
+    }
+  }
+
   disconnect() {
+    this.connectionGeneration += 1;
+    this.recoveringAuth = false;
     this.shouldReconnect = false;
     this.connectPromise = null;
     this.authRequestId = null;
@@ -357,10 +403,11 @@ class WSClient {
         const wasManual = !this.shouldReconnect;
         this.stopHeartbeat();
         this.ws = null;
-        this.connectPromise = null;
+        if (!this.recoveringAuth) this.connectPromise = null;
         this.authRequestId = null;
         this.rejectAllPending(new WSProtocolError("WebSocket connection closed"));
         this.updateStatus("closed");
+        reject(new WSProtocolError("WebSocket connection closed"));
 
         if (!wasManual) {
           this.scheduleReconnect();
@@ -439,6 +486,7 @@ class WSClient {
       return;
     }
 
+    if (envelope.server_ts_ms !== undefined) observeServerTime(envelope.server_ts_ms);
     this.envelopeHandlers.forEach((handler) => handler(envelope));
 
     switch (envelope.type) {
@@ -474,6 +522,7 @@ class WSClient {
   private handleErrorEnvelope(envelope: WSErrorEnvelope) {
     const requestId = envelope.payload.request_id ?? this.authRequestId;
     const isUnauthorized = envelope.payload.code === "unauthorized";
+    const isAuthentication = this.status === "authenticating";
     const error = new WSProtocolError(
       envelope.payload.message,
       envelope.payload.code,
@@ -488,15 +537,17 @@ class WSClient {
         window.clearTimeout(pending.timeoutId);
         this.pendingRequests.delete(requestId);
         pending.reject(error);
-        if (isUnauthorized) {
+        if (isUnauthorized && !isAuthentication) {
           this.disconnect();
+          expireAuthSession();
         }
         return;
       }
     }
 
-    if (isUnauthorized) {
+    if (isUnauthorized && !isAuthentication) {
       this.disconnect();
+      expireAuthSession();
     }
   }
 
@@ -570,7 +621,7 @@ class WSClient {
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
 
-      const token = localStorage.getItem("access_token") || this.token;
+      const token = localStorage.getItem("access_token");
       if (!token || !this.shouldReconnect) return;
 
       void this.connect(token).catch(() => {
@@ -594,4 +645,6 @@ class WSClient {
 }
 
 export { WSProtocolError };
-export default new WSClient();
+const wsClient = new WSClient();
+onSessionReset(() => wsClient.disconnect());
+export default wsClient;

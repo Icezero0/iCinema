@@ -1,11 +1,9 @@
 import axios, { AxiosError } from 'axios'
 import type { InternalAxiosRequestConfig } from 'axios'
 
-const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? 'http://localhost:8000'
-const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? '/api/v1'
+import { API_BASE_URL, refreshAccessTokenOnce, expireAuthSession, sessionGeneration } from '@/infra/auth/session'
 
-const baseURL = API_ORIGIN + API_PREFIX
-
+const baseURL = API_BASE_URL
 export const http = axios.create({
   baseURL,
   timeout: 15000,
@@ -25,12 +23,6 @@ type BackendErrorResponse = {
 export type BackendAxiosError = AxiosError & {
   backendError?: BackendErrorPayload
   backendReason?: string
-}
-
-type TokenResponse = {
-  access_token: string
-  refresh_token: string
-  token_type: string
 }
 
 function extractBackendErrorPayload(err: unknown): BackendErrorPayload | null {
@@ -65,16 +57,6 @@ export function getBackendErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : ""
 }
 
-function clearAuthStorage() {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
-}
-
-function redirectToLogin() {
-  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
-  window.location.href = `/auth/login?redirect=${encodeURIComponent(redirect)}`
-}
-
 function isAuthRequest(url?: string) {
   if (!url) return false
   return (
@@ -86,6 +68,7 @@ function isAuthRequest(url?: string) {
 
 // 请求拦截：默认带 access_token
 http.interceptors.request.use((config) => {
+  (config as InternalAxiosRequestConfig & { sessionGeneration: number }).sessionGeneration = sessionGeneration()
   const token = localStorage.getItem('access_token')
   if (token) {
     config.headers = config.headers ?? {}
@@ -96,38 +79,17 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-let refreshPromise: Promise<string> | null = null
-
-async function refreshAccessTokenOnce(): Promise<string> {
-  const refreshToken = localStorage.getItem('refresh_token')
-  if (!refreshToken) throw new Error('No refresh token')
-
-  const { data } = await axios.post<TokenResponse>(
-    `${baseURL}/auth/refresh`,
-    {
-      refresh_token: refreshToken,
-    },
-    {
-      timeout: 15000,
-    },
-  )
-
-  const newAccessToken = data?.access_token
-  const newRefreshToken = data?.refresh_token
-
-  if (!newAccessToken || !newRefreshToken) {
-    throw new Error('Refresh did not return complete token pair')
-  }
-
-  localStorage.setItem('access_token', newAccessToken)
-  localStorage.setItem('refresh_token', newRefreshToken)
-
-  return newAccessToken
-}
-
 http.interceptors.response.use(
-  (resp) => resp,
+  (resp) => {
+    if ((resp.config as InternalAxiosRequestConfig & { sessionGeneration: number }).sessionGeneration !== sessionGeneration()) {
+      throw new axios.CanceledError('Session changed')
+    }
+    return resp
+  },
   async (err: AxiosError) => {
+    if (err.config && (err.config as InternalAxiosRequestConfig & { sessionGeneration: number }).sessionGeneration !== sessionGeneration()) {
+      throw new axios.CanceledError('Session changed')
+    }
     annotateBackendError(err)
 
     const status = err.response?.status
@@ -150,22 +112,17 @@ http.interceptors.response.use(
     }
     original._retry = true
 
+    const generation = sessionGeneration()
     try {
-      refreshPromise =
-        refreshPromise ??
-        refreshAccessTokenOnce().finally(() => {
-          refreshPromise = null
-        })
-
-      const newToken = await refreshPromise
+      const newToken = await refreshAccessTokenOnce()
 
       original.headers = original.headers ?? {}
       original.headers.Authorization = `Bearer ${newToken}`
 
       return http.request(original)
     } catch {
-      clearAuthStorage()
-      redirectToLogin()
+      if (generation !== sessionGeneration()) throw new axios.CanceledError('Session changed')
+      expireAuthSession()
       throw err
     }
   },

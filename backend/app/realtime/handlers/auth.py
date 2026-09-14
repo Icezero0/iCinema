@@ -31,7 +31,9 @@ class AuthHandler:
 
         auth_payload = WsAuthPayload.model_validate(payload)
         user = await authenticate_websocket_token(db, token=auth_payload.token)
-        connection = await manager.register_connection(user_id=user.id, websocket=websocket)
+        connection = await manager.register_connection(
+            user_id=user.id, websocket=websocket, token_version=user.token_version,
+        )
         logger.info(
             "ws authenticated user_id=%s connection_id=%s",
             user.id,

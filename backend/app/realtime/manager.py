@@ -8,6 +8,8 @@ from fastapi import WebSocket
 
 from app.realtime.channels import ChannelKey, user_channel
 from app.realtime.protocol import WsMessage
+from app.core.database import AsyncSessionLocal
+from app.modules.users.repository import UserRepository
 
 
 @dataclass
@@ -17,6 +19,7 @@ class WsConnection:
     websocket: WebSocket
     subscriptions: set[ChannelKey] = field(default_factory=set)
     active_room_id: int | None = None
+    token_version: int | None = None
 
 
 class RealtimeManager:
@@ -31,11 +34,13 @@ class RealtimeManager:
         *,
         user_id: int,
         websocket: WebSocket,
+        token_version: int | None = None,
     ) -> WsConnection:
         connection = WsConnection(
             connection_id=uuid4().hex,
             user_id=user_id,
             websocket=websocket,
+            token_version=token_version,
         )
 
         async with self._lock:
@@ -113,6 +118,13 @@ class RealtimeManager:
             return
 
         try:
+            if connection.token_version is not None:
+                async with AsyncSessionLocal() as db:
+                    user = await UserRepository().get_by_id(db, connection.user_id)
+                    if user is None or user.token_version != connection.token_version:
+                        await connection.websocket.close(code=1008, reason="Session revoked")
+                        await self.disconnect(connection_id)
+                        return
             await connection.websocket.send_json(message.model_dump(mode="json"))
         except Exception:  # noqa: BLE001
             try:

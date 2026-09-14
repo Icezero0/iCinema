@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from time import time
 
 from app.realtime.constants import (
     WsCommandAction,
@@ -19,6 +20,7 @@ class WsMessage(BaseModel):
     v: int = 1
     type: WsMessageType
     payload: dict[str, Any] | None = None
+    server_ts_ms: int = Field(default_factory=lambda: int(time() * 1000))
 
 
 # =========================

@@ -124,8 +124,8 @@ async def get_my_stickers(
         db,
         user=current_user,
         all=all,
-        page=page,
-        page_size=page_size,
+        page=page if page is not None else 1,
+        page_size=page_size if page_size is not None else 20,
     )
     return StickerLibraryResponse(
         items=[

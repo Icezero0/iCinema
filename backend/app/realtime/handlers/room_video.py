@@ -22,7 +22,7 @@ from app.realtime.constants import AutoPlaybackAction, ResourceHealthStatusType,
 from app.realtime.manager import RealtimeManager, WsConnection
 from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
-from app.realtime.room_video_runtime import RoomVideoRuntimeService
+from app.realtime.room_video_runtime import RoomVideoRuntimeService, now_ms
 
 logger = logging.getLogger("app.realtime.video")
 
@@ -180,7 +180,7 @@ class RoomVideoCommandHandler:
                 source_type=source_type,
                 external_url=external_url,
                 file_hash=file_hash,
-                anchor_ts_ms=anchor_ts_ms,
+                anchor_ts_ms=now_ms(),
             )
         )
 
@@ -231,7 +231,7 @@ class RoomVideoCommandHandler:
         playback = await self.video_runtime_service.play(
             room_id=room_id,
             position_seconds=position_seconds,
-            anchor_ts_ms=anchor_ts_ms,
+            anchor_ts_ms=now_ms(),
             sync_policy=sync_policy,
             playback_rate=playback_rate,
         )
@@ -280,7 +280,7 @@ class RoomVideoCommandHandler:
         playback = await self.video_runtime_service.pause(
             room_id=room_id,
             position_seconds=position_seconds,
-            anchor_ts_ms=anchor_ts_ms,
+            anchor_ts_ms=now_ms(),
             sync_policy=sync_policy,
             playback_rate=playback_rate,
         )
@@ -329,7 +329,7 @@ class RoomVideoCommandHandler:
         playback = await self.video_runtime_service.seek(
             room_id=room_id,
             position_seconds=position_seconds,
-            anchor_ts_ms=anchor_ts_ms,
+            anchor_ts_ms=now_ms(),
             sync_policy=sync_policy,
             resume_after_seek=resume_after_seek,
         )

@@ -17,9 +17,11 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
-TEST_DATA_DIR = Path(tempfile.gettempdir()) / "icinema_backend_new_tests"
-os.environ.setdefault("DATA_DIR", str(TEST_DATA_DIR))
+os.environ["JWT_SECRET_KEY"] = "test-secret-key"
+TEST_DATA_DIR = Path(tempfile.mkdtemp(prefix="icinema_backend_tests_")).resolve()
+assert TEST_DATA_DIR.is_relative_to(Path(tempfile.gettempdir()).resolve())
+os.environ["DATA_DIR"] = str(TEST_DATA_DIR)
+os.environ["UPLOAD_DIR"] = str(TEST_DATA_DIR / "upload")
 os.environ["DEBUG"] = "false"
 
 from app.core.database import AsyncSessionLocal, engine
@@ -105,7 +107,7 @@ async def api_client(app) -> AsyncIterator[httpx.AsyncClient]:
 @pytest.fixture
 def auth_headers() -> Callable[[User], dict[str, str]]:
     def _build(user: User) -> dict[str, str]:
-        token = create_access_token(str(user.id))
+        token = create_access_token(str(user.id), {"ver": user.token_version})
         return {"Authorization": f"Bearer {token}"}
 
     return _build
@@ -114,7 +116,7 @@ def auth_headers() -> Callable[[User], dict[str, str]]:
 @pytest.fixture
 def refresh_token_for() -> Callable[[User], str]:
     def _build(user: User) -> str:
-        return create_refresh_token(str(user.id))
+        return create_refresh_token(str(user.id), token_version=user.token_version)
 
     return _build
 

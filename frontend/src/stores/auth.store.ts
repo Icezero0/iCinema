@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { getMe, type UserMeResponse } from '@/infra/api/users.api'
-import { refreshAccessToken } from '@/infra/api/auth.api'
+import { refreshAccessTokenOnce, resetSessionData } from '@/infra/auth/session'
 
 type AuthStatus = 'unknown' | 'authenticated' | 'anonymous'
 
@@ -36,6 +36,7 @@ export const useAuthStore = defineStore('auth', {
           localStorage.removeItem('refresh_token')
         }
       }
+      resetSessionData()
     },
 
     syncTokensFromStorage() {
@@ -54,6 +55,7 @@ export const useAuthStore = defineStore('auth', {
       this.clearTokens()
       this.me = null
       this.status = 'anonymous'
+      resetSessionData()
     },
 
     async fetchMe() {
@@ -83,8 +85,8 @@ export const useAuthStore = defineStore('auth', {
 
       if (this.refreshToken) {
         try {
-          const r = await refreshAccessToken(this.refreshToken)
-          this.setTokens(r.access_token, r.refresh_token)
+          await refreshAccessTokenOnce()
+          this.syncTokensFromStorage()
           await this.fetchMe()
           return
         } catch {

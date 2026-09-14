@@ -1,4 +1,5 @@
 from math import ceil
+from sqlalchemy import update
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -154,8 +155,11 @@ class UserService:
         if "username" in updates:
             user.username = updates["username"]
 
-        if "password" in updates:
+        if updates.get("password") is not None:
             user.hashed_password = hash_password(updates["password"])
+            await db.execute(update(User).where(User.id == user.id).values(
+                token_version=User.token_version + 1,
+            ))
 
         if "auto_accept" in updates:
             user.auto_accept = updates["auto_accept"]

@@ -1,17 +1,36 @@
 import hashlib
 import shutil
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
+from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.error_reasons import ErrorReason
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import AppError, BadRequestError
 from app.modules.media.constants import MediaAssetType
 
 settings = get_settings()
+
+
+@event.listens_for(Session, "after_commit")
+def _commit_media_files(session):
+    session.info.pop("new_media_files", None)
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _remove_uncommitted_media_files(session, transaction):
+    if transaction.parent is not None:
+        return
+    for path in session.info.pop("new_media_files", []):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logging.getLogger(__name__).exception("Could not remove uncommitted media file")
 
 
 @dataclass
@@ -135,7 +154,18 @@ class MediaStorageService:
                     },
                 )
 
-        content = await file.read()
+        chunks = []
+        size = 0
+        while True:
+            chunk = await file.read(min(64 * 1024, settings.max_upload_bytes + 1 - size))
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > settings.max_upload_bytes:
+                raise AppError("Media file is too large", code="payload_too_large", status_code=413,
+                               reason="media_file_too_large", details={"max_bytes": settings.max_upload_bytes})
+            chunks.append(chunk)
+        content = b"".join(chunks)
         if not content:
             raise BadRequestError(
                 "Media file cannot be empty",
@@ -160,12 +190,19 @@ class MediaStorageService:
         prepared: PreparedUploadFile,
         asset_type: str,
     ) -> SavedMediaFile:
+        if len(prepared.content) > settings.max_upload_bytes:
+            raise AppError("Media file is too large", code="payload_too_large", status_code=413,
+                           reason="media_file_too_large")
         base_dir = self._get_base_dir(asset_type)
         base_dir.mkdir(parents=True, exist_ok=True)
 
         filename = f"{uuid4().hex}{prepared.ext}"
         target = base_dir / filename
-        target.write_bytes(prepared.content)
+        try:
+            target.write_bytes(prepared.content)
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
 
         return SavedMediaFile(
             storage_key=filename,
@@ -196,7 +233,11 @@ class MediaStorageService:
 
         filename = f"{uuid4().hex}{source.suffix.lower()}"
         target = target_dir / filename
-        shutil.copyfile(source, target)
+        try:
+            shutil.copyfile(source, target)
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
         return filename
 
     def get_file_path(self, *, asset_type: str, storage_key: str) -> Path:

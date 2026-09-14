@@ -7,6 +7,7 @@ from app.core.security import (
     create_refresh_token,
     decode_token,
     verify_password,
+    require_token_version,
 )
 from app.modules.users.repository import UserRepository
 
@@ -15,10 +16,10 @@ class AuthService:
     def __init__(self) -> None:
         self.user_repo = UserRepository()
 
-    def _build_token_response(self, user_id: int) -> dict:
+    def _build_token_response(self, user_id: int, token_version: int = 0) -> dict:
         return {
-            "access_token": create_access_token(str(user_id)),
-            "refresh_token": create_refresh_token(str(user_id)),
+            "access_token": create_access_token(str(user_id), {"ver": token_version}),
+            "refresh_token": create_refresh_token(str(user_id), token_version=token_version),
             "token_type": "bearer",
         }
 
@@ -30,7 +31,7 @@ class AuthService:
                 reason=ErrorReason.INVALID_CREDENTIALS,
             )
 
-        return self._build_token_response(user.id)
+        return self._build_token_response(user.id, user.token_version)
 
     async def refresh_tokens(self, db: AsyncSession, *, refresh_token: str) -> dict:
         try:
@@ -69,4 +70,5 @@ class AuthService:
         if not user:
             raise UnauthorizedError("User not found", reason=ErrorReason.USER_NOT_FOUND)
 
-        return self._build_token_response(user.id)
+        require_token_version(payload, user.token_version)
+        return self._build_token_response(user.id, user.token_version)
