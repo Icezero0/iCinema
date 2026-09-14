@@ -311,8 +311,9 @@ class WSClient {
   sendHeartbeat() {
     if (!this.ws || this.status !== "ready") return;
 
+    const ws = this.ws;
     this.lastPingAt = Date.now();
-    this.armHeartbeatTimeout();
+    this.armHeartbeatTimeout(ws);
 
     const envelope: WSHeartbeatEnvelope = {
       v: WS_PROTOCOL_VERSION,
@@ -337,18 +338,22 @@ class WSClient {
 
     return new Promise<void>((resolve, reject) => {
       const handleOpen = () => {
+        if (this.ws !== ws) return;
         this.authenticate().then(resolve).catch(reject);
       };
 
       const handleMessage = (event: MessageEvent<string>) => {
+        if (this.ws !== ws) return;
         this.handleMessage(event.data);
       };
 
       const handleError = () => {
+        if (this.ws !== ws) return;
         this.updateStatus("error");
       };
 
       const handleClose = () => {
+        if (this.ws !== ws) return;
         const wasManual = !this.shouldReconnect;
         this.stopHeartbeat();
         this.ws = null;
@@ -526,19 +531,19 @@ class WSClient {
     this.lastPongAt = 0;
   }
 
-  private armHeartbeatTimeout() {
+  private armHeartbeatTimeout(ws: WebSocket) {
     this.clearHeartbeatTimeout();
 
     this.heartbeatTimeoutTimer = window.setTimeout(() => {
+      if (this.ws !== ws) return;
+
       const waitingForPong =
         this.lastPingAt > 0 &&
         (this.lastPongAt === 0 || this.lastPongAt < this.lastPingAt);
 
       if (!waitingForPong) return;
 
-      if (this.ws) {
-        this.ws.close();
-      }
+      ws.close();
     }, HEARTBEAT_TIMEOUT_MS);
   }
 

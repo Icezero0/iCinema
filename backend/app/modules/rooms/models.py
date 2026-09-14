@@ -20,6 +20,7 @@ from app.modules.rooms.constants import (
 
 class Room(Base):
     __tablename__ = "rooms"
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

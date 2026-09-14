@@ -1,6 +1,9 @@
 import pytest
+from sqlalchemy import text
 
 from app.core.exceptions import ConflictError, ForbiddenError
+from app.modules.media.models import MessageResourceRef
+from app.modules.messages.models import Message
 from app.modules.notifications.models import Notification
 from app.modules.rooms.constants import (
     RoomJoinAuditMode,
@@ -40,6 +43,45 @@ async def test_create_room_creates_owner_membership_and_settings(db_session, fac
     assert settings_list[0].room_id == room.id
     assert settings_list[0].sync_policy == RoomSyncPolicy.AUTO_SYNC
     assert settings_list[0].seek_auto_pause is True
+
+
+# 删除房间必须清理消息资源链，并且后续房间不能复用旧房间 ID。
+async def test_delete_room_cascades_messages_and_does_not_reuse_room_id(
+    db_session,
+    factories,
+) -> None:
+    owner = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    asset = await factories.create_media_asset(uploaded_by=owner)
+    message = await factories.create_message(
+        room=room,
+        sender=owner,
+        content='{"segments":[{"type":"text","text":"old message"}]}',
+    )
+    await factories.add_message_resource_ref(message=message, asset=asset)
+    await factories.commit()
+
+    deleted_room_id = room.id
+    foreign_keys = await db_session.execute(text("PRAGMA foreign_keys"))
+    assert foreign_keys.scalar_one() == 1
+
+    await RoomService().delete_room(
+        db_session,
+        room_id=deleted_room_id,
+        user=owner,
+    )
+
+    assert await factories.list_all(Message) == []
+    assert await factories.list_all(MessageResourceRef) == []
+
+    replacement = await RoomService().create_room(
+        db_session,
+        user=owner,
+        payload=RoomCreate(name=room.name),
+    )
+
+    assert replacement.id > deleted_room_id
+    assert await factories.list_all(Message) == []
 
 
 # 验证非成员无法访问私有房间。

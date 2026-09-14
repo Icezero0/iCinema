@@ -9,6 +9,7 @@ import {
   unsetRoomMemberManager,
 } from "@/infra/api/rooms.api";
 import { useEntitiesStore } from "@/stores/entities.store";
+import { useMessagesStore } from "@/stores/messages.store";
 import { useToastsStore } from "@/stores/toasts.store";
 import { getBackendErrorMessage } from "@/infra/http/client";
 
@@ -32,6 +33,7 @@ function setMemberActionLoading(actionIds: { value: number[] }, userId: number, 
 
 export function useRoomMemberActions(options: UseRoomMemberActionsOptions) {
   const entitiesStore = useEntitiesStore();
+  const messagesStore = useMessagesStore();
   const toasts = useToastsStore();
 
   const isLeavingRoom = ref(false);
@@ -68,7 +70,9 @@ export function useRoomMemberActions(options: UseRoomMemberActionsOptions) {
     isDisbandingRoom.value = true;
 
     try {
-      await deleteRoom(options.roomId.value);
+      const deletedRoomId = options.roomId.value;
+      await deleteRoom(deletedRoomId);
+      messagesStore.clearRoom(deletedRoomId);
       toasts.push({
         message: options.t("room.members.disbandSuccess"),
         tone: "success",

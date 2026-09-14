@@ -657,6 +657,10 @@ function removeDanmaku(id: string) {
 }
 
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
+  if (payload.reason === "room_deleted") {
+    messagesStore.clearRoom(roomId.value);
+  }
+
   toasts.push({
     message: t(`room.realtime.sessionClosed.${payload.reason}`),
     tone: "warning",
