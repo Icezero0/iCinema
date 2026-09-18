@@ -37,6 +37,8 @@ export function useRoomJoinRequests(options: UseRoomJoinRequestsOptions) {
 
     return {
       id: request.id,
+      roomAction: request.room_action,
+      canReview: canReviewRequest(request),
       user:
         user?.username ||
         user?.email ||
@@ -106,6 +108,11 @@ export function useRoomJoinRequests(options: UseRoomJoinRequestsOptions) {
     return requestActionIds.value.includes(requestId);
   }
 
+  function canReviewRequest(request: RoomJoinRequest) {
+    return options.canManageRoomRequests.value && request.status === "pending"
+      && request.room_action === "pending";
+  }
+
   function setRequestActionLoading(requestId: number, loading: boolean) {
     requestActionIds.value = loading
       ? [...new Set([...requestActionIds.value, requestId])]
@@ -113,6 +120,8 @@ export function useRoomJoinRequests(options: UseRoomJoinRequestsOptions) {
   }
 
   async function approveRequest(requestId: number) {
+    const request = roomJoinRequests.value.find(item => item.id === requestId);
+    if (!request || !canReviewRequest(request) || isRequestActionLoading(requestId)) return;
     setRequestActionLoading(requestId, true);
     requestsError.value = "";
 
@@ -127,6 +136,8 @@ export function useRoomJoinRequests(options: UseRoomJoinRequestsOptions) {
   }
 
   async function rejectRequest(requestId: number) {
+    const request = roomJoinRequests.value.find(item => item.id === requestId);
+    if (!request || !canReviewRequest(request) || isRequestActionLoading(requestId)) return;
     setRequestActionLoading(requestId, true);
     requestsError.value = "";
 

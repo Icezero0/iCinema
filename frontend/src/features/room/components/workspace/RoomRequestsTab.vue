@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import RoomRequestItem from "@/features/room/components/RoomRequestItem.vue";
+import type { RoomJoinRequestAction } from "@/infra/api/rooms.api";
 
 defineProps<{
   loading?: boolean;
@@ -11,6 +12,8 @@ defineProps<{
     user: string;
     note: string;
     time: string;
+    roomAction: RoomJoinRequestAction;
+    canReview: boolean;
   }>;
   isRequestActionLoading: (requestId: number) => boolean;
 }>();
@@ -44,6 +47,8 @@ const { t } = useI18n();
         :user="request.user"
         :time="request.time"
         :note="request.note"
+        :room-action="request.roomAction"
+        :can-review="request.canReview"
         :loading="isRequestActionLoading(request.id)"
         @approve="emit('approve', request.id)"
         @reject="emit('reject', request.id)"

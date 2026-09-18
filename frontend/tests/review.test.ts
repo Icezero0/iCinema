@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import axios from 'axios';
-import { createApp, ref } from 'vue';
+import { computed, createApp, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import en from '../src/infra/i18n/locales/en';
@@ -82,6 +82,35 @@ const { useAuthStore } = await import('../src/stores/auth.store');
 const { useRoomsStore } = await import('../src/stores/rooms.store');
 const { useMessagesStore } = await import('../src/stores/messages.store');
 const { http } = await import('../src/infra/http/client');
+const { useRoomJoinRequests } = await import('../src/features/room/composables/useRoomJoinRequests');
+
+test('room invitation already approved by the room cannot be reviewed again', async () => {
+  setActivePinia(createPinia());
+  const original = http.defaults.adapter;
+  let calls = 0;
+  http.defaults.adapter = async () => { calls++; throw new Error('Unexpected review'); };
+  try {
+    const permitted = ref(true);
+    const requests = useRoomJoinRequests({ roomId: computed(() => 1),
+      canManageRoomRequests: computed(() => permitted.value), optimisticInviteUserIds: ref([]), t: key => key });
+    const request = { id: 1, room_id: 1, initiator_user_id: 1, target_user_id: 2,
+      source: 'invite', status: 'pending', room_action: 'approved', target_action: 'pending',
+      created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' } as any;
+    requests.roomJoinRequests.value = [request];
+    assert.equal(requests.roomRequestItems.value[0]?.canReview, false);
+    assert.equal(requests.roomRequestItems.value[0]?.roomAction, 'approved');
+    await requests.approveRequest(1);
+    await requests.rejectRequest(1);
+    assert.equal(calls, 0);
+    requests.roomJoinRequests.value = [{ ...request, source: 'apply', room_action: 'pending', target_action: 'approved' }];
+    assert.equal(requests.roomRequestItems.value[0]?.canReview, true);
+    permitted.value = false;
+    assert.equal(requests.roomRequestItems.value[0]?.canReview, false);
+    permitted.value = true;
+    requests.roomJoinRequests.value = [{ ...request, status: 'cancelled', room_action: 'pending' }];
+    assert.equal(requests.roomRequestItems.value[0]?.canReview, false);
+  } finally { http.defaults.adapter = original; setActivePinia(pinia); }
+});
 
 test('home includes joined rooms without depending on the public directory', async () => {
   setActivePinia(createPinia());

@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { CheckIcon, XMarkIcon } from "@heroicons/vue/24/outline";
+import { useI18n } from "vue-i18n";
+import type { RoomJoinRequestAction } from "@/infra/api/rooms.api";
+import BasePill from "@/ui/base/BasePill.vue";
+
+const { t } = useI18n();
 
 defineProps<{
   user: string;
   note: string;
   time: string;
+  roomAction: RoomJoinRequestAction;
+  canReview: boolean;
   loading?: boolean;
 }>();
 
@@ -23,21 +30,26 @@ const emit = defineEmits<{
     <div class="requestActions">
       <span class="requestTime">{{ time }}</span>
       <BaseIconButton
+        v-if="canReview"
         class="miniAction approveAction"
-        aria-label="Approve request"
+        :aria-label="t('joinRequests.actions.approve')"
         :disabled="loading"
         @click="emit('approve')"
       >
         <AppIcon :icon="CheckIcon" :size="18" />
       </BaseIconButton>
       <BaseIconButton
+        v-if="canReview"
         class="miniAction rejectAction"
-        aria-label="Reject request"
+        :aria-label="t('joinRequests.actions.reject')"
         :disabled="loading"
         @click="emit('reject')"
       >
         <AppIcon :icon="XMarkIcon" :size="18" />
       </BaseIconButton>
+      <BasePill v-if="!canReview" tone="muted" class="actionStatus" :data-status="roomAction">
+        {{ t(`joinRequests.status.${roomAction}`) }}
+      </BasePill>
     </div>
   </div>
 </template>
@@ -86,6 +98,13 @@ const emit = defineEmits<{
   border: 1px solid var(--c-border);
   background: color-mix(in srgb, var(--c-surface) 82%, var(--c-bg));
 }
+
+.actionStatus[data-status="approved"] {
+  color: #2fb46e;
+  border-color: color-mix(in srgb, #2fb46e 30%, var(--c-border));
+  background: color-mix(in srgb, #2fb46e 10%, var(--c-surface));
+}
+.actionStatus[data-status="rejected"] { color: var(--c-danger); }
 
 .miniAction.approveAction {
   color: #2fb46e;
