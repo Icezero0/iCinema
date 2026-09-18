@@ -102,7 +102,7 @@ const allPanelOptions = computed<{ key: RoomPanelKey; label: string; badge?: str
   {
     key: "requests",
     label: t("room.tabs.requests"),
-    badge: roomJoinRequests.value.length > 0 ? String(roomJoinRequests.value.length) : undefined,
+    badge: roomRequestItems.value.length > 0 ? String(roomRequestItems.value.length) : undefined,
     icon: ClipboardDocumentCheckIcon,
   },
   { key: "settings", label: t("room.tabs.settings"), icon: Cog6ToothIcon },
@@ -185,7 +185,6 @@ const {
 const {
   requestsLoading,
   requestsError,
-  roomJoinRequests,
   roomRequestItems,
   pendingMemberInviteStates,
   fetchRoomRequests,

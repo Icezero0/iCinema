@@ -97,18 +97,18 @@ test('room invitation already approved by the room cannot be reviewed again', as
       source: 'invite', status: 'pending', room_action: 'approved', target_action: 'pending',
       created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' } as any;
     requests.roomJoinRequests.value = [request];
-    assert.equal(requests.roomRequestItems.value[0]?.canReview, false);
-    assert.equal(requests.roomRequestItems.value[0]?.roomAction, 'approved');
+    assert.deepEqual(requests.roomRequestItems.value, []);
+    assert.deepEqual(requests.pendingMemberInviteStates.value, [{ userId: 2, source: 'invite' }]);
     await requests.approveRequest(1);
     await requests.rejectRequest(1);
     assert.equal(calls, 0);
     requests.roomJoinRequests.value = [{ ...request, source: 'apply', room_action: 'pending', target_action: 'approved' }];
     assert.equal(requests.roomRequestItems.value[0]?.canReview, true);
     permitted.value = false;
-    assert.equal(requests.roomRequestItems.value[0]?.canReview, false);
+    assert.deepEqual(requests.roomRequestItems.value, []);
     permitted.value = true;
     requests.roomJoinRequests.value = [{ ...request, status: 'cancelled', room_action: 'pending' }];
-    assert.equal(requests.roomRequestItems.value[0]?.canReview, false);
+    assert.deepEqual(requests.roomRequestItems.value, []);
   } finally { http.defaults.adapter = original; setActivePinia(pinia); }
 });
 

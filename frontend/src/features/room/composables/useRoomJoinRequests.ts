@@ -31,7 +31,7 @@ export function useRoomJoinRequests(options: UseRoomJoinRequestsOptions) {
   const roomJoinRequests = ref<RoomJoinRequest[]>([]);
   const requestActionIds = ref<number[]>([]);
 
-  const roomRequestItems = computed(() => roomJoinRequests.value.map((request) => {
+  const roomRequestItems = computed(() => roomJoinRequests.value.filter(canReviewRequest).map((request) => {
     const isApply = request.source === "apply";
     const user = isApply ? request.initiator : request.target;
 
