@@ -79,6 +79,46 @@ const clock = await import('../src/infra/realtime/playbackClock');
 const { resetStoresOnSessionChange } = await import('../src/infra/auth/sessionPinia');
 const { useStickersStore } = await import('../src/stores/stickers.store');
 const { useAuthStore } = await import('../src/stores/auth.store');
+const { useRoomsStore } = await import('../src/stores/rooms.store');
+const { useMessagesStore } = await import('../src/stores/messages.store');
+const { http } = await import('../src/infra/http/client');
+
+test('home includes joined rooms without depending on the public directory', async () => {
+  setActivePinia(createPinia());
+  const original = http.defaults.adapter;
+  const requests: string[] = [];
+  http.defaults.adapter = async config => {
+    requests.push(config.url!);
+    if (config.url !== '/users/me/rooms') throw new Error('Public directory unavailable');
+    assert.equal(config.params.role, undefined);
+    return { config, status: 200, statusText: 'OK', headers: {}, data: {
+      items: [
+        { id: 1, name: 'Owned', owner_id: 1, owner: { id: 1, username: 'Me' }, my_role: 'owner', is_public: false },
+        { id: 2, name: 'Joined', owner_id: 2, owner: { id: 2, username: 'Other' }, my_role: 'member', is_public: true },
+      ], total: 2, page: 1, page_size: 100, total_pages: 1,
+    } };
+  };
+  try {
+    const rooms = useRoomsStore();
+    await rooms.fetchHomeRooms();
+    assert.deepEqual(rooms.myRooms.map(room => [room.id, room.my_role]), [[1, 'owner'], [2, 'member']]);
+    assert.equal(rooms.error, null);
+    assert.deepEqual(requests, ['/users/me/rooms']);
+  } finally { http.defaults.adapter = original; setActivePinia(pinia); }
+});
+
+test('historical messages do not imply that their sender is currently online', () => {
+  setActivePinia(createPinia());
+  try {
+    const messages = useMessagesStore();
+    messages.appendRealtimeMessage({ id: 1, room_id: 1, sender_user_id: 2,
+      sender: { id: 2, username: 'Offline sender', email: 'offline@example.invalid', auto_accept: false, avatar_url: null },
+      content: { segments: [{ type: 'text', text: 'Old message' }] }, created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+    assert.equal(messages.getRoomChatMessages(1)[0]?.status, 'offline');
+  } finally { setActivePinia(pinia); }
+});
 const { useRoomPlaybackState } = await import('../src/features/room/composables/useRoomPlaybackState');
 const pinia = createPinia();
 pinia.use(resetStoresOnSessionChange);

@@ -8,6 +8,7 @@ Create Date: 2026-09-15 00:00:00.000000
 from collections.abc import Sequence
 
 from alembic import op
+import sqlalchemy as sa
 
 
 revision: str = "a71c5e4d2b90"
@@ -17,6 +18,23 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _delete_stale_room_rows() -> None:
+    # Legacy joined_at used datetime.now(...) as a value at module import, not
+    # a callable. A valid membership can therefore predate its room. Neither
+    # deleting nor preserving a suspected reused-ID membership is safe without
+    # reviewing a backup. Fail before any cleanup rather than guessing access.
+    ambiguous = op.get_bind().execute(sa.text("""
+        SELECT COUNT(*) FROM room_members
+        JOIN rooms ON rooms.id = room_members.room_id
+        WHERE rooms.created_at IS NOT NULL
+          AND room_members.joined_at IS NOT NULL
+          AND room_members.joined_at < rooms.created_at
+    """)).scalar_one()
+    if ambiguous:
+        raise RuntimeError(
+            "Ambiguous legacy room memberships: joined_at may be the old server "
+            "startup time. No cleanup performed. Review memberships against a "
+            "pre-upgrade backup before retrying migration a71c5e4d2b90."
+        )
     # Foreign keys were previously disabled for SQLite connections. Remove both
     # true orphans and rows inherited when a deleted room ID was reused.
     op.execute(

@@ -303,7 +303,7 @@ const displayResourceStatusByUserId = computed(() => {
 const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
   const memberStatus: MemberStatus =
-    realtime.hasPresenceSnapshot.value && presentUserIds.value.has(member.user_id)
+    realtime.isRealtimeActive.value && realtime.hasPresenceSnapshot.value && presentUserIds.value.has(member.user_id)
       ? displayResourceStatusByUserId.value.get(member.user_id) ?? "idle"
       : "offline";
 

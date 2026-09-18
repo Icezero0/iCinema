@@ -51,7 +51,7 @@ function getQfaceDisplayUrl(emojiId: string) {
       :name="author"
       :src="avatarUrl"
       :role="role ?? 'member'"
-      :status="status ?? 'idle'"
+      :status="status ?? 'offline'"
       :size="32"
     />
     <BaseAvatar

@@ -278,7 +278,7 @@ function mapMessageToChatMessage(
       message.sender_user_id === currentUserId,
     avatarVariant: "room",
     role: roomMemberRole,
-    status: "idle",
+    status: "offline",
     segments: message.content.segments.map((segment, index) => {
       if (segment.type === "text") {
         return {

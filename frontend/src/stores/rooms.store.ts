@@ -5,7 +5,6 @@ import {
   applyRoomJoinRequest,
   createRoom,
   getMyRooms,
-  getRooms,
   type Room,
   type RoomCreatePayload,
 } from "@/infra/api/rooms.api";
@@ -63,20 +62,13 @@ export const useRoomsStore = defineStore("rooms", {
 
       try {
         const entities = useEntitiesStore();
-        const [myRoomsData, allRoomsData] = await Promise.all([
-          getMyRooms({
-            page: 1,
-            page_size: 100,
-          }),
-          getRooms({
-            page: 1,
-            page_size: 100,
-          }),
-        ]);
+        // The public directory loads independently on its own page. Its failure
+        // must not prevent owned/joined rooms from appearing on the home page.
+        const myRoomsData = await getMyRooms({ page: 1, page_size: 100 });
 
         this.myRooms = myRoomsData.items;
         const myRoomIds = new Set(this.myRooms.map((room) => room.id));
-        this.publicRooms = allRoomsData.items.filter(
+        this.publicRooms = this.publicRooms.filter(
           (room) => room.visibility === "public" && !myRoomIds.has(room.id),
         );
 

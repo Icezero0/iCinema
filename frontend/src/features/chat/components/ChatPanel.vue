@@ -63,11 +63,10 @@ function getMessageGroupKey(message: ChatMessage) {
 }
 
 function getMessageStatus(message: ChatMessage) {
-  if (typeof message.authorUserId !== "number") {
-    return message.status ?? "offline";
+  if (props.memberStatusByUserId) {
+    return props.memberStatusByUserId.get(message.authorUserId ?? -1) ?? "offline";
   }
-
-  return props.memberStatusByUserId?.get(message.authorUserId) ?? message.status ?? "offline";
+  return message.status ?? "offline";
 }
 
 const displayMessages = computed(() => props.messages.map((message, index, list) => {
