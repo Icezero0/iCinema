@@ -108,9 +108,9 @@ export function toMediaEngineLoadInput(
     };
   }
 
-  if (sourceType === "external_url") {
+  if (sourceType === "external_url" || sourceType === "omofun") {
     return {
-      sourceType,
+      sourceType: "external_url",
       externalUrl,
       localFile: null,
     };

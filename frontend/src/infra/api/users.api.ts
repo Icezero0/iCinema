@@ -10,6 +10,7 @@ export type UserResponse = {
 
 export type SiteRole = 'user' | 'admin'
 export type SitePermission =
+  | 'manage_catalog'
   | 'create_feedback'
   | 'view_own_feedback'
   | 'view_all_feedback'

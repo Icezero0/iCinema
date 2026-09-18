@@ -4,9 +4,12 @@ import { useI18n } from "vue-i18n";
 import {
   DocumentIcon,
   LinkIcon,
+  FilmIcon,
   QuestionMarkCircleIcon,
 } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
+import OmofunSourceControl from './OmofunSourceControl.vue';
+import type { OmofunSelection } from '@/infra/realtime/roomRealtime';
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 import {
   canUseFileSystemAccessPicker,
@@ -15,6 +18,7 @@ import {
 } from "@/features/room/video/localFileHandleCache";
 
 const props = defineProps<{
+  roomId: number;
   title: string;
   sourceType: RoomVideoSourceType;
   externalUrl: string;
@@ -26,6 +30,9 @@ const props = defineProps<{
   messageTone?: "muted" | "error";
   hashProgress?: number | null;
   applying?: boolean;
+  omofun?: OmofunSelection | null;
+  sourceRevision?: number;
+  closeKey?: number;
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +41,8 @@ const emit = defineEmits<{
   (e: "select-local-match-file", value: LocalFileSelection | null): void;
   (e: "select-local-target-file", value: LocalFileSelection | null): void;
   (e: "apply"): void;
+  (e: "select-omofun", selection: OmofunSelection, revision: number): void;
+  (e: "dialog-change", open: boolean): void;
 }>();
 
 const { t } = useI18n();
@@ -64,6 +73,7 @@ const supportedLocalFileTypes = [
 ].join(",");
 
 const sourceTypeOptions = computed(() => [
+  { value: 'omofun' as const, label: 'Omofun', icon: FilmIcon },
   {
     value: "external_url" as const,
     label: t("room.sourcePanel.externalUrl"),
@@ -221,6 +231,7 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
       <button
         v-for="option in sourceTypeOptions"
         :key="option.value"
+        :disabled="applying"
         class="sourceTypeOption"
         type="button"
         role="radio"
@@ -248,7 +259,7 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
       </label>
     </div>
 
-    <div v-else class="sourceModePanel">
+    <div v-else-if="sourceType === 'local_file'" class="sourceModePanel">
         <div class="localFilePanel">
         <div class="localTargetHeader">
           <span class="localTargetLabel">{{ t("room.sourcePanel.localRoomTarget") }}</span>
@@ -323,7 +334,11 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
       </div>
     </div>
 
-    <div class="sourcePanelActions">
+    <OmofunSourceControl :key="roomId" :room-id="roomId" v-show="sourceType === 'omofun'" :active="sourceType === 'omofun'" :current="omofun"
+      :source-revision="sourceRevision ?? 0" :can-apply="canSetLocalRoomTarget" :applying="applying" :close-key="closeKey"
+      @select="(selection, revision) => emit('select-omofun', selection, revision)" @dialog-change="emit('dialog-change', $event)" />
+
+    <div v-if="sourceType !== 'omofun'" class="sourcePanelActions">
       <span class="actionMessage" :class="{ error: actionMessageIsError }">
         {{ actionMessage }}
       </span>
@@ -411,7 +426,7 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
 
 .sourceTypeSwitch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--c-border);

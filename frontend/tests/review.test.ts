@@ -3,6 +3,34 @@ import { test } from 'node:test';
 import axios from 'axios';
 import { createApp, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
+import { createI18n } from 'vue-i18n';
+import en from '../src/infra/i18n/locales/en';
+import zhCN from '../src/infra/i18n/locales/zh-CN';
+import { toMediaEngineLoadInput } from '../src/features/room/video/mediaEngineTypes';
+
+test('catalog translations have matching keys and change with the selected language', () => {
+  function keys(value: Record<string, unknown>, prefix = ''): string[] {
+    return Object.entries(value).flatMap(([key, entry]) => typeof entry === 'string'
+      ? [prefix + key] : keys(entry as Record<string, unknown>, prefix + key + '.')).sort();
+  }
+  assert.deepEqual(keys(en.catalogAdmin), keys(zhCN.catalogAdmin));
+  assert.deepEqual(keys(en.catalogDetail), keys(zhCN.catalogDetail));
+  assert.deepEqual(keys(en.catalogImport), keys(zhCN.catalogImport));
+  assert.deepEqual(keys(en.omofun), keys(zhCN.omofun));
+  assert.ok(!keys(en.catalogDetail).includes('fields.season'));
+  const i18n = createI18n({ legacy: false, locale: 'en', messages: { en, 'zh-CN': zhCN } });
+  assert.equal(i18n.global.t('catalogAdmin.title'), 'Video resources');
+  assert.equal(i18n.global.t('catalogAdmin.editTitle', { id: 7 }), 'Edit resource #7');
+  assert.equal(i18n.global.t('catalogDetail.lineCount', { count: 2, total: 3 }), '2 enabled direct-play lines / 3 configured lines');
+  assert.equal(i18n.global.t('catalogDetail.episodeLabel', { kind: 'Episode', number: 1, title: 'Test' }), 'Episode 1 · Test');
+  i18n.global.locale.value = 'zh-CN';
+  assert.equal(i18n.global.t('catalogAdmin.title'), '视频资源管理');
+  assert.equal(i18n.global.t('catalogDetail.lineCount', { count: 2, total: 3 }), '可直接预览 2 条 / 已配置 3 条线路');
+  assert.equal(i18n.global.t('catalogDetail.manualSource'), '手动录入');
+  for (const key of keys(en.catalogAdmin)) assert.ok(i18n.global.te('catalogAdmin.' + key));
+  for (const key of keys(en.catalogDetail)) assert.ok(i18n.global.te('catalogDetail.' + key));
+  for (const key of keys(en.catalogImport)) assert.ok(i18n.global.te('catalogImport.' + key));
+});
 
 const storage: Record<string, any> = {};
 Object.defineProperties(storage, {
@@ -101,6 +129,20 @@ test('deferred player application includes time spent loading', async () => {
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.ok(seeks[0]! >= 605 && seeks[0]! < 606);
   assert.equal(rates[0], 1);
+});
+
+test('Omofun room source uses the URL engine while preserving the user-facing mode', () => {
+  const playback = useRoomPlaybackState({ roomId: ref(1), playerStageRef: ref(null), t: (key) => key });
+  playback.applyRealtimeVideoSource({ room_id: 1, source_type: 'omofun', file_hash: null,
+    external_url: 'https://media.example/episode.m3u8?token=1', source_revision: 7,
+    omofun: { work_id: '123', episode_id: 'ep1', line_id: 'line', cache_version: 3 } });
+  assert.equal(playback.playbackSourceType.value, 'omofun');
+  assert.deepEqual(toMediaEngineLoadInput(playback.playbackSourceType.value, playback.playbackSourceUrl.value, null), {
+    sourceType: 'external_url', externalUrl: 'https://media.example/episode.m3u8?token=1', localFile: null,
+  });
+  playback.applyRealtimeVideoSource({ room_id: 1, source_type: 'local_file', file_hash: 'abc', external_url: null });
+  assert.equal(playback.playbackSourceUrl.value, '');
+  assert.equal(toMediaEngineLoadInput('local_file', '', null), null);
 });
 
 test('HTTP and WS refresh callers share one request', async () => {

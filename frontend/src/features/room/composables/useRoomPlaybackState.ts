@@ -185,13 +185,13 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   }
 
   function applyRealtimeVideoSource(source: RoomRealtimeVideoSourceState | null) {
-    const nextSourceUrl = source?.source_type === "external_url"
+    const nextSourceUrl = source && source.source_type !== "local_file"
       ? source.external_url?.trim() ?? ""
       : "";
     const isSameExternalSource =
       source !== null &&
-      source.source_type === "external_url" &&
-      playbackSourceType.value === "external_url" &&
+      source.source_type !== "local_file" &&
+      playbackSourceType.value === source.source_type &&
       playbackSourceUrl.value === nextSourceUrl;
     const nextFileHash = source?.source_type === "local_file"
       ? source.file_hash ?? ""
@@ -234,7 +234,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
 
     playbackSourceType.value = source.source_type;
     playbackSourceUrl.value =
-      source.source_type === "external_url"
+      source.source_type !== "local_file"
         ? source.external_url?.trim() ?? ""
         : "";
     playbackSourceRevision.value += 1;

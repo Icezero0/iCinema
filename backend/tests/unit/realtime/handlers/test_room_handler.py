@@ -1,4 +1,7 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from sqlalchemy import delete
+from app.modules.rooms.models import RoomMember
 
 import pytest
 
@@ -33,6 +36,32 @@ class RecordingPublisher:
 
     async def publish_playback_play(self, **kwargs) -> None:
         self.calls.append(("publish_playback_play", kwargs))
+
+
+async def test_owner_enters_even_when_membership_is_missing(db_session, factories):
+    owner = await factories.create_user()
+    outsider = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    await db_session.execute(delete(RoomMember).where(RoomMember.room_id == room.id))
+    await db_session.commit()
+    presence = SimpleNamespace(
+        find_room_user_connection=AsyncMock(return_value=None),
+        enter_room=AsyncMock(return_value=PresenceState(room_id=room.id, present_user_ids=[owner.id])),
+    )
+    runtime = SimpleNamespace(
+        get_room_video_source=AsyncMock(return_value=None),
+        get_playback=AsyncMock(return_value=None),
+        get_user_resource_states=AsyncMock(return_value=UserResourceStatesState(room_id=room.id, user_resource_states=[])),
+    )
+    handler = RoomCommandHandler(presence_service=presence, video_runtime_service=runtime)
+    command = WsCommandPayload(request_id="owner-recovery", action=WsCommandAction.ROOM_ENTER, data={"room_id": room.id})
+    result = await handler.handle(db=db_session, manager=object(), publisher=RecordingPublisher(),
+        connection=WsConnection(connection_id="owner", user_id=owner.id, websocket=SimpleNamespace()), command=command)
+    assert result["room_id"] == room.id
+    with pytest.raises(ForbiddenError):
+        await handler.handle(db=db_session, manager=object(), publisher=RecordingPublisher(),
+            connection=WsConnection(connection_id="outsider", user_id=outsider.id, websocket=SimpleNamespace()), command=command)
+    assert presence.enter_room.await_count == 1
 
 
 # 缺少 room_id 时会拒绝房间命令

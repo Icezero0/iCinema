@@ -2,7 +2,15 @@
 
 版本：v1  
 状态：Draft  
-适用范围：`backend_new/app/realtime`
+适用范围：`backend/app/realtime`
+
+## Omofun 扩展（2026-09-19）
+
+`room_video_source_set` 增加 `source_type: "omofun"`。客户端提交 `work_id`、`episode_id`、`line_id`、`cache_version`、`expected_source_revision` 和可选 `anchor_ts_ms`；禁止同时提交 `external_url` 或 `file_hash`。服务端复用房间成员及主动同步权限，核对房间源版本与成功缓存版本后从缓存取得实际地址。缓存或房间已变化时分别返回 `omofun_cache_changed`、`omofun_room_changed`，未找到线路返回 `omofun_invalid_selection`。
+
+视频源状态新增递增的 `source_revision` 及可空的 `omofun` 元数据（作品、剧集、线路、缓存版本和展示名称）。Omofun状态仍通过 `external_url` 向房间成员提供浏览器播放需要的地址，但界面不显示它；媒体引擎按外链/HLS加载，前端保留 `omofun` 模式。成功切源仍广播视频源、暂停于0秒及资源状态重置，Omofun调用者依靠广播应用一次，不因迟到ACK再次重载。
+
+共享解析缓存刷新不广播房间事件、不推进房间源版本。房间在 `room_settings.omofun_source` 保存独立播放快照，加入成员取得当前运行时快照；运行时不存在时从持久快照恢复为暂停，不从最新共享缓存替换URL。切回普通外链/本地文件清除Omofun持久快照。其他播放命令及资源报告暂沿用原协议；前后端需同步更新以识别新增模式。
 
 ## 1. 文档目标
 

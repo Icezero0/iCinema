@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-09-16T22:32:21.011753+00:00",
+  "database": "isolated temporary database",
+  "runs": [
+    {
+      "status": "completed",
+      "items": [
+        {
+          "upstream_id": 114997,
+          "title": "乡下大叔成为剑圣 第二季",
+          "status": "created",
+          "reason": "",
+          "content_id": 1,
+          "warnings": [],
+          "entries": 11
+        }
+      ]
+    },
+    {
+      "status": "completed",
+      "items": [
+        {
+          "upstream_id": 114997,
+          "title": "乡下大叔成为剑圣 第二季",
+          "status": "unchanged",
+          "reason": "",
+          "content_id": 1,
+          "warnings": [],
+          "entries": 11
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "works": 1,
+    "playbacks": 11
+  }
+}

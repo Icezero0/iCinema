@@ -5,6 +5,7 @@ from app.modules.site.constants import SitePermission, SiteRole
 
 ROLE_PERMISSIONS: dict[SiteRole, set[SitePermission]] = {
     SiteRole.ADMIN: {
+        SitePermission.MANAGE_CATALOG,
         SitePermission.CREATE_FEEDBACK,
         SitePermission.VIEW_OWN_FEEDBACK,
         SitePermission.VIEW_ALL_FEEDBACK,
@@ -33,4 +34,3 @@ def require_site_permission(role: SiteRole, permission: SitePermission) -> None:
             reason=ErrorReason.SITE_PERMISSION_DENIED,
             details={"role": role, "permission": permission},
         )
-

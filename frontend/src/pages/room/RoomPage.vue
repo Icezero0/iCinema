@@ -825,7 +825,8 @@ watch(
                   @seek-capability-change="handlePlaybackCanSeekChange"
                 />
 
-                <RoomPlaybackControls
+        <RoomPlaybackControls
+          :room-id="roomId"
                   class="playbackControls"
                   :is-playing="playbackIsPlaying"
                   :progress="playbackDisplayProgress"
@@ -844,6 +845,8 @@ watch(
                   :sync-label="t('room.playback.controls.syncNow')"
                   :source-label="t('room.playback.controls.source')"
                   :source-panel-title="t('room.sourcePanel.title')"
+                  :omofun="realtime.roomVideoSource.value?.omofun"
+                  :source-revision="realtime.roomVideoSource.value?.source_revision ?? 0"
                   :source-attention="needsRoomLocalFileSelection"
                   :source-panel-open-key="sourcePanelOpenKey"
                   :source-panel-close-key="sourcePanelCloseKey"

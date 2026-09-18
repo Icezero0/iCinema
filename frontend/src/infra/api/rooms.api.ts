@@ -92,7 +92,7 @@ export type RoomJoinRequestListResponse = {
   total_pages: number;
 };
 
-export type RoomVideoSourceType = "external_url" | "local_file";
+export type RoomVideoSourceType = "external_url" | "local_file" | "omofun";
 export type RoomSyncPolicy = "auto_sync" | "disabled";
 export type RoomActiveSyncPermission =
   | "owner_only"

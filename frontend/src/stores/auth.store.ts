@@ -13,6 +13,7 @@ export const useAuthStore = defineStore('auth', {
   }),
 
   getters: {
+    canManageCatalog: (s) => Boolean(s.me?.site_permissions?.includes('manage_catalog')),
     isLoggedIn: (s) => s.status === 'authenticated',
     canManageFeedback: (s) =>
       Boolean(s.me?.site_permissions?.includes('view_all_feedback')),

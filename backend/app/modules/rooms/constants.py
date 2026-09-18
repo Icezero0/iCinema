@@ -34,6 +34,7 @@ class RoomJoinAuditMode(StrEnum):
 class RoomVideoSourceType(StrEnum):
     EXTERNAL_URL = "external_url"
     LOCAL_FILE = "local_file"
+    OMOFUN = "omofun"
 
 
 class RoomSyncPolicy(StrEnum):

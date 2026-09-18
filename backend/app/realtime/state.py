@@ -20,6 +20,8 @@ class RoomVideoSourceState(BaseModel):
     source_type: RoomVideoSourceType
     external_url: str | None = None
     file_hash: str | None = None
+    omofun: dict | None = None
+    source_revision: int = 0
 
 
 class PlaybackState(BaseModel):

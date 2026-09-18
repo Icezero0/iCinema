@@ -13,6 +13,7 @@ import {
   type RoomRealtimePlaybackState,
   type RoomRealtimeResourceStatus,
   type RoomRealtimeVideoSourceState,
+  type OmofunSelection,
 } from "@/infra/realtime/roomRealtime";
 import { useToastsStore } from "@/stores/toasts.store";
 import { computeFileSha256 } from "@/features/room/video/fileHash";
@@ -31,6 +32,8 @@ type LocalFileSourceIssue = "none" | "select_required" | "hash_mismatch" | "hash
 type LocalFileSourceAction = "match_room_target" | "set_room_target";
 
 type PlaybackSourcePayload = {
+  omofun?: OmofunSelection;
+  expectedSourceRevision?: number;
   sourceType: RoomVideoSourceType;
   externalUrl: string;
   localFile: File | null;
@@ -250,10 +253,7 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
       return hasMatchingRoomLocalFile.value;
     }
 
-    return (
-      options.playback.playbackSourceType.value === "external_url" &&
-      options.playback.playbackSourceUrl.value.trim().length > 0
-    );
+    return options.playback.playbackSourceUrl.value.trim().length > 0;
   }
 
   function getRealtimeErrorReason(error: unknown) {
@@ -272,7 +272,7 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
 
   function showRealtimePlaybackError(error?: unknown) {
     const reason = getRealtimeErrorReason(error);
-    const reasonKey = reason ? `room.playback.errors.${reason}` : "";
+    const reasonKey = reason ? (reason.startsWith('omofun_') ? `omofun.errors.${reason}` : `room.playback.errors.${reason}`) : "";
     const details = getRealtimeErrorDetails(error);
     const stallingUserIds = Array.isArray(details?.stalling_user_ids)
       ? details.stalling_user_ids
@@ -403,6 +403,24 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
 
   async function handleApplyPlaybackSource(payload: PlaybackSourcePayload) {
     localFileSourceIssue.value = "none";
+
+    if (payload.sourceType === "omofun") {
+      if (!payload.omofun || sourceApplying.value || !ensureRealtimePlaybackControlAllowed()) return;
+      const roomId = options.roomId.value;
+      sourceApplying.value = true;
+      try {
+        await setRoomRealtimeVideoSource({
+          source_type: "omofun", ...payload.omofun,
+          expected_source_revision: payload.expectedSourceRevision ?? 0,
+          anchor_ts_ms: Date.now(),
+        });
+        // Server events apply playback once; late ACKs must not reapply an older source.
+        if (roomId === options.roomId.value) closeSourcePanelAfterApply();
+      } catch (error) {
+        if (roomId === options.roomId.value) showRealtimePlaybackError(error);
+      } finally { if (roomId === options.roomId.value) sourceApplying.value = false; }
+      return;
+    }
 
     if (payload.sourceType === "local_file") {
       const localFileAction = payload.localFileAction ??
@@ -661,7 +679,7 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
     if (event.state.source_type === "local_file" && !syncRoomLocalFileRequirement()) {
       return;
     }
-    if (event.state.source_type === "external_url") {
+    if (event.state.source_type !== "local_file") {
       localFileSourceIssue.value = "none";
     }
 

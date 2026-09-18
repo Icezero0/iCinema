@@ -4,11 +4,18 @@ import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 export type RoomRealtimeResourceStatus = "ready" | "stalling" | "error";
 export type RoomRealtimePlaybackStatus = "playing" | "paused";
 
+export type OmofunSelection = {
+  work_id: string; episode_id: string; line_id: string; cache_version: number;
+  title?: string; episode_title?: string; line_label?: string;
+};
+
 export type RoomRealtimeVideoSourceState = {
   room_id: number;
   source_type: RoomVideoSourceType;
   external_url: string | null;
   file_hash: string | null;
+  omofun?: OmofunSelection | null;
+  source_revision?: number;
 };
 
 export type RoomRealtimePlaybackState = {
@@ -53,6 +60,11 @@ export type RoomRealtimeSessionClosed = {
 };
 
 export type RoomRealtimeVideoSourceSetPayload =
+  | (OmofunSelection & {
+      source_type: "omofun";
+      expected_source_revision: number;
+      anchor_ts_ms: number;
+    })
   | {
       source_type: "external_url";
       external_url: string;

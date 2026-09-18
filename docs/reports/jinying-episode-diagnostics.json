@@ -1,0 +1,1003 @@
+{
+  "checked_at": "2026-09-17T00:49:08.161345+00:00",
+  "endpoint": "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json",
+  "category": 25,
+  "complete": true,
+  "pages_scanned": 125,
+  "related_titles": [
+    {
+      "vod_id": 86924,
+      "vod_name": "假面骑士ZZZ 普通话版",
+      "type_id": 25,
+      "vod_time": "2026-08-30 14:50:07"
+    },
+    {
+      "vod_id": 86925,
+      "vod_name": "假面骑士ZZZ​ 日语版",
+      "type_id": 25,
+      "vod_time": "2026-08-30 10:54:03"
+    },
+    {
+      "vod_id": 87147,
+      "vod_name": "东岛丹三郎想成为假面骑士",
+      "type_id": 25,
+      "vod_time": "2026-03-22 09:15:02"
+    },
+    {
+      "vod_id": 86048,
+      "vod_name": "假面骑士Ghost",
+      "type_id": 25,
+      "vod_time": "2025-09-14 17:35:02"
+    },
+    {
+      "vod_id": 66959,
+      "vod_name": "假面骑士加布 普通话",
+      "type_id": 25,
+      "vod_time": "2025-08-31 10:30:02"
+    },
+    {
+      "vod_id": 74561,
+      "vod_name": "假面骑士艾克赛德普通话版",
+      "type_id": 25,
+      "vod_time": "2025-02-21 20:05:04"
+    },
+    {
+      "vod_id": 74562,
+      "vod_name": "假面骑士艾克赛德",
+      "type_id": 25,
+      "vod_time": "2025-02-21 19:55:02"
+    },
+    {
+      "vod_id": 52522,
+      "vod_name": "假面骑士歌查德 普通话",
+      "type_id": 25,
+      "vod_time": "2024-12-22 10:45:02"
+    },
+    {
+      "vod_id": 64590,
+      "vod_name": "假面骑士加布",
+      "type_id": 25,
+      "vod_time": "2024-10-20 10:40:02"
+    },
+    {
+      "vod_id": 52523,
+      "vod_name": "假面骑士歌查德",
+      "type_id": 25,
+      "vod_time": "2024-08-25 16:00:02"
+    },
+    {
+      "vod_id": 55804,
+      "vod_name": "假面骑士时王",
+      "type_id": 25,
+      "vod_time": "2024-03-22 19:40:02"
+    },
+    {
+      "vod_id": 55802,
+      "vod_name": "假面骑士时王 中文配音",
+      "type_id": 25,
+      "vod_time": "2024-03-22 19:20:02"
+    },
+    {
+      "vod_id": 54972,
+      "vod_name": "假面骑士零一 中文配音",
+      "type_id": 25,
+      "vod_time": "2024-03-13 10:35:02"
+    },
+    {
+      "vod_id": 54987,
+      "vod_name": "假面骑士01",
+      "type_id": 25,
+      "vod_time": "2024-03-09 11:15:02"
+    },
+    {
+      "vod_id": 52456,
+      "vod_name": "假面骑士 平成世代 终章 创骑与艾克赛德联手传奇骑士",
+      "type_id": 25,
+      "vod_time": "2024-01-19 21:05:02"
+    }
+  ],
+  "details": [
+    {
+      "vod_id": 86924,
+      "vod_name": "假面骑士ZZZ 普通话版",
+      "type_id": 25,
+      "type_name": "日本动漫",
+      "vod_year": "2025",
+      "vod_area": "日本",
+      "vod_time": "2026-08-30 14:50:07",
+      "vod_play_from": "jinyingm3u8",
+      "vod_play_url": "第1集$https://hd.kuktxu.com/play/xe7ll5Oa/index.m3u8#第2集$https://hd.kuktxu.com/play/Le3o2gOe/index.m3u8#第3集$https://hd.kuktxu.com/play/9aAJAD9b/index.m3u8#第4集$https://hd.kuktxu.com/play/DbDM26Bd/index.m3u8#第5集$https://hd.kuktxu.com/play/rb2nBV1b/index.m3u8#第6集$https://hd.kuktxu.com/play/DdwYQ8ma/index.m3u8#第7集$https://hd.kuktxu.com/play/1aKKZA8a/index.m3u8#第8集$https://hd.kuktxu.com/play/DdwM7gJa/index.m3u8#第9集$https://hd.kuktxu.com/play/1aMOz4Bd/index.m3u8#第10集$https://hd.kuktxu.com/play/yb8PGngb/index.m3u8#第11集$https://hd.kuktxu.com/play/erkZRM6a/index.m3u8#第12集$https://hd.kuktxu.com/play/ejRQBzve/index.m3u8#第13集$https://hd.kuktxu.com/play/av2qyKna/index.m3u8#第14集$https://hd.kuktxu.com/play/bDkNmPBa/index.m3u8#第15集$https://hd.kuktxu.com/play/bW66OGga/index.m3u8#第16集$https://hd.kuktxu.com/play/axkkyqBe/index.m3u8#第17集$https://hd.kuktxu.com/play/bkRRW8Ea/index.m3u8#第18集$https://hd.kuktxu.com/play/bmZZoj9d/index.m3u8#第19集$https://hd.kuktxu.com/play/e31171Mb/index.m3u8#第20集$https://hd.kuktxu.com/play/bkR58MEa/index.m3u8#第21集$https://hd.kuktxu.com/play/av2gRyVa/index.m3u8#第22集$https://hd.kuktxu.com/play/bYE6RlAb/index.m3u8#第23集$https://hd.kuktxu.com/play/bo2YrVYa/index.m3u8#第24集$https://hd.kuktxu.com/play/bkR5EXJa/index.m3u8#第25集$https://hd.kuktxu.com/play/egJ515Yd/index.m3u8#第26集$https://hd.kuktxu.com/play/azpKlBOd/index.m3u8#第27集$https://hd.kuktxu.com/play/dJ6qXYvd/index.m3u8#第28集$https://hd.kuktxu.com/play/eER9pKla/index.m3u8#第29集$https://hd.kuktxu.com/play/dR6oA00d/index.m3u8#第30集$https://hd.kuktxu.com/play/e312ZNMb/index.m3u8#第31集$https://hd.kuktxu.com/play/aOYMY1Ed/index.m3u8#第32集$https://hd.kuktxu.com/play/elYx8j7a/index.m3u8#第33集$https://hd.kuktxu.com/play/eZ6YRowe/index.m3u8#第34集$https://hd.kuktxu.com/play/dPN7ky1a/index.m3u8#第35集$https://hd.kuktxu.com/play/bo2VLpYa/index.m3u8#第36集$https://hd.kuktxu.com/play/bmZOLqAd/index.m3u8#第37集$https://hd.kuktxu.com/play/dJ688Nyd/index.m3u8#第38集$https://hd.kuktxu.com/play/dR6lwYVd/index.m3u8#第39集$https://hd.kuktxu.com/play/bmZqnYOd/index.m3u8#第40集$https://hd.kuktxu.com/play/egJpqwkd/index.m3u8#第41集$https://hd.kuktxu.com/play/bqxQvL3a/index.m3u8#第42集$https://hd.kuktxu.com/play/bmZqBKAd/index.m3u8#第43集$https://hd.kuktxu.com/play/dNkY0Z6e/index.m3u8#第44集$https://hd.kuktxu.com/play/e9rDA0za/index.m3u8#第45集$https://hd.kuktxu.com/play/bYEywvAb/index.m3u8#第46集$https://hd.kuktxu.com/play/bo2jLDAa/index.m3u8#第47集$https://hd.kuktxu.com/play/av28Xv0a/index.m3u8#第48集$https://hd.kuktxu.com/play/ejR8nERe/index.m3u8#第49集$https://hd.kuktxu.com/play/epY2KXya/index.m3u8#第50集已完结$https://hd.kuktxu.com/play/epY2vvpa/index.m3u8",
+      "parsed_entries": 49,
+      "warnings": [
+        "unmapped_episode: 第50集已完结"
+      ],
+      "labels": [
+        {
+          "group": "jinyingm3u8",
+          "label": "第1集",
+          "identity": [
+            "episode",
+            1
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第2集",
+          "identity": [
+            "episode",
+            2
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第3集",
+          "identity": [
+            "episode",
+            3
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第4集",
+          "identity": [
+            "episode",
+            4
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第5集",
+          "identity": [
+            "episode",
+            5
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第6集",
+          "identity": [
+            "episode",
+            6
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第7集",
+          "identity": [
+            "episode",
+            7
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第8集",
+          "identity": [
+            "episode",
+            8
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第9集",
+          "identity": [
+            "episode",
+            9
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第10集",
+          "identity": [
+            "episode",
+            10
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第11集",
+          "identity": [
+            "episode",
+            11
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第12集",
+          "identity": [
+            "episode",
+            12
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第13集",
+          "identity": [
+            "episode",
+            13
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第14集",
+          "identity": [
+            "episode",
+            14
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第15集",
+          "identity": [
+            "episode",
+            15
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第16集",
+          "identity": [
+            "episode",
+            16
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第17集",
+          "identity": [
+            "episode",
+            17
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第18集",
+          "identity": [
+            "episode",
+            18
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第19集",
+          "identity": [
+            "episode",
+            19
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第20集",
+          "identity": [
+            "episode",
+            20
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第21集",
+          "identity": [
+            "episode",
+            21
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第22集",
+          "identity": [
+            "episode",
+            22
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第23集",
+          "identity": [
+            "episode",
+            23
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第24集",
+          "identity": [
+            "episode",
+            24
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第25集",
+          "identity": [
+            "episode",
+            25
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第26集",
+          "identity": [
+            "episode",
+            26
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第27集",
+          "identity": [
+            "episode",
+            27
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第28集",
+          "identity": [
+            "episode",
+            28
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第29集",
+          "identity": [
+            "episode",
+            29
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第30集",
+          "identity": [
+            "episode",
+            30
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第31集",
+          "identity": [
+            "episode",
+            31
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第32集",
+          "identity": [
+            "episode",
+            32
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第33集",
+          "identity": [
+            "episode",
+            33
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第34集",
+          "identity": [
+            "episode",
+            34
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第35集",
+          "identity": [
+            "episode",
+            35
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第36集",
+          "identity": [
+            "episode",
+            36
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第37集",
+          "identity": [
+            "episode",
+            37
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第38集",
+          "identity": [
+            "episode",
+            38
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第39集",
+          "identity": [
+            "episode",
+            39
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第40集",
+          "identity": [
+            "episode",
+            40
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第41集",
+          "identity": [
+            "episode",
+            41
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第42集",
+          "identity": [
+            "episode",
+            42
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第43集",
+          "identity": [
+            "episode",
+            43
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第44集",
+          "identity": [
+            "episode",
+            44
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第45集",
+          "identity": [
+            "episode",
+            45
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第46集",
+          "identity": [
+            "episode",
+            46
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第47集",
+          "identity": [
+            "episode",
+            47
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第48集",
+          "identity": [
+            "episode",
+            48
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第49集",
+          "identity": [
+            "episode",
+            49
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第50集已完结",
+          "identity": null
+        }
+      ],
+      "rejected_entries": [
+        {
+          "raw": "第50集已完结$https://hd.kuktxu.com/play/epY2vvpa/index.m3u8",
+          "configured_group_matches": true,
+          "url_validation_passes": true,
+          "url_ends_in_m3u8": true
+        }
+      ]
+    },
+    {
+      "vod_id": 86925,
+      "vod_name": "假面骑士ZZZ​ 日语版",
+      "type_id": 25,
+      "type_name": "日本动漫",
+      "vod_year": "2025",
+      "vod_area": "日本",
+      "vod_time": "2026-08-30 10:54:03",
+      "vod_play_from": "jinyingm3u8",
+      "vod_play_url": "第1集$https://hd.kuktxu.com/play/Qe1558Ge/index.m3u8#第2集$https://hd.kuktxu.com/play/NbWg7rQb/index.m3u8#第3集$https://hd.kuktxu.com/play/YerQXk2d/index.m3u8#第4集$https://hd.kuktxu.com/play/DdwYA2Ja/index.m3u8#第5集$https://hd.kuktxu.com/play/yb8wL4ga/index.m3u8#第6集$https://hd.kuktxu.com/play/penMEVYd/index.m3u8#第7集$https://hd.kuktxu.com/play/9aAjPQjb/index.m3u8#第8集$https://hd.kuktxu.com/play/DbDpWEBb/index.m3u8#第9集$https://hd.kuktxu.com/play/5eVgM69a/index.m3u8#第10集$https://hd.kuktxu.com/play/rb2zyP1b/index.m3u8#第11集$https://hd.kuktxu.com/play/elYQ5M6a/index.m3u8#第12集$https://hd.kuktxu.com/play/epYwnJVa/index.m3u8#第13集$https://hd.kuktxu.com/play/bmZRml3d/index.m3u8#第14集$https://hd.kuktxu.com/play/aM8DyNQe/index.m3u8#第15集$https://hd.kuktxu.com/play/dNkkDvze/index.m3u8#第16集$https://hd.kuktxu.com/play/eERRyOga/index.m3u8#第17集$https://hd.kuktxu.com/play/e733q1re/index.m3u8#第18集$https://hd.kuktxu.com/play/av22Av5a/index.m3u8#第19集$https://hd.kuktxu.com/play/bW6626Ja/index.m3u8#第20集$https://hd.kuktxu.com/play/bqxj78Ga/index.m3u8#第21集$https://hd.kuktxu.com/play/dL9g0kge/index.m3u8#第22集$https://hd.kuktxu.com/play/e5y8g1Ye/index.m3u8#第23集$https://hd.kuktxu.com/play/e5y8p9Ye/index.m3u8#第24集$https://hd.kuktxu.com/play/bqxjN87a/index.m3u8#第25集$https://hd.kuktxu.com/play/bo2YpYja/index.m3u8#第26集$https://hd.kuktxu.com/play/bqxY8VDa/index.m3u8#第27集$https://hd.kuktxu.com/play/bqxY8Vka/index.m3u8#第28集$https://hd.kuktxu.com/play/dNk9B78e/index.m3u8#第29集$https://hd.kuktxu.com/play/dL98r2We/index.m3u8#第30集$https://hd.kuktxu.com/play/bW67YVJa/index.m3u8#第31集$https://hd.kuktxu.com/play/dG6v6P5b/index.m3u8#第32集$https://hd.kuktxu.com/play/erk8gyBa/index.m3u8#第33集$https://hd.kuktxu.com/play/b68XjvVe/index.m3u8#第34集$https://hd.kuktxu.com/play/bYEWwLMb/index.m3u8#第35集$https://hd.kuktxu.com/play/egJZzBrd/index.m3u8#第36集$https://hd.kuktxu.com/play/av2lXQVa/index.m3u8#第37集$https://hd.kuktxu.com/play/azp6662d/index.m3u8#第38集$https://hd.kuktxu.com/play/dL9Zn6De/index.m3u8#第39集$https://hd.kuktxu.com/play/av2QzQXa/index.m3u8#第40集$https://hd.kuktxu.com/play/e5y7v28e/index.m3u8#第41集$https://hd.kuktxu.com/play/azp6GYrd/index.m3u8#第42集$https://hd.kuktxu.com/play/av2QONga/index.m3u8#第43集$https://hd.kuktxu.com/play/eER0xNva/index.m3u8#第44集$https://hd.kuktxu.com/play/bmZY0v3d/index.m3u8#第45集$https://hd.kuktxu.com/play/e5yRk9Ye/index.m3u8#第46集$https://hd.kuktxu.com/play/egJnzrZd/index.m3u8#第47集$https://hd.kuktxu.com/play/bmZYLj9d/index.m3u8#第48集$https://hd.kuktxu.com/play/epY2zN2a/index.m3u8#第49集$https://hd.kuktxu.com/play/ejR8MO4e/index.m3u8#第50集已完结$https://hd.kuktxu.com/play/dyPXGGEb/index.m3u8",
+      "parsed_entries": 49,
+      "warnings": [
+        "unmapped_episode: 第50集已完结"
+      ],
+      "labels": [
+        {
+          "group": "jinyingm3u8",
+          "label": "第1集",
+          "identity": [
+            "episode",
+            1
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第2集",
+          "identity": [
+            "episode",
+            2
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第3集",
+          "identity": [
+            "episode",
+            3
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第4集",
+          "identity": [
+            "episode",
+            4
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第5集",
+          "identity": [
+            "episode",
+            5
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第6集",
+          "identity": [
+            "episode",
+            6
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第7集",
+          "identity": [
+            "episode",
+            7
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第8集",
+          "identity": [
+            "episode",
+            8
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第9集",
+          "identity": [
+            "episode",
+            9
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第10集",
+          "identity": [
+            "episode",
+            10
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第11集",
+          "identity": [
+            "episode",
+            11
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第12集",
+          "identity": [
+            "episode",
+            12
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第13集",
+          "identity": [
+            "episode",
+            13
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第14集",
+          "identity": [
+            "episode",
+            14
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第15集",
+          "identity": [
+            "episode",
+            15
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第16集",
+          "identity": [
+            "episode",
+            16
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第17集",
+          "identity": [
+            "episode",
+            17
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第18集",
+          "identity": [
+            "episode",
+            18
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第19集",
+          "identity": [
+            "episode",
+            19
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第20集",
+          "identity": [
+            "episode",
+            20
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第21集",
+          "identity": [
+            "episode",
+            21
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第22集",
+          "identity": [
+            "episode",
+            22
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第23集",
+          "identity": [
+            "episode",
+            23
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第24集",
+          "identity": [
+            "episode",
+            24
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第25集",
+          "identity": [
+            "episode",
+            25
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第26集",
+          "identity": [
+            "episode",
+            26
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第27集",
+          "identity": [
+            "episode",
+            27
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第28集",
+          "identity": [
+            "episode",
+            28
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第29集",
+          "identity": [
+            "episode",
+            29
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第30集",
+          "identity": [
+            "episode",
+            30
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第31集",
+          "identity": [
+            "episode",
+            31
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第32集",
+          "identity": [
+            "episode",
+            32
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第33集",
+          "identity": [
+            "episode",
+            33
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第34集",
+          "identity": [
+            "episode",
+            34
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第35集",
+          "identity": [
+            "episode",
+            35
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第36集",
+          "identity": [
+            "episode",
+            36
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第37集",
+          "identity": [
+            "episode",
+            37
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第38集",
+          "identity": [
+            "episode",
+            38
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第39集",
+          "identity": [
+            "episode",
+            39
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第40集",
+          "identity": [
+            "episode",
+            40
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第41集",
+          "identity": [
+            "episode",
+            41
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第42集",
+          "identity": [
+            "episode",
+            42
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第43集",
+          "identity": [
+            "episode",
+            43
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第44集",
+          "identity": [
+            "episode",
+            44
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第45集",
+          "identity": [
+            "episode",
+            45
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第46集",
+          "identity": [
+            "episode",
+            46
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第47集",
+          "identity": [
+            "episode",
+            47
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第48集",
+          "identity": [
+            "episode",
+            48
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第49集",
+          "identity": [
+            "episode",
+            49
+          ]
+        },
+        {
+          "group": "jinyingm3u8",
+          "label": "第50集已完结",
+          "identity": null
+        }
+      ],
+      "rejected_entries": [
+        {
+          "raw": "第50集已完结$https://hd.kuktxu.com/play/dyPXGGEb/index.m3u8",
+          "configured_group_matches": true,
+          "url_validation_passes": true,
+          "url_ends_in_m3u8": true
+        }
+      ]
+    },
+    {
+      "vod_id": 52456,
+      "vod_name": "假面骑士 平成世代 终章 创骑与艾克赛德联手传奇骑士",
+      "type_id": 25,
+      "type_name": "日本动漫",
+      "vod_year": "2017",
+      "vod_area": "",
+      "vod_time": "2024-01-19 21:05:02",
+      "vod_play_from": "jinyingm3u8",
+      "vod_play_url": "第1集完结$https://hd.kuktxu.com/play/negq9Q6b/index.m3u8",
+      "parsed_entries": 0,
+      "warnings": [
+        "unmapped_episode: 第1集完结"
+      ],
+      "labels": [
+        {
+          "group": "jinyingm3u8",
+          "label": "第1集完结",
+          "identity": null
+        }
+      ],
+      "rejected_entries": [
+        {
+          "raw": "第1集完结$https://hd.kuktxu.com/play/negq9Q6b/index.m3u8",
+          "configured_group_matches": true,
+          "url_validation_passes": true,
+          "url_ends_in_m3u8": true
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "upstream_total": 2486,
+  "reparse_after_fix": {
+    "checked_at": "2026-09-17T01:01:11.649153+00:00",
+    "results": [
+      {
+        "upstream_id": 86924,
+        "title": "假面骑士ZZZ 普通话版",
+        "before": 49,
+        "after": 50,
+        "warnings": []
+      },
+      {
+        "upstream_id": 86925,
+        "title": "假面骑士ZZZ​ 日语版",
+        "before": 49,
+        "after": 50,
+        "warnings": []
+      },
+      {
+        "upstream_id": 52456,
+        "title": "假面骑士 平成世代 终章 创骑与艾克赛德联手传奇骑士",
+        "before": 0,
+        "after": 1,
+        "warnings": []
+      }
+    ]
+  }
+}

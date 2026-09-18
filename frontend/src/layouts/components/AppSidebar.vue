@@ -45,6 +45,9 @@ const items = computed(() => [
     badge: badgeText.value,
   },
   { to: "/profile", label: t("sidebar.profile"), icon: UserCircleIcon },
+  ...(auth.canManageCatalog
+    ? [{ to: "/admin/videos", label: t("catalogAdmin.title"), icon: PlayCircleIcon }]
+    : []),
   ...(auth.canManageFeedback
     ? [
         {

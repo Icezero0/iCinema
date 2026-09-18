@@ -7,7 +7,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.error_reasons import ErrorReason
-from app.core.exceptions import BadRequestError, ForbiddenError
+from app.core.exceptions import BadRequestError, ConflictError, ForbiddenError
+from app.modules.omofun.models import OmofunCache
+from app.modules.omofun.parser import normalize_work_id
 from app.core.logging import log_extra
 from app.modules.rooms.constants import (
     RoomActiveSyncPermission,
@@ -120,6 +122,12 @@ class RoomVideoCommandHandler:
         )
 
     async def _handle_room_video_source_set(
+        self, *, db, publisher, room_id, command,
+    ):
+        async with self.video_runtime_service.source_change_lock:
+            return await self._set_source_locked(db=db, publisher=publisher, room_id=room_id, command=command)
+
+    async def _set_source_locked(
         self,
         *,
         db: AsyncSession,
@@ -133,6 +141,29 @@ class RoomVideoCommandHandler:
 
         external_url: str | None = None
         file_hash: str | None = None
+        omofun = None
+        pinned_source = None
+        if source_type == RoomVideoSourceType.OMOFUN:
+            if data.get("external_url") is not None or data.get("file_hash") is not None:
+                raise BadRequestError(reason="omofun_invalid_selection")
+            current = await self.video_runtime_service.get_room_video_source(room_id=room_id)
+            expected = data.get("expected_source_revision")
+            if type(expected) is not int or expected != (current.source_revision if current else 0):
+                raise ConflictError(reason="omofun_room_changed")
+            work_id = normalize_work_id(str(data.get("work_id", "")))
+            cache = await db.get(OmofunCache, work_id)
+            if not cache or not cache.snapshot or type(data.get("cache_version")) is not int or cache.version != data["cache_version"]:
+                raise ConflictError(reason="omofun_cache_changed")
+            episode = next((ep for ep in cache.snapshot["episodes"] if ep["id"] == data.get("episode_id")), None)
+            line = next((line for line in episode["lines"] if line["id"] == data.get("line_id")), None) if episode else None
+            if not line:
+                raise BadRequestError(reason="omofun_invalid_selection")
+            external_url = line["url"]
+            omofun = {"work_id": work_id, "episode_id": episode["id"], "line_id": line["id"],
+                      "cache_version": cache.version, "title": cache.snapshot["title"],
+                      "episode_title": episode["title"], "line_label": line["source"][:2].upper() + "线路"}
+            pinned_source = {"external_url": external_url, "omofun": omofun,
+                             "source_revision": expected + 1}
 
         if source_type == RoomVideoSourceType.EXTERNAL_URL:
             external_url = self._parse_required_non_empty_string(
@@ -148,7 +179,7 @@ class RoomVideoCommandHandler:
                         "source_type": source_type,
                     },
                 )
-        else:
+        elif source_type == RoomVideoSourceType.LOCAL_FILE:
             file_hash = self._parse_required_non_empty_string(
                 data.get("file_hash"),
                 field_name="file_hash",
@@ -168,10 +199,12 @@ class RoomVideoCommandHandler:
             field_name="anchor_ts_ms",
         )
 
+        extra = {"omofun_source": pinned_source} if pinned_source else {}
         await self.room_settings_service.set_selected_room_video_source_type(
             db,
             room_id=room_id,
             source_type=source_type,
+            **extra,
         )
 
         room_video_source, playback, user_resource_states = (
@@ -181,6 +214,7 @@ class RoomVideoCommandHandler:
                 external_url=external_url,
                 file_hash=file_hash,
                 anchor_ts_ms=now_ms(),
+                **({"omofun": omofun} if omofun else {}),
             )
         )
 

@@ -1,7 +1,32 @@
 from unittest.mock import AsyncMock
 
+import pytest
+from sqlalchemy import delete, update
+
 from app.modules.rooms.constants import RoomRole
 from app.modules.rooms.models import RoomMember
+
+
+@pytest.mark.parametrize("owner_role", [None, "member"])
+async def test_actual_owner_can_access_without_valid_membership(
+    api_client, factories, auth_headers, db_session, owner_role,
+):
+    from app.modules.rooms.membership.service import RoomMembershipService
+    owner = await factories.create_user()
+    outsider = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    condition = (RoomMember.room_id == room.id) & (RoomMember.user_id == owner.id)
+    if owner_role is None:
+        await db_session.execute(delete(RoomMember).where(condition))
+    else:
+        await db_session.execute(update(RoomMember).where(condition).values(role=owner_role))
+    await db_session.commit()
+    assert await RoomMembershipService().find_room_role(db_session, room_id=room.id, user_id=owner.id) == RoomRole.OWNER
+    for suffix in ("", "/members", "/messages"):
+        response = await api_client.get(f"/api/v1/rooms/{room.id}{suffix}", headers=auth_headers(owner))
+        assert response.status_code == 200, response.text
+        denied = await api_client.get(f"/api/v1/rooms/{room.id}{suffix}", headers=auth_headers(outsider))
+        assert denied.status_code == 403
 
 
 # 验证普通成员可以主动退出房间，并触发会话清理和成员列表广播。

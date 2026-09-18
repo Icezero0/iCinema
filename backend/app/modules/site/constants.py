@@ -7,9 +7,9 @@ class SiteRole(StrEnum):
 
 
 class SitePermission(StrEnum):
+    MANAGE_CATALOG = "manage_catalog"
     CREATE_FEEDBACK = "create_feedback"
     VIEW_OWN_FEEDBACK = "view_own_feedback"
     VIEW_ALL_FEEDBACK = "view_all_feedback"
     UPDATE_FEEDBACK = "update_feedback"
     DELETE_FEEDBACK = "delete_feedback"
-

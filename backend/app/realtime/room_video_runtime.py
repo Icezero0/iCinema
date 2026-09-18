@@ -54,6 +54,7 @@ class RoomVideoRuntimeService:
     def __init__(self) -> None:
         self._room_states: dict[int, RoomVideoRuntimeState] = {}
         self._lock = asyncio.Lock()
+        self.source_change_lock = asyncio.Lock()
 
     def _get_or_create_room_state_locked(self, room_id: int) -> RoomVideoRuntimeState:
         state = self._room_states.get(room_id)
@@ -160,6 +161,8 @@ class RoomVideoRuntimeService:
         external_url: str | None = None,
         file_hash: str | None = None,
         anchor_ts_ms: int | None = None,
+        omofun: dict | None = None,
+        source_revision: int | None = None,
     ) -> tuple[RoomVideoSourceState, PlaybackState, UserResourceStatesState]:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
@@ -169,6 +172,9 @@ class RoomVideoRuntimeService:
                 source_type=source_type,
                 external_url=external_url,
                 file_hash=file_hash,
+                omofun=omofun,
+                source_revision=source_revision if source_revision is not None else
+                    ((state.room_video_source.source_revision if state.room_video_source else 0) + 1),
             )
             playback = PlaybackState(
                 room_id=room_id,

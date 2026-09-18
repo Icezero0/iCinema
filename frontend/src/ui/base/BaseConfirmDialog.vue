@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BaseCard from "@/ui/base/BaseCard.vue";
 import BaseButton from "@/ui/base/BaseButton.vue";
 
@@ -15,6 +15,8 @@ const props = withDefaults(
     variant?: "default" | "danger";
     closeOnOverlay?: boolean;
     closeOnEsc?: boolean;
+    lockScroll?: boolean;
+    zIndex?: number;
 
     loading?: boolean;
     confirmDisabled?: boolean;
@@ -25,6 +27,8 @@ const props = withDefaults(
     variant: "default",
     closeOnOverlay: true,
     closeOnEsc: true,
+    lockScroll: true,
+    zIndex: 80,
     loading: false,
     confirmDisabled: false,
   }
@@ -37,6 +41,8 @@ const emit = defineEmits<{
 }>();
 
 const open = computed(() => props.modelValue);
+const dialogRef = ref<HTMLElement | null>(null);
+let previousFocus: HTMLElement | null = null;
 const dialogTeleportTarget = ref<HTMLElement | "body">("body");
 
 function syncDialogTeleportTarget() {
@@ -68,6 +74,15 @@ function onOverlayClick() {
 function onKeydown(e: KeyboardEvent) {
   if (!open.value) return;
 
+  if (e.key === "Tab") {
+    const buttons = Array.from(dialogRef.value?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
+    const first = buttons[0], last = buttons[buttons.length - 1];
+    if (!first || !last) { e.preventDefault(); return; }
+    if (!dialogRef.value?.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
   if (e.key === "Escape" && props.closeOnEsc) {
     e.preventDefault();
     onCancel();
@@ -77,9 +92,15 @@ function onKeydown(e: KeyboardEvent) {
 
 watch(
   () => open.value,
-  (v) => {
-    document.documentElement.style.overflow = v ? "hidden" : "";
-  }
+  async (v, previous) => {
+    if (props.lockScroll && (v || previous !== undefined)) document.documentElement.style.overflow = v ? "hidden" : "";
+    if (v) {
+      previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      await nextTick();
+      if (open.value) dialogRef.value?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    } else if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  },
+  { immediate: true },
 );
 
 onMounted(() => {
@@ -90,16 +111,17 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   document.removeEventListener("fullscreenchange", syncDialogTeleportTarget);
-  document.documentElement.style.overflow = "";
+  if (props.lockScroll) document.documentElement.style.overflow = "";
+  if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
 });
 </script>
 
 <template>
   <Teleport :to="dialogTeleportTarget">
     <Transition name="fade">
-      <div v-if="open" class="overlay" role="presentation" @click="onOverlayClick">
+      <div v-if="open" class="overlay" :style="{ zIndex }" role="presentation" @click="onOverlayClick">
         <Transition name="pop">
-          <div class="dialog" role="dialog" aria-modal="true" @click.stop>
+          <div ref="dialogRef" class="dialog" role="dialog" aria-modal="true" :aria-label="title" @click.stop>
             <BaseCard class="card">
               <div class="header">
                 <div class="title">{{ title }}</div>

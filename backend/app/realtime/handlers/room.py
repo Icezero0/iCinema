@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError, ForbiddenError
 from app.core.logging import log_extra
-from app.modules.rooms.constants import RoomSyncPolicy
+from app.modules.rooms.constants import RoomSyncPolicy, RoomVideoSourceType
 from app.modules.rooms.membership.service import RoomMembershipService
 from app.modules.rooms.room.service import RoomService
 from app.modules.rooms.settings.service import RoomSettingsService
@@ -119,7 +119,7 @@ class RoomCommandHandler:
     ) -> dict[str, object]:
         room_id = self._extract_room_id(command)
 
-        await self.room_service.get_room_by_id(db, room_id)
+        room = await self.room_service.get_room_by_id(db, room_id)
         role = await self.membership_service.find_room_role(
             db,
             room_id=room_id,
@@ -131,6 +131,19 @@ class RoomCommandHandler:
                 reason=ErrorReason.ROOM_ENTER_FORBIDDEN,
                 details={"room_id": room_id},
             )
+
+        settings = getattr(room, "settings", None)
+        if settings and settings.selected_room_video_source_type == RoomVideoSourceType.OMOFUN:
+            async with self.video_runtime_service.source_change_lock:
+                if await self.video_runtime_service.get_room_video_source(room_id=room_id) is None:
+                    await db.refresh(settings)
+                    pinned = settings.omofun_source
+                    if settings.selected_room_video_source_type == RoomVideoSourceType.OMOFUN and pinned:
+                        await self.video_runtime_service.set_room_video_source(
+                            room_id=room_id, source_type=RoomVideoSourceType.OMOFUN,
+                            external_url=pinned["external_url"], omofun=pinned["omofun"],
+                            source_revision=pinned["source_revision"],
+                        )
 
         previous_room_id = connection.active_room_id
         replaced_connection_id = await self.presence_service.find_room_user_connection(

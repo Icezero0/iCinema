@@ -36,6 +36,10 @@ router.beforeEach(async (to, from) => {
   }
 
   if (
+    to.matched.some(record => record.meta.requiresCatalogAdmin) && !auth.canManageCatalog
+  ) return "/";
+
+  if (
     auth.isLoggedIn &&
     (to.path === "/auth/login" || to.path === "/auth/register")
   ) {

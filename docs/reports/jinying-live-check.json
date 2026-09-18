@@ -1,0 +1,181 @@
+{
+  "url": "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json?ac=detail&ids=114997",
+  "status": 200,
+  "code": 1,
+  "fields": [
+    "group_id",
+    "type_id",
+    "type_id_1",
+    "type_name",
+    "vod_actor",
+    "vod_area",
+    "vod_author",
+    "vod_behind",
+    "vod_blurb",
+    "vod_class",
+    "vod_color",
+    "vod_content",
+    "vod_copyright",
+    "vod_director",
+    "vod_douban_id",
+    "vod_douban_score",
+    "vod_down",
+    "vod_down_from",
+    "vod_down_note",
+    "vod_down_server",
+    "vod_down_url",
+    "vod_duration",
+    "vod_en",
+    "vod_hits",
+    "vod_hits_day",
+    "vod_hits_month",
+    "vod_hits_week",
+    "vod_id",
+    "vod_isend",
+    "vod_jumpurl",
+    "vod_lang",
+    "vod_letter",
+    "vod_level",
+    "vod_lock",
+    "vod_name",
+    "vod_pic",
+    "vod_pic_screenshot",
+    "vod_pic_slide",
+    "vod_pic_thumb",
+    "vod_play_from",
+    "vod_play_note",
+    "vod_play_server",
+    "vod_play_url",
+    "vod_plot",
+    "vod_plot_detail",
+    "vod_plot_name",
+    "vod_points",
+    "vod_points_down",
+    "vod_points_play",
+    "vod_pubdate",
+    "vod_pwd",
+    "vod_pwd_down",
+    "vod_pwd_down_url",
+    "vod_pwd_play",
+    "vod_pwd_play_url",
+    "vod_pwd_url",
+    "vod_rel_art",
+    "vod_rel_vod",
+    "vod_remarks",
+    "vod_reurl",
+    "vod_score",
+    "vod_score_all",
+    "vod_score_num",
+    "vod_serial",
+    "vod_state",
+    "vod_status",
+    "vod_sub",
+    "vod_tag",
+    "vod_time",
+    "vod_time_add",
+    "vod_time_hits",
+    "vod_time_make",
+    "vod_total",
+    "vod_tpl",
+    "vod_tpl_down",
+    "vod_tpl_play",
+    "vod_trysee",
+    "vod_tv",
+    "vod_up",
+    "vod_version",
+    "vod_weekday",
+    "vod_writer",
+    "vod_year"
+  ],
+  "metadata": {
+    "vod_id": 114997,
+    "vod_name": "乡下大叔成为剑圣 第二季",
+    "type_id": 25,
+    "type_name": "日本动漫",
+    "vod_year": "2026",
+    "vod_area": "日本",
+    "vod_play_from": "jinyingm3u8",
+    "vod_remarks": "第11集"
+  },
+  "groups": [
+    {
+      "line": "jinyingm3u8",
+      "entries": 11,
+      "first_entry": "第1集$https://hd.kuktxu.com/play/bo2jVoKa/index.m3u8"
+    }
+  ],
+  "checked_at_utc": "2026-09-16T22:06:58.674612+00:00",
+  "media_checks": [
+    {
+      "requested_url": "https://hd.kuktxu.com/play/bo2jVoKa/index.m3u8",
+      "final_url": "https://hd.kuktxu.com/play/bo2jVoKa/index.m3u8",
+      "status": 200,
+      "content_type": "application/vnd.apple.mpegurl",
+      "allow_origin": "*",
+      "bytes_read": 25783,
+      "is_m3u8": true,
+      "master": false,
+      "media": true,
+      "encrypted": true
+    },
+    {
+      "requested_url": "https://c.baisiweiting.com:18443/hls/918/20260709/4268147/plist0.ts",
+      "error": "<urlopen error [WinError 10060] 由于连接方在一段时间后没有正确答复或连接的主机没有反应，连接尝试失败。>",
+      "kind": "first_segment_prefix"
+    }
+  ],
+  "listing_checks": {
+    "category_id": 25,
+    "category_name": "????",
+    "pages_checked": [
+      1,
+      2
+    ],
+    "counts": [
+      20,
+      20
+    ],
+    "overlap": 0,
+    "reported_total": 2486,
+    "reported_pages": 125,
+    "status": [
+      200,
+      200
+    ],
+    "code": [
+      1,
+      1
+    ]
+  },
+  "key_check": {
+    "kind": "encryption_key",
+    "url": "https://hd.kuktxu.com/play/bo2jVoKa/enc.key",
+    "status": 200,
+    "allow_origin": "*",
+    "bytes_read": 16,
+    "aes128_key_length_valid": true
+  },
+  "segment_retry": {
+    "kind": "first_segment_prefix_retry",
+    "url": "https://c.baisiweiting.com:18443/hls/918/20260709/4268147/plist0.ts",
+    "error": "<urlopen error timed out>"
+  },
+  "second_sample": {
+    "detail_url": "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json?ac=detail&ids=101307",
+    "status": 200,
+    "code": 1,
+    "id": 101307,
+    "title": "名侦探光之美少女！",
+    "line": "jinyingm3u8",
+    "playlist": {
+      "url": "https://hd.kuktxu.com/play/bYE67o2b/index.m3u8",
+      "status": 200,
+      "is_m3u8": true,
+      "allow_origin": "*"
+    },
+    "segment": {
+      "url": "https://c.baisiweiting.com:18443/hls/898/20260513/3930073/plist0.ts"
+    },
+    "error": "<urlopen error timed out>"
+  }
+}

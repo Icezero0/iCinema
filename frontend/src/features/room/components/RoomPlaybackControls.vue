@@ -9,6 +9,7 @@ import {
 import { PauseIcon, PlayIcon } from "@heroicons/vue/24/solid";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import RoomSourcePanel from "@/features/room/components/RoomSourcePanel.vue";
+import type { OmofunSelection } from '@/infra/realtime/roomRealtime';
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 import type {
   LocalFileHandle,
@@ -18,6 +19,7 @@ import type {
 type LocalFileSourceAction = "match_room_target" | "set_room_target";
 
 const props = defineProps<{
+  roomId: number;
   isPlaying: boolean;
   progress: number;
   bufferedProgress: number;
@@ -26,6 +28,8 @@ const props = defineProps<{
   seekDisabled?: boolean;
   sourceType: RoomVideoSourceType;
   sourceUrl: string;
+  omofun?: OmofunSelection | null;
+  sourceRevision?: number;
   sourceFileName: string;
   currentTime: number;
   duration: number;
@@ -54,6 +58,8 @@ const emit = defineEmits<{
   (e: "update:progress", value: number): void;
   (e: "update:volume", value: number): void;
   (e: "apply-source", value: {
+    omofun?: OmofunSelection;
+    expectedSourceRevision?: number;
     sourceType: RoomVideoSourceType;
     externalUrl: string;
     localFile: File | null;
@@ -65,10 +71,11 @@ const emit = defineEmits<{
 const rootRef = ref<HTMLElement | null>(null);
 const sourceWrapRef = ref<HTMLElement | null>(null);
 const sourceOpen = ref(false);
+const sourceDialogOpen = ref(false);
 const sourcePanelPlacement = ref<"up" | "down">("up");
 const sourcePanelMaxHeight = ref("min(520px, calc(100dvh - 24px))");
 const sourceTypeDraft = ref<RoomVideoSourceType>(props.sourceType);
-const sourceExternalUrlDraft = ref(props.sourceUrl);
+const sourceExternalUrlDraft = ref(props.sourceType === 'external_url' ? props.sourceUrl : '');
 const sourceLocalActionDraft = ref<LocalFileSourceAction | null>(null);
 const sourceLocalMatchFileDraft = ref<File | null>(null);
 const sourceLocalMatchFileHandleDraft = ref<LocalFileHandle | null>(null);
@@ -171,7 +178,7 @@ watch(
 );
 
 const hasSourceDraft = computed(() => (
-  sourceExternalUrlDraft.value !== props.sourceUrl ||
+  sourceExternalUrlDraft.value !== (props.sourceType === 'external_url' ? props.sourceUrl : '') ||
   sourceTypeDraft.value !== props.sourceType ||
   sourceLocalActionDraft.value != null ||
   sourceLocalMatchFileDraft.value != null ||
@@ -271,7 +278,7 @@ function handleApplySourceDraft() {
 
 function syncSourceDraftFromProps() {
   sourceTypeDraft.value = props.sourceType;
-  sourceExternalUrlDraft.value = props.sourceUrl;
+  sourceExternalUrlDraft.value = props.sourceType === 'external_url' ? props.sourceUrl : '';
   sourceLocalActionDraft.value = null;
   sourceLocalMatchFileDraft.value = null;
   sourceLocalMatchFileHandleDraft.value = null;
@@ -279,6 +286,10 @@ function syncSourceDraftFromProps() {
   sourceLocalTargetFileHandleDraft.value = null;
   sourceLocalTargetFileNameDraft.value = "";
 }
+
+watch(() => [props.sourceType, props.sourceUrl, sourceOpen.value] as const, () => {
+  if (!sourceOpen.value && !sourceDialogOpen.value && !props.sourceApplying) syncSourceDraftFromProps();
+});
 
 function openSourcePanel() {
   sourceOpen.value = true;
@@ -346,6 +357,7 @@ function onVolumeInput(event: Event) {
 }
 
 function onDocumentPointerDown(event: PointerEvent) {
+  if (sourceDialogOpen.value) return;
   const root = rootRef.value;
   const target = event.target as Node | null;
   if (!root || !target || root.contains(target)) return;
@@ -355,6 +367,7 @@ function onDocumentPointerDown(event: PointerEvent) {
 }
 
 function onDocumentKeyDown(event: KeyboardEvent) {
+  if (sourceDialogOpen.value) return;
   if (event.key !== "Escape") return;
   sourceOpen.value = false;
   volumeOpen.value = false;
@@ -397,6 +410,7 @@ onBeforeUnmount(() => {
             :style="{ maxHeight: sourcePanelMaxHeight }"
           >
             <RoomSourcePanel
+              :room-id="roomId"
               :title="sourcePanelTitle"
               :source-type="sourceTypeDraft"
               :external-url="sourceExternalUrlDraft"
@@ -408,6 +422,9 @@ onBeforeUnmount(() => {
               :message-tone="sourceMessageTone"
               :hash-progress="sourceHashProgress"
               :applying="sourceApplying"
+              :omofun="omofun" :source-revision="sourceRevision" :close-key="sourcePanelCloseKey"
+              @dialog-change="sourceDialogOpen = $event"
+              @select-omofun="(selection, revision) => emit('apply-source', { sourceType: 'omofun', externalUrl: '', localFile: null, omofun: selection, expectedSourceRevision: revision })"
               @update:source-type="sourceTypeDraft = $event"
               @update:external-url="sourceExternalUrlDraft = $event"
               @select-local-match-file="handleLocalMatchFileSelected"

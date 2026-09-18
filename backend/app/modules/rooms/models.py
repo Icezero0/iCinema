@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -70,6 +70,9 @@ class Room(Base):
 
 class RoomSettings(Base):
     __tablename__ = "room_settings"
+
+    omofun_source: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    omofun_resolution: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 

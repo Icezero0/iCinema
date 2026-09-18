@@ -1,9 +1,10 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.error_reasons import ErrorReason
 from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from app.modules.rooms.constants import RoomPermission, RoomRole
-from app.modules.rooms.models import RoomMember
+from app.modules.rooms.models import Room, RoomMember
 from app.modules.rooms.membership.repository import RoomMembershipRepository
 from app.modules.rooms.permissions import require_room_permission, has_room_permission
 from app.modules.users.models import User
@@ -29,6 +30,9 @@ class RoomMembershipService:
         room_id: int,
         user_id: int,
     ) -> RoomRole | None:
+        owner_id = await db.scalar(select(Room.owner_id).where(Room.id == room_id))
+        if owner_id == user_id:
+            return RoomRole.OWNER
         member = await self.find_room_member(db, room_id=room_id, user_id=user_id)
         if member is None:
             return None

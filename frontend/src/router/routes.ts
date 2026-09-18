@@ -27,6 +27,30 @@ export default [
         component: () => import("@/pages/home/HomePage.vue"),
       },
       {
+        path: "admin/videos",
+        name: "catalog-admin",
+        meta: { requiresCatalogAdmin: true },
+        component: () => import("@/pages/catalog-admin/CatalogAdminPage.vue"),
+      },
+      {
+        path: "admin/videos/:id",
+        name: "catalog-detail",
+        meta: { requiresCatalogAdmin: true },
+        component: () => import("@/pages/catalog-admin/CatalogDetailPage.vue"),
+      },
+      {
+        path: "admin/providers",
+        name: "catalog-providers",
+        meta: { requiresCatalogAdmin: true },
+        component: () => import("@/pages/catalog-admin/CatalogProvidersPage.vue"),
+      },
+      {
+        path: "admin/imports",
+        name: "catalog-imports",
+        meta: { requiresCatalogAdmin: true },
+        component: () => import("@/pages/catalog-admin/CatalogImportsPage.vue"),
+      },
+      {
         path: "rooms/:id",
         name: "room",
         component: () => import("@/pages/room/RoomPage.vue"),
