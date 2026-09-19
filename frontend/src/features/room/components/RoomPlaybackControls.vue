@@ -75,6 +75,7 @@ const sourceDialogOpen = ref(false);
 const sourcePanelPlacement = ref<"up" | "down">("up");
 const sourcePanelMaxHeight = ref("min(520px, calc(100dvh - 24px))");
 const sourceTypeDraft = ref<RoomVideoSourceType>(props.sourceType);
+const sourceTabSelectedByUser = ref(false);
 const sourceExternalUrlDraft = ref(props.sourceType === 'external_url' ? props.sourceUrl : '');
 const sourceLocalActionDraft = ref<LocalFileSourceAction | null>(null);
 const sourceLocalMatchFileDraft = ref<File | null>(null);
@@ -277,7 +278,7 @@ function handleApplySourceDraft() {
 }
 
 function syncSourceDraftFromProps() {
-  sourceTypeDraft.value = props.sourceType;
+  if (!sourceTabSelectedByUser.value) sourceTypeDraft.value = props.sourceType;
   sourceExternalUrlDraft.value = props.sourceType === 'external_url' ? props.sourceUrl : '';
   sourceLocalActionDraft.value = null;
   sourceLocalMatchFileDraft.value = null;
@@ -289,6 +290,10 @@ function syncSourceDraftFromProps() {
 
 watch(() => [props.sourceType, props.sourceUrl, sourceOpen.value] as const, () => {
   if (!sourceOpen.value && !sourceDialogOpen.value && !props.sourceApplying) syncSourceDraftFromProps();
+});
+watch(() => props.roomId, () => {
+  sourceTabSelectedByUser.value = false;
+  syncSourceDraftFromProps();
 });
 
 function openSourcePanel() {
@@ -425,7 +430,7 @@ onBeforeUnmount(() => {
               :omofun="omofun" :source-revision="sourceRevision" :close-key="sourcePanelCloseKey"
               @dialog-change="sourceDialogOpen = $event"
               @select-omofun="(selection, revision) => emit('apply-source', { sourceType: 'omofun', externalUrl: '', localFile: null, omofun: selection, expectedSourceRevision: revision })"
-              @update:source-type="sourceTypeDraft = $event"
+              @update:source-type="sourceTypeDraft = $event; sourceTabSelectedByUser = true"
               @update:external-url="sourceExternalUrlDraft = $event"
               @select-local-match-file="handleLocalMatchFileSelected"
               @select-local-target-file="handleLocalTargetFileSelected"

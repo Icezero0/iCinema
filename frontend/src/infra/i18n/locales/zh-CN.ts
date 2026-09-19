@@ -1,5 +1,9 @@
 export default {
   omofun: {
+    details: { director: '导演：', cast: '主演：', updated_text: '更新：', remarks: '备注：' },
+    episodes: '选集', lines: '线路', selectEpisode: '请选择集数',
+    helpLabel: 'Omofun 解析帮助',
+    help: '请通过 {site} 搜索您喜欢的作品，将作品链接复制到此处进行解析。',
     workId: 'Omofun 作品 ID', openEpisodes: '打开选集', noEpisodesYet: '暂无可用选集',
     lineName: '{name}线路', playLine: '使用{name}线路',
     title: 'Omofun', input: '作品 ID 或网址', placeholder: '粘贴 Omofun 链接或作品 ID',

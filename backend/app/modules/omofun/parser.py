@@ -2,7 +2,7 @@ import hashlib
 import ipaddress
 import re
 from html.parser import HTMLParser
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from app.core.exceptions import BadRequestError
 
@@ -40,9 +40,24 @@ class DetailParser(HTMLParser):
         self.in_title = False
         self.current = None
         self.episodes = {}
+        self.elements = []
+        self.description_parts = []
+        self.description_length = 0
+        self.poster_url = None
+        self.info_item = None
+        self.metadata = {}
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        classes = (attrs.get("class") or "").split()
+        if tag == "img" and not self.poster_url and any("module-info-poster" in entry[1] for entry in self.elements):
+            self.poster_url = normalize_poster_url(attrs.get("data-original") or attrs.get("data-src") or attrs.get("src") or "")
+        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+            self.elements.append((tag, classes))
+        if "module-info-item" in classes and any("module-info-main" in entry[1] for entry in self.elements):
+            self.info_item = {"depth": len(self.elements), "label": "", "value": ""}
+        if tag == "br":
+            self.handle_data("\n")
         if tag == "h1":
             self.in_title = True
         if tag == "a":
@@ -53,18 +68,58 @@ class DetailParser(HTMLParser):
                 self.current = [match.group(1), match.group(2), []]
 
     def handle_data(self, data):
+        if self.info_item and not any(entry[0] in {"script", "style"} for entry in self.elements):
+            if any("module-info-item-title" in entry[1] for entry in self.elements):
+                self.info_item["label"] = (self.info_item["label"] + data)[:128]
+            elif any("module-info-item-content" in entry[1] for entry in self.elements):
+                self.info_item["value"] = (self.info_item["value"] + data)[:4096]
+        if (any("module-info-introduction-content" in entry[1] for entry in self.elements)
+                and not any(entry[0] in {"script", "style"} for entry in self.elements)):
+            part = data[:max(0, 10000 - self.description_length)]
+            self.description_parts.append(part)
+            self.description_length += len(part)
         if self.in_title:
             self.title_parts.append(data)
         if self.current:
             self.current[2].append(data)
 
     def handle_endtag(self, tag):
+        for index in range(len(self.elements) - 1, -1, -1):
+            if self.elements[index][0] == tag:
+                del self.elements[index:]
+                break
+        if self.info_item and len(self.elements) < self.info_item["depth"]:
+            label = "".join(self.info_item["label"].split()).rstrip("：:")
+            key = {"导演": "director", "主演": "cast", "更新": "updated_text", "备注": "remarks"}.get(label)
+            if key:
+                self.metadata[key] = " ".join(self.info_item["value"].split()).strip(" /／")
+            self.info_item = None
         if tag == "h1":
             self.in_title = False
         if tag == "a" and self.current:
             key, number, parts = self.current
             self.episodes.setdefault(key, {"id": key, "number": number, "title": "".join(parts).strip()[:200]})
             self.current = None
+
+
+def normalize_poster_url(value: str) -> str | None:
+    if not value or len(value) > 4096 or "\\" in value or any(ord(c) < 33 for c in value):
+        return None
+    try:
+        url = urljoin("https://omofun.in/", value)
+        parsed = urlsplit(url)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password or parsed.port not in {None, 80, 443}:
+            return None
+        try:
+            if not ipaddress.ip_address(host).is_global:
+                return None
+        except ValueError:
+            if "." not in host or host.endswith((".local", ".localhost")):
+                return None
+        return url
+    except ValueError:
+        return None
 
 
 def parse_detail(work_id: str, html: str) -> dict:
@@ -78,7 +133,9 @@ def parse_detail(work_id: str, html: str) -> dict:
         raise invalid("omofun_no_episodes")
     if len(parser.episodes) > MAX_EPISODES:
         raise invalid("omofun_limit")
-    return {"title": title, "episodes": sorted(parser.episodes.values(), key=lambda ep: float(ep["number"]))}
+    return {"title": title, **parser.metadata, "description": " ".join("".join(parser.description_parts).split()),
+            "poster_url": parser.poster_url,
+            "episodes": sorted(parser.episodes.values(), key=lambda ep: float(ep["number"]))}
 
 
 def is_hls_url(value):

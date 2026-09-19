@@ -4,10 +4,12 @@ export type OmofunLine = { id: string; source: string; label: string; url: strin
 export type OmofunEpisode = { id: string; number: string; title: string; lines: OmofunLine[]; skipped_lines: number };
 export type OmofunResult = {
   work_id: string; version: number;
-  snapshot: { title: string; episodes: OmofunEpisode[] } | null;
+  snapshot: { title: string; description?: string; poster_url?: string | null;
+    director?: string; cast?: string; updated_text?: string; remarks?: string; episodes: OmofunEpisode[] } | null;
   parsed_at: number | null; expires_at: number | null; stale: boolean;
   state: 'empty' | 'parsing' | 'ready' | 'failed'; error: string;
   completed: number; total: number; retry_after: number;
+  parsing_title: string;
 };
 export async function resolveOmofun(value: string, force = false) {
   return (await http.post<OmofunResult>('/omofun/resolve', { value, force })).data;

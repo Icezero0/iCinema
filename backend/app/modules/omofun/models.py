@@ -19,3 +19,4 @@ class OmofunCache(Base):
     requested_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     completed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     total: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    parsing_title: Mapped[str] = mapped_column(String(255), default="", server_default=text("''"))

@@ -11,6 +11,7 @@ const props = withDefaults(
 
     // layout
     maxWidth?: number; // e.g. 520
+    contentHeight?: boolean;
     zIndex?: number; // default 80
 
     // behavior
@@ -114,6 +115,7 @@ const dialogStyle = computed(() => ({ maxWidth: `${props.maxWidth}px` }));
         <Transition name="pop">
           <div
             class="dialog"
+            :class="{ contentHeight }"
             :style="dialogStyle"
             role="dialog"
             aria-modal="true"
@@ -173,6 +175,11 @@ const dialogStyle = computed(() => ({ maxWidth: `${props.maxWidth}px` }));
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 180ms ease;
+}
+
+.dialog.contentHeight {
+  max-height: none;
+  overflow: visible;
 }
 .fade-enter-from,
 .fade-leave-to {

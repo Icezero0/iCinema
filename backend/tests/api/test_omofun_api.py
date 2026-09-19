@@ -20,6 +20,8 @@ def upstream(monkeypatch):
     async def detail(path):
         calls.append(path)
         return '''<h1>Test anime</h1>
+        <div class="module-info-poster"><img src="/cover.jpg"></div>
+        <div class="module-info-introduction-content">Test description</div>
         <a class="module-play-list-link" href="/vod/play/123/ep1.html">Episode 1</a>
         <a class="module-play-list-link" href="/vod/play/123/ep2.html">Episode 2</a>'''
 
@@ -33,6 +35,39 @@ def upstream(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_title_is_visible_during_parse_without_publishing_partial_snapshot(db_session, factories, upstream, monkeypatch):
+    user = await factories.create_user()
+    await db_session.commit()
+    user_id = user.id
+    original_lines = service.request_lines
+    seen = []
+
+    async def observe(work, episode):
+        async with AsyncSessionLocal() as fresh:
+            progress = await service.read_cache(fresh, work)
+        assert progress["state"] == "parsing"
+        assert progress["parsing_title"] == "Test anime"
+        assert progress["snapshot"] is None
+        seen.append(episode)
+        return await original_lines(work, episode)
+
+    monkeypatch.setattr(service, "request_lines", observe)
+    result, token = await service.resolve(db_session, "123", False, user_id)
+    assert result["parsing_title"] == ""
+    await service.run_parse("123", token)
+    db_session.expire_all()
+    ready = await service.read_cache(db_session, "123")
+    assert seen == ["ep1", "ep2"]
+    assert ready["state"] == "ready" and ready["parsing_title"] == ""
+    await db_session.execute(update(OmofunCache).values(attempted_at=time.time()-61))
+    await db_session.commit()
+    db_session.expire_all()
+    refresh, _ = await service.resolve(db_session, "123", True, user_id)
+    assert refresh["state"] == "parsing" and refresh["parsing_title"] == ""
+    assert refresh["snapshot"] == ready["snapshot"]
+
+
+@pytest.mark.asyncio
 async def test_auth_cache_hit_url_normalization_and_no_catalog_writes(api_client, factories, db_session, auth_headers, upstream):
     assert (await api_client.post("/api/v1/omofun/resolve", json={"value": "123"})).status_code == 401
     user = await factories.create_user()
@@ -43,6 +78,8 @@ async def test_auth_cache_hit_url_normalization_and_no_catalog_writes(api_client
     result = (await api_client.get("/api/v1/omofun/123", headers=headers)).json()
     assert result["state"] == "ready" and result["version"] == 1 and not result["stale"]
     assert len(result["snapshot"]["episodes"]) == 2
+    assert result["snapshot"]["description"] == "Test description"
+    assert result["snapshot"]["poster_url"] == "https://omofun.in/cover.jpg"
     response = await api_client.post("/api/v1/omofun/resolve", json={"value": "https://omofun.in/vod/play/123"}, headers=headers)
     assert response.json()["snapshot"] == result["snapshot"] and len(upstream) == 3
     assert response.headers["cache-control"] == "no-store"

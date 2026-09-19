@@ -1,5 +1,9 @@
 export default {
   omofun: {
+    details: { director: 'Director:', cast: 'Cast:', updated_text: 'Updated:', remarks: 'Notes:' },
+    episodes: 'Episodes', lines: 'Lines', selectEpisode: 'Select an episode',
+    helpLabel: 'Omofun parsing help',
+    help: 'Find a title you like on {site}, then paste its link here to parse it.',
     workId: 'Omofun work ID', openEpisodes: 'Episodes', noEpisodesYet: 'No episodes available',
     lineName: '{name} line', playLine: 'Use {name} line',
     title: 'Omofun', input: 'Work ID or URL', placeholder: 'Paste an Omofun URL or work ID',

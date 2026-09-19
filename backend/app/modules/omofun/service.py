@@ -28,6 +28,7 @@ def view(row: OmofunCache, now: float) -> dict:
         "state": "failed" if expired_job else row.state,
         "error": "omofun_interrupted" if expired_job else row.error,
         "completed": row.completed, "total": row.total,
+        "parsing_title": row.parsing_title if row.state == "parsing" and not expired_job else "",
         "retry_after": max(0, int(row.attempted_at + REFRESH_COOLDOWN - now + 0.999)),
     }
 
@@ -66,7 +67,7 @@ async def resolve(db, value: str, force: bool, user_id: int):
         OmofunCache.attempted_at <= now - REFRESH_COOLDOWN,
         active_count < 2, user_count == 0,
     ).values(state="parsing", token=token, attempted_at=now, lease_until=now + LEASE_SECONDS,
-             requested_by=user_id, error="", completed=0, total=0).execution_options(synchronize_session=False))
+             requested_by=user_id, error="", completed=0, total=0, parsing_title="").execution_options(synchronize_session=False))
     if not result.rowcount:
         await db.rollback()
         db.expire_all()
@@ -97,7 +98,7 @@ async def run_parse(work_id: str, token: str):
             snapshot = parse_detail(work_id, await request_text(f"/vod/detail/{work_id}.html"))
             total = len(snapshot["episodes"])
             snapshot_bytes = len(json.dumps(snapshot, ensure_ascii=False).encode())
-            if not await write_if_owner(work_id, token, total=total, lease_until=time.time() + LEASE_SECONDS):
+            if not await write_if_owner(work_id, token, total=total, parsing_title=snapshot["title"], lease_until=time.time() + LEASE_SECONDS):
                 return
             for completed, episode in enumerate(snapshot["episodes"], 1):
                 parsed = parse_lines(await request_lines(work_id, episode["id"]))

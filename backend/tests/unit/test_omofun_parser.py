@@ -32,6 +32,40 @@ def test_detail_uses_episode_list_not_promoted_latest_link():
         parse_detail("1", "<h1>Captcha</h1>")
 
 
+def test_detail_extracts_only_work_poster_and_plain_introduction():
+    html = '''<img src="/logo.png"><h1>Test</h1>
+    <div class="module-info-poster"><a><img data-original="/cover.jpg" src="/loading.gif"></a></div>
+    <div class="module-info-introduction-content"><p>First &amp; second<br>Next <b>line</b></p><script>ignored()</script></div>
+    <div>Director and other metadata</div><img src="/recommendation.jpg">
+    <a class="module-play-list-link" href="/vod/play/1/ep1.html">1</a>'''
+    result = parse_detail("1", html)
+    assert result["poster_url"] == "https://omofun.in/cover.jpg"
+    assert result["description"] == "First & second Next line"
+    missing = parse_detail("1", '<h1>Test</h1><a class="module-play-list-link" href="/vod/play/1/ep1.html">1</a>')
+    assert missing["poster_url"] is None and missing["description"] == ""
+
+
+def test_work_metadata_uses_labels_and_ignores_scripts_and_recommendations():
+    html = '''<h1>Test</h1><div class="module-info-main">
+      <div class="module-info-item"><span class="module-info-item-title">备注：</span><div class="module-info-item-content">更新至第24集</div></div>
+      <div class="module-info-item"><span class="module-info-item-title">导演：</span><div class="module-info-item-content"><a>Director A</a><span>/</span></div></div>
+      <div class="module-info-item"><span class="module-info-item-title">主演：</span><div class="module-info-item-content"><a>Actor A</a><span>/</span><a>Actor B</a><span>/</span><script>bad()</script></div></div>
+      <div class="module-info-item"><span class="module-info-item-title">更新：</span><div class="module-info-item-content">2024年3月24日 11:47</div></div>
+    </div><div class="module-info-item"><span class="module-info-item-title">导演：</span><div class="module-info-item-content">Wrong</div></div>
+    <a class="module-play-list-link" href="/vod/play/1/ep1.html">1</a>'''
+    result = parse_detail("1", html)
+    assert result["director"] == "Director A"
+    assert result["cast"] == "Actor A/Actor B"
+    assert result["updated_text"] == "2024年3月24日 11:47"
+    assert result["remarks"] == "更新至第24集"
+
+
+@pytest.mark.parametrize("url", ["javascript:alert(1)", "data:image/svg+xml,x", "http://127.0.0.1/p.jpg", "https://user:pass@host.test/p.jpg"])
+def test_detail_ignores_unsafe_poster(url):
+    html = f'<h1>Test</h1><div class="module-info-poster"><img src="{url}"></div><a class="module-play-list-link" href="/vod/play/1/ep1.html">1</a>'
+    assert parse_detail("1", html)["poster_url"] is None
+
+
 def test_lines_preserve_same_source_variants_and_signed_queries():
     first = {"src_site": "ffzy", "play_data": "https://video.example/a.m3u8?sign=123"}
     second = {"src_site": "ffzy", "play_data": "https://video.example/b.m3u8"}
