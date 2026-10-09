@@ -1,29 +1,44 @@
-# Bilibili 播放接入设计（功能分支）
+# Bilibili 播放接入计划
 
-日期：2026-10-09。分支 `feat/bilibili-playback`。当前文档是实施约束和验收顺序，不代表已经接通 Bilibili；CMS 工作暂放。目标是普通 BV 投稿视频、非 DRM DASH、每位用户使用自己的 B 站登录态，在 iCinema 房间内同步播放。
+日期：2026-10-09。当前开发分支：`feat/electron-desktop`。CMS 方向暂缓。先按 [iCinema 现有业务 Electron 化计划](electron-desktop-plan.md) 完成桌面客户端；B 站原型保留在本分支作为后续验证资料，不进入第一阶段正式应用。之后的 B 站功能目标仍是普通 BV 投稿视频、用户各自使用自己的 B 站账号，以及房间播放同步；番剧、课程、HDR、杜比、DRM 暂不纳入。
 
-## 与当前代码的接点
+## 已确定的架构边界
 
-- 后端 `RoomVideoSourceType` 目前只有 `external_url`、`local_file`、`omofun`；前端房间源面板也只有这三种选项。
-- Omofun 房间源把 `external_url` 放进运行态和持久快照，并通过 `room_video_source_set` 发给成员。Bilibili 不能沿用这条地址广播路径：新增 `bilibili` 类型及独立元数据，只广播 `bvid`、`cid`、分P身份、播放位置和状态；不广播 CDN URL、登录凭据、代理令牌或画质权限。
-- 同步核心继续控制当前页面的 `HTMLVideoElement`。Bilibili DASH 前端适配器通过 dash.js/Shaka 接到同一个 video 元素，生命周期必须与现有 HLS/本地文件引擎协调，切源时清理旧播放器。
-- 用户进入或重连房间，先接收相同资源身份和房间播放快照，再由本人的会话独立获取可用画质和媒体流；无法播放的用户明确显示个人原因，不阻止有权限的成员播放。
-- BiliPai 是 GPL-3.0 的 Android 实现，仅用作接口行为参考。后端用 Python 实现请求、会话和受限媒体网关；前端用 TypeScript 实现 UI、DASH 适配及现有同步接线，不复制其 Kotlin 代码。
+- **VPS 不转发任何 B 站视频或音频字节**，也不提供媒体网关或失败后的代理回退。浏览器直连媒体失败时，明确显示该路径不可用。
+- iCinema 后端不集中保存用户的 `SESSDATA`、`bili_jct`、刷新令牌等 B 站凭据，也不代用户长期维持 B 站登录态。用户在 B 站登录，凭据留在用户设备及 B 站所属域名。
+- 房间只持久化、广播 `bvid`、`cid`、分 P、来源版本和现有播放状态；不存储或广播个人的 `playurl`、DASH/CDN 地址及账号信息。每人以自己的权限播放。
+- 不实施原计划中的后端二维码绑定、后端 WBI/playurl 客户端或加密凭据表。Shaka 已在独立桌面原型中验证，接入正式房间时仍须验证与现有同步控制的配合。
 
-## 分段实施与验收
+## 已验证的边界
 
-1. **公开投稿播放链路实测。** 从实际 BV URL 解析 BVID，调用 `x/web-interface/view` 获取 CID 与分P；以目标 VPS 的网络环境请求播放信息，筛选普通非 DRM DASH。取得一条允许的媒体请求，验证 `Range` 返回 206。记录 API 错误码、地区限制、是否要登录与是否需要 Referer。只有实测成功才把“可解析”升级为“可播放”。
-2. **按用户绑定账号。** 二维码登录由后端取得和轮询，凭据仅保存于对应 iCinema 用户的加密存储；支持查看绑定状态和退出/撤销。配置独立加密密钥，限制日志/响应不出现 `SESSDATA`、`bili_jct`、access token 或 CDN 地址。账号失效时该用户重新登录，不将房主会话借给其他人。
-3. **元数据与播放解析。** 服务端按 BV、分P与 CID 获取作品信息和 `x/player/wbi/playurl` 数据，必要时使用 WBI 签名；标准化 DASH 视频/音频轨、codec、带宽、`SegmentBase`、候选 CDN 和有效期。返回明确的登录、会员、付费、地区、私密、下架及 DRM 不支持状态。只在本人有权限且存在普通非 DRM 轨时生成短期播放会话；不尝试绕过 DRM 或付费判断。
-4. **受限媒体网关与 DASH 播放。** 后端依据本人短期会话中的轨 ID 选择预验证的 CDN URL，为前端生成 MPD；代理端处理 Referer、必要 User-Agent 和单段 `Range` 请求，原样保留有效的 200/206、`Content-Range`、`Accept-Ranges`、`Content-Length`、`Content-Type`。代理只能访问受控 B 站媒体域名，并在 DNS 解析和连接时检查目标为公网；禁止任意 URL 参数、重定向到新域、私网连接和无限缓存/响应。令牌短期有效，绑定 iCinema 用户与流，不写入房间状态。前端用 DASH 库驱动同一个 video 元素，验证播放、暂停、跳转和倍速。
-5. **房间同步与回归。** 房主/有权限的成员选择 BV 和分P后，房间只保存身份与播放状态。两名绑定不同 B 站账号的成员各自获取媒体，重新进入可按房间位置同步；一方无 B 站权限或会话过期时只影响自身。其他播放源、房间权限、资源状态和 Omofun 刷新不中断行为需回归。
+本地已完成用户扫码登录验证：登录态得到作品信息、`quality=80` 的 DASH 视频/音频轨。独立 Electron 原型已实现持久本机登录、普通 AVC/AAC DASH 播放、本机媒体协议、CDN 备选切换及截断分段校验；用户确认两个 BV 样本可流畅播放，其中一个成功预取完整 357 秒。前方预取上限随后收紧为 300 秒。**iCinema 实际房间界面与两名用户各自登录后的同步尚未验证**；VPS 媒体访问不属于实施路径。见[技术验证记录](../reports/bilibili-feasibility-2026-10-09.md)。
 
-## 技术边界
+纯网页路径仍未验证：Electron 原型成功不等于普通网页能使用用户已登录 B 站的 Cookie 或设置相同的媒体请求头。iCinema 与 B 站不同源，浏览器限制网页读取 B 站 Cookie、iframe 内容和播放器对象；跨域凭据请求还取决于 B 站的 CORS 与浏览器的第三方 Cookie 策略。当前选择桌面端继续开发。参考：[MDN 同源策略](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Same-origin_policy)、[MDN 第三方 Cookie](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies)。
 
-- 首版只承诺普通投稿视频和非 DRM DASH；番剧、课程/PUGV、HDR、Dolby、8K、直播和 DRM 不在验收范围。
-- `playurl` 和 CDN URL 会过期。过期时本人重新解析并更新本地短期会话；房间资源身份与当前播放不会因此自动切源。
-- 代理媒体会消耗 VPS 出站流量和带宽；实施前用一个短样本测请求数、Range 行为及两人同时播放的带宽，再设定限流与最大连接数。
-- 任何接口、登录和媒体可用性以运行中的 Bilibili 与部署地区实测为准。Android 客户端可访问不等于浏览器或目标 VPS 能访问。
-- 新依赖预期为后端凭据加密库、前端 DASH 播放库。确定版本和接线后提供基于 `backend/venv` 的安装命令与前端安装命令；本文件不引入依赖。
+[B 站官方外链播放器文档](https://player.bilibili.com/)列出 `bvid`、`cid`、分 P、`t`（初始时间）、`autoplay` 等参数，但未列出让宿主网页实时读取进度、暂停、跳转和调整倍速的接口。跨域限制也使现有 `HTMLMediaElement` 同步代码无法直接控制 iframe。这是文档层面的限制，实际行为尚需浏览器验证；iframe 能否沿用用户在 B 站的登录态，同样受浏览器策略影响。
 
-参考：[BiliPai](https://github.com/jay3-yy/BiliPai)、[dash.js](https://github.com/Dash-Industry-Forum/dash.js)、[iCinema 房间源协议](backend/ws-protocol.md)。
+## 候选路径与取舍
+
+| 路径 | 凭据与媒体 | 待验证的关键点 |
+| --- | --- | --- |
+| B 站官方外链播放器 iframe | 登录和媒体请求由 B 站播放器在用户浏览器中处理；VPS 只传房间状态 | iframe 能否取得用户登录态；是否存在可靠的实时播放状态与控制接口。只有初始 `t` 参数不足以保证现有同步体验。 |
+| 用户端浏览器扩展 | 扩展在用户设备上、经用户授权访问 B 站页面或登录态；VPS 不接触凭据和媒体 | 能否稳定控制 B 站播放器，或在浏览器内独立取得 `playurl` 并直连 CDN；各浏览器的安装、权限与维护成本。 |
+| 独立桌面客户端 | B 站登录和 API/CDN 请求都在用户电脑；本机进程可补必要请求头并处理 Range，VPS 仍只传房间状态 | Electron 内独立会话能否登录、取得普通 DASH 并经本机媒体协议完整播放；画面、声音及 `<video>` 同步控制是否正常。 |
+
+桌面端原型放在 [`desktop/probes/bilibili`](../../desktop/probes/bilibili/README.md)，与现有前后端依赖隔离。`desktop/` 将承载 iCinema 桌面壳和本机能力，B 站只是一个播放源。原型已在用户本机完成登录后的 DASH 实播及两个 BV 样本的流畅性验证。B 站登录态保存在 Electron 独立的本机持久会话，用户可以主动清除；媒体只在用户电脑内通过自定义协议转交播放器。房间接入与多用户同步尚未实现。
+
+普通 iCinema 网页内的自定义 `<video>` + Shaka 路径，只有在**不把 B 站凭据交给 iCinema 后端**的条件下，实际验证了客户端可取得个人 `playurl`、浏览器可直接播放对应 CDN、且同一个视频可受现有同步控制时，才进入实施。不能用 VPS 代理补足失败环节。
+
+后端加密保存 Cookie 本身不是“为每人维持一条常驻连接”，但会形成集中保管第三方账号凭据、由服务器 IP 代用户访问 B 站 API 的风险。用户已明确不希望按此路径继续，故此前的后端绑定方案撤销。
+
+房间层可以继续复用现有的播放状态同步模型：只保存 BV/CID、分 P、`source_revision`、进度、播放/暂停与倍速。用户自己的登录态和媒体地址不进入房间状态、广播事件或 iCinema 后端日志。现有 BV 输入解析器和测试可复用。
+
+## 分阶段推进与验收
+
+1. **桌面端最小验证（已完成）。** 在独立 Electron 原型中由用户在本机登录 B 站，检查独立会话、登录态 `playurl`、普通 AVC/AAC DASH、本机媒体协议下的完整画面与声音，以及 `<video>` 的暂停、跳转和倍速。只拿到 API 200 或短 Range 206 不算通过；不得从 VPS 转发媒体。依赖由用户审阅安装命令后自行安装。
+2. **完成现有业务 Electron 化（前置阶段）。** 按独立的桌面客户端计划，将当前前端和现有业务在 Electron 中验收通过；此阶段不接入 B 站账号或播放入口。
+3. **接入 B 站本机能力与房间。** 在已稳定的桌面客户端中提取原型的本机登录、解析、媒体协议与 Shaka 播放能力；房间新增 B 站播放源身份，仅持久化和广播 BV/CID、分 P 与播放状态，每位成员独立解析媒体。先验收单人房间播放，再验收两人同步、房主切源、晚加入、重连及权限失败隔离；回归现有播放源，随后处理 URL 续期与更复杂的内容类型。
+
+每阶段完成后提交不超过 300 字的简报，列出验收时应重点看的页面和操作。按用户既定习惯，开发时不主动启动前后端服务，由用户运行后热更新验收。任何新库都先提供用途和安装命令供用户 review，由用户在本地安装。
+
+只参考 [BiliPai](https://github.com/jay3-yy/BiliPai) 的接口行为与架构，其源码使用 GPL-3.0；iCinema 的实现自行编写。独立桌面原型已经使用 [Shaka Player](https://github.com/shaka-project/shaka-player) 播放普通 DASH，正式桌面界面将复用这条本机播放链路。
