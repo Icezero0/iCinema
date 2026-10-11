@@ -7,6 +7,7 @@ import pytest
 
 from app.core.exceptions import BadRequestError, ForbiddenError
 from app.modules.rooms.constants import RoomSyncPolicy, RoomVideoSourceType
+from app.modules.rooms.settings.service import RoomSettingsService
 from app.realtime.constants import AutoPlaybackAction, PlaybackStatusType, WsCommandAction
 from app.realtime.handlers.room import RoomCommandHandler
 from app.realtime.manager import WsConnection
@@ -50,6 +51,7 @@ async def test_owner_enters_even_when_membership_is_missing(db_session, factorie
     )
     runtime = SimpleNamespace(
         get_room_video_source=AsyncMock(return_value=None),
+        invalidate_bilibili_member=AsyncMock(return_value=None),
         get_playback=AsyncMock(return_value=None),
         get_user_resource_states=AsyncMock(return_value=UserResourceStatesState(room_id=room.id, user_resource_states=[])),
     )
@@ -62,6 +64,33 @@ async def test_owner_enters_even_when_membership_is_missing(db_session, factorie
         await handler.handle(db=db_session, manager=object(), publisher=RecordingPublisher(),
             connection=WsConnection(connection_id="outsider", user_id=outsider.id, websocket=SimpleNamespace()), command=command)
     assert presence.enter_room.await_count == 1
+
+
+async def test_bilibili_identity_is_restored_in_room_snapshot(db_session, factories):
+    owner = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    await factories.commit()
+    await RoomSettingsService().set_selected_room_video_source_type(
+        db_session, room_id=room.id, source_type=RoomVideoSourceType.BILIBILI,
+        bilibili_source={"bvid": "BV1JneT6rEaG", "cid": 12345, "page": 2, "source_revision": 4},
+    )
+    presence = SimpleNamespace(
+        find_room_user_connection=AsyncMock(return_value=None),
+        enter_room=AsyncMock(return_value=PresenceState(room_id=room.id, present_user_ids=[owner.id])),
+    )
+    handler = RoomCommandHandler(presence_service=presence, video_runtime_service=RoomVideoRuntimeService())
+    result = await handler.handle(
+        db=db_session, manager=object(), publisher=RecordingPublisher(),
+        connection=WsConnection(connection_id="bilibili-owner", user_id=owner.id, websocket=SimpleNamespace()),
+        command=WsCommandPayload(request_id="bilibili-enter", action=WsCommandAction.ROOM_ENTER,
+                                 data={"room_id": room.id}),
+    )
+    assert result["room_video_source"]["source_type"] == "bilibili"
+    assert result["room_video_source"]["bilibili"] == {
+        "bvid": "BV1JneT6rEaG", "cid": 12345, "page": 2,
+    }
+    assert result["room_video_source"]["source_revision"] == 4
+    assert result["playback"]["status"] == "paused"
 
 
 # 缺少 room_id 时会拒绝房间命令

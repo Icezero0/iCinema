@@ -66,6 +66,7 @@ const items = computed(() => [
     class="sidebar"
     :class="{ mobile: mobile }"
     :data-open="open"
+    :inert="!open"
   >
     <div class="sidebarInner" :data-open="open">
       <nav class="nav">
@@ -91,6 +92,10 @@ const items = computed(() => [
 <style scoped>
 .sidebar {
   width: 248px;
+  position: fixed;
+  top: 56px;
+  bottom: 0;
+  left: 0;
   border-right: 1px solid var(--c-border);
   background:
     linear-gradient(
@@ -99,20 +104,14 @@ const items = computed(() => [
       color-mix(in srgb, var(--c-surface) 90%, var(--c-bg))
     );
   padding: 18px 14px;
-  overflow: hidden;
-  transition:
-    width 180ms ease,
-    padding 180ms ease,
-    border-color 180ms ease,
-    transform 180ms ease;
-  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: transform 180ms ease;
   z-index: 40;
 }
 
 .sidebar[data-open="false"] {
-  width: 0;
-  padding: 0;
-  border-right: none;
+  transform: translateX(-100%);
 }
 
 .sidebarInner {
@@ -133,20 +132,13 @@ const items = computed(() => [
 }
 
 .sidebar.mobile {
-  position: fixed;
-  top: 56px;
-  bottom: 0;
-  left: 0;
   width: min(280px, calc(100vw - 24px));
   border-right: 1px solid color-mix(in srgb, var(--c-border) 88%, white);
   box-shadow: 0 18px 44px rgb(0 0 0 / 0.16);
 }
 
 .sidebar.mobile[data-open="false"] {
-  width: min(280px, calc(100vw - 24px));
-  padding: 18px 14px;
-  border-right: 1px solid color-mix(in srgb, var(--c-border) 88%, white);
-  transform: translateX(calc(-100% - 12px));
+  transform: translateX(-100%);
 }
 
 .sidebar.mobile .sidebarInner[data-open="false"] {

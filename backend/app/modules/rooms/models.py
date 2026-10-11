@@ -73,6 +73,7 @@ class RoomSettings(Base):
 
     omofun_source: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     omofun_resolution: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    bilibili_source: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 

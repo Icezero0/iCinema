@@ -1,0 +1,16 @@
+{
+  "name": "icinema-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "start:built": "electron . --bundled",
+    "build:renderer": "npm --prefix ../frontend run build && node build-renderer.cjs",
+    "build:windows": "npm run build:renderer && node build-windows.cjs",
+    "test": "node --test navigation.test.cjs app-protocol.test.cjs runtime-config.test.cjs storage-policy.test.cjs bilibili-account.test.cjs bilibili-session-store.test.cjs bilibili-video.test.cjs bilibili-media.test.cjs bilibili-playback.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "44.7.0"
+  }
+}

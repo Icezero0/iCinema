@@ -11,6 +11,7 @@ import {
 } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import type { BilibiliLocalMedia } from "@/infra/bilibili-desktop";
 import ChatComposer from "@/features/chat/components/ChatComposer.vue";
 import type { ChatSegment } from "@/features/chat/types";
 import ChatDanmakuOverlay from "@/features/room/components/danmaku/ChatDanmakuOverlay.vue";
@@ -26,6 +27,8 @@ const props = defineProps<{
   sourceUrl: string;
   sourceFile: File | null;
   sourceRevision: number;
+  localBilibili?: BilibiliLocalMedia | null;
+  sourceError?: string;
   volume: number;
   videoFullscreenLabel: string;
   exitVideoFullscreenLabel: string;
@@ -71,9 +74,9 @@ const player = useRoomMediaEngine({
   writeLog: () => {},
 });
 const videoRef = player.videoRef;
-const hasSource = computed(() => Boolean(player.appliedUrl.value));
+const hasSource = computed(() => Boolean(player.appliedUrl.value) || props.sourceType === "bilibili");
 const displayedResourceStatus = computed(() =>
-  toDisplayedResourceStatus(player.mediaHealthState.value, hasSource.value));
+  props.sourceError ? "error" : toDisplayedResourceStatus(player.mediaHealthState.value, hasSource.value));
 const showEmptyState = computed(() => !hasSource.value);
 const showWaitingState = computed(() => hasSource.value && player.mediaHealthState.value === "stalling");
 const showPausedState = computed(() =>
@@ -104,8 +107,26 @@ function setVideoRef(el: unknown) {
 async function loadCurrentSource() {
   if (!videoRef.value) return;
 
+  if (props.localBilibili) {
+    await player.loadBilibiliSource(props.localBilibili);
+    return;
+  }
   const input = toMediaEngineLoadInput(props.sourceType, props.sourceUrl, props.sourceFile);
   await player.loadSource(input ?? "");
+}
+
+let loadQueue = Promise.resolve();
+let loadRevision = 0;
+function scheduleSourceLoad() {
+  const revision = ++loadRevision;
+  loadQueue = loadQueue.catch(() => {}).then(async () => {
+    if (revision !== loadRevision) return;
+    await loadCurrentSource();
+  }).catch(() => {});
+}
+
+function waitForSourceLoad() {
+  return loadQueue;
 }
 
 async function playVideo() {
@@ -259,10 +280,10 @@ async function toggleVideoFullscreen() {
 }
 
 watch(
-  () => [props.sourceType, props.sourceUrl, props.sourceFile, props.sourceRevision, videoRef.value] as const,
-  () => {
-    void loadCurrentSource();
-  },
+  () => [props.localBilibili, props.localBilibili ? null : props.sourceType,
+    props.localBilibili ? null : props.sourceUrl, props.localBilibili ? null : props.sourceFile,
+    props.localBilibili ? null : props.sourceRevision, videoRef.value] as const,
+  scheduleSourceLoad,
   { immediate: true },
 );
 watch(
@@ -306,6 +327,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  loadRevision++;
   document.removeEventListener("fullscreenchange", syncFullscreenState);
   document.removeEventListener("pointerdown", hidePlayerActionsFromOutside);
   if (controlsHideTimer) {
@@ -318,6 +340,7 @@ function setPlaybackRate(rate: number) {
 }
 
 defineExpose({
+  waitForSourceLoad,
   setPlaybackRate,
   playVideo,
   pauseVideo,
@@ -342,7 +365,7 @@ defineExpose({
   >
     <div class="playerSurface">
       <video
-        v-show="hasSource && player.mediaHealthState.value !== 'error'"
+        v-show="hasSource && !sourceError && player.mediaHealthState.value !== 'error'"
         :ref="setVideoRef"
         class="playerVideo"
         playsinline
@@ -382,11 +405,11 @@ defineExpose({
           <div class="emptyHint">{{ hint }}</div>
         </div>
       </div>
-      <div v-else-if="player.mediaHealthState.value === 'error'" class="playerOverlay playerOverlayError">
+      <div v-else-if="sourceError || player.mediaHealthState.value === 'error'" class="playerOverlay playerOverlayError">
         <div class="overlayIcon">
           <AppIcon :icon="ExclamationTriangleIcon" :size="30" />
         </div>
-        <div class="overlayText">{{ player.errorMessage.value }}</div>
+        <div class="overlayText">{{ sourceError || player.errorMessage.value }}</div>
       </div>
       <div v-else-if="showWaitingState" class="playerOverlay">
         <div class="loadingSpinner" aria-hidden="true" />

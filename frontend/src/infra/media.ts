@@ -1,4 +1,4 @@
-const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? window.location.origin ?? "http://localhost:8000";
+import { MEDIA_ORIGIN } from "@/infra/runtime-config";
 
 export function resolveMediaUrl(path?: string | null) {
   if (!path) return "";
@@ -8,12 +8,15 @@ export function resolveMediaUrl(path?: string | null) {
   }
 
   if (path.startsWith("//")) {
-    return `${window.location.protocol}${path}`;
+    const protocol = window.location.protocol === "icinema:"
+      ? new URL(MEDIA_ORIGIN).protocol
+      : window.location.protocol;
+    return `${protocol}${path}`;
   }
 
   if (path.startsWith("/")) {
-    return `${API_ORIGIN}${path}`;
+    return `${MEDIA_ORIGIN}${path}`;
   }
 
-  return `${API_ORIGIN}/${path}`;
+  return `${MEDIA_ORIGIN}/${path}`;
 }

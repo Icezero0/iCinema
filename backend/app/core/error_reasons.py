@@ -76,6 +76,7 @@ class ErrorReason(StrEnum):
     PLAYBACK_RESUME_BLOCKED_BY_STALLING_USERS = (
         "playback_resume_blocked_by_stalling_users"
     )
+    BILIBILI_PLAYBACK_MEMBERS_NOT_READY = "bilibili_playback_members_not_ready"
     REQUEST_VALIDATION_FAILED = "request_validation_failed"
     ROOM_VIDEO_CONTROL_FORBIDDEN = "room_video_control_forbidden"
     ROOM_VIDEO_CONTROL_PERMISSION_DENIED = "room_video_control_permission_denied"

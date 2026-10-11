@@ -71,7 +71,7 @@ export function useChatMediaActions(options: UseChatMediaActionsOptions) {
       const isCrossOrigin = url.origin !== window.location.origin;
       const isPublicMediaPath = /^\/(avatar|image|sticker)\//.test(url.pathname);
 
-      if (isCrossOrigin && isPublicMediaPath) {
+      if (isCrossOrigin && isPublicMediaPath && /^https?:$/.test(window.location.protocol)) {
         return `${window.location.origin}${url.pathname}${url.search}`;
       }
 

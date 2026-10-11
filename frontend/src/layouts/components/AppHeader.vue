@@ -100,7 +100,8 @@ onMounted(() => {
   padding: 0 var(--s-4);
   border-bottom: 1px solid var(--c-border);
   background: color-mix(in srgb, var(--c-surface) 92%, var(--c-bg));
-  position: relative;
+  position: sticky;
+  top: 0;
   overflow: visible;
   z-index: 50;
   gap: 20px;

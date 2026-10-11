@@ -9,12 +9,15 @@ export type OmofunSelection = {
   title?: string; episode_title?: string; line_label?: string;
 };
 
+export type BilibiliSelection = { bvid: string; cid: number; page: number };
+
 export type RoomRealtimeVideoSourceState = {
   room_id: number;
   source_type: RoomVideoSourceType;
   external_url: string | null;
   file_hash: string | null;
   omofun?: OmofunSelection | null;
+  bilibili?: BilibiliSelection | null;
   source_revision?: number;
 };
 
@@ -60,6 +63,7 @@ export type RoomRealtimeSessionClosed = {
 };
 
 export type RoomRealtimeVideoSourceSetPayload =
+  | (BilibiliSelection & { source_type: "bilibili"; anchor_ts_ms: number })
   | (OmofunSelection & {
       source_type: "omofun";
       expected_source_revision: number;
@@ -91,6 +95,7 @@ export type RoomRealtimePlaybackSeekPayload = Omit<
 
 export type RoomRealtimeResourceStatusPayload = {
   status: RoomRealtimeResourceStatus;
+  source_revision?: number;
   reported_at_ms: number;
   position_seconds?: number | null;
   error_code?: string | null;

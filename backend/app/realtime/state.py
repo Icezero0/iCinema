@@ -21,6 +21,7 @@ class RoomVideoSourceState(BaseModel):
     external_url: str | None = None
     file_hash: str | None = None
     omofun: dict | None = None
+    bilibili: dict | None = None
     source_revision: int = 0
 
 

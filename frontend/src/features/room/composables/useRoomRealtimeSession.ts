@@ -103,6 +103,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   const roomPlaybackEvent = ref<RoomRealtimePlaybackEvent | null>(null);
   const userResourceStates = ref<RoomRealtimeUserResourceState[]>([]);
   const isRealtimeActive = ref(false);
+  const isRoomSessionReplaced = ref(false);
   const realtimeStatus = ref<WSConnectionStatus>(wsClient.connectionStatus);
   const realtimeError = ref("");
 
@@ -125,6 +126,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   }
 
   async function enterCurrentRoom() {
+    if (isRoomSessionReplaced.value) return;
     const roomId = options.roomId.value;
     auth.syncTokensFromStorage();
     if (!roomId || !auth.isLoggedIn || !auth.accessToken) return;
@@ -311,6 +313,11 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
 
   function handleSessionClosed(payload: RoomRealtimeSessionClosed) {
     if (!isCurrentRoomPayload(payload, options.roomId.value)) return;
+    if (payload.reason === "entered_elsewhere") {
+      isRoomSessionReplaced.value = true;
+      enterAttempt += 1;
+      enteringRoomId = null;
+    }
     enteredRoomId = null;
     isRealtimeActive.value = false;
     presentUserIds.value = [];
@@ -355,6 +362,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
   }
 
   function handlePageResume() {
+    if (isRoomSessionReplaced.value) return;
     const now = Date.now();
     if (now - lastResumeCheckAt < ROOM_REALTIME_RESUME_CHECK_THROTTLE_MS) return;
     lastResumeCheckAt = now;
@@ -400,6 +408,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
 
       if (
         status === "ready" &&
+        !isRoomSessionReplaced.value &&
         enteredRoomId !== options.roomId.value &&
         enteringRoomId !== options.roomId.value
       ) {
@@ -413,6 +422,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     () => options.roomId.value,
     async (roomId, previousRoomId) => {
       enterAttempt += 1;
+      isRoomSessionReplaced.value = false;
       if (previousRoomId) {
         await leaveEnteredRoom(previousRoomId);
       }
@@ -454,6 +464,7 @@ export function useRoomRealtimeSession(options: UseRoomRealtimeSessionOptions) {
     roomPlaybackEvent,
     userResourceStates,
     isRealtimeActive,
+    isRoomSessionReplaced,
     realtimeStatus,
     realtimeError,
     enterCurrentRoom,

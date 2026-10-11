@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.exceptions import BadRequestError, ForbiddenError
+from app.core.exceptions import BadRequestError, ConflictError, ForbiddenError
 from app.modules.rooms.constants import (
     RoomActiveSyncPermission,
     RoomSyncPolicy,
@@ -173,6 +173,26 @@ async def test_handle_user_resource_status_publishes_resource_states_and_auto_pa
     assert publisher.calls[1] == ("publish_playback_pause", {"playback": playback})
 
 
+async def test_stale_bilibili_resource_status_cannot_mark_new_part_ready() -> None:
+    runtime = RoomVideoRuntimeService()
+    await runtime.set_room_video_source(
+        room_id=31, source_type=RoomVideoSourceType.BILIBILI,
+        bilibili={"bvid": "BV1JneT6rEaG", "cid": 123, "page": 2}, source_revision=2,
+    )
+    handler = RoomVideoCommandHandler(video_runtime_service=runtime)
+    command = WsCommandPayload(
+        request_id="stale-status", action=WsCommandAction.USER_RESOURCE_STATUS,
+        data={"status": "ready", "reported_at_ms": 1000, "source_revision": 1},
+    )
+    with pytest.raises(ConflictError) as error:
+        await handler._handle_user_resource_status(
+            publisher=RecordingPublisher(), room_id=31, user_id=1,
+            command=command, sync_policy=RoomSyncPolicy.AUTO_SYNC,
+        )
+    assert getattr(error.value, "reason", None) == "bilibili_source_changed"
+    assert (await runtime.get_user_resource_states(room_id=31)).user_resource_states == []
+
+
 # 设置外链视频源时会更新 runtime 并广播视频源和播放状态
 async def test_handle_room_video_source_set_for_external_url(monkeypatch) -> None:
     handler = RoomVideoCommandHandler(video_runtime_service=RoomVideoRuntimeService())
@@ -236,6 +256,61 @@ async def test_handle_room_video_source_set_for_external_url(monkeypatch) -> Non
         "publish_user_resource_states",
         {"user_resource_states": user_resource_states},
     )
+
+
+async def test_bilibili_source_broadcasts_only_identity_and_resets_playback(db_session, factories) -> None:
+    owner = await factories.create_user()
+    room = await factories.create_room(owner=owner)
+    await factories.commit()
+    runtime = RoomVideoRuntimeService()
+    handler = RoomVideoCommandHandler(video_runtime_service=runtime)
+    publisher = RecordingPublisher()
+    command = WsCommandPayload(
+        request_id="bilibili-source",
+        action=WsCommandAction.ROOM_VIDEO_SOURCE_SET,
+        data={"source_type": "bilibili", "bvid": "BV1JneT6rEaG", "cid": 12345,
+              "page": 2, "anchor_ts_ms": 1000},
+    )
+
+    result = await handler._handle_room_video_source_set(
+        db=db_session, publisher=publisher, room_id=room.id, command=command,
+    )
+
+    assert result["room_video_source"]["bilibili"] == {
+        "bvid": "BV1JneT6rEaG", "cid": 12345, "page": 2,
+    }
+    assert result["room_video_source"]["external_url"] is None
+    assert result["playback"]["status"] == "paused"
+    assert result["playback"]["position_seconds"] == 0
+    assert "bilivideo" not in str(result)
+    assert publisher.calls[0][0] == "publish_room_video_source_set"
+    assert publisher.calls[1][0] == "publish_playback_pause"
+    settings = await handler.room_settings_service.find_room_settings_by_room_id(db_session, room_id=room.id)
+    assert settings.selected_room_video_source_type == RoomVideoSourceType.BILIBILI
+    assert settings.bilibili_source == {
+        "bvid": "BV1JneT6rEaG", "cid": 12345, "page": 2, "source_revision": 1,
+    }
+
+
+@pytest.mark.parametrize("selection", [
+    {"bvid": "https://www.bilibili.com/video/BV1JneT6rEaG", "cid": 123, "page": 1},
+    {"bvid": "BV1JneT6rEaG", "cid": True, "page": 1},
+    {"bvid": "BV1JneT6rEaG", "cid": 9_007_199_254_740_992, "page": 1},
+    {"bvid": "BV1JneT6rEaG", "cid": 123, "page": 0},
+    {"bvid": "BV1JneT6rEaG", "cid": 123, "page": 1, "external_url": "https://example.com/video.mpd"},
+])
+async def test_bilibili_source_rejects_invalid_identity(selection) -> None:
+    handler = RoomVideoCommandHandler(video_runtime_service=RoomVideoRuntimeService())
+    command = WsCommandPayload(
+        request_id="invalid-bilibili-source",
+        action=WsCommandAction.ROOM_VIDEO_SOURCE_SET,
+        data={"source_type": "bilibili", **selection},
+    )
+    with pytest.raises(BadRequestError) as exc_info:
+        await handler._handle_room_video_source_set(
+            db=object(), publisher=RecordingPublisher(), room_id=1, command=command,
+        )
+    assert exc_info.value.reason == "bilibili_invalid_selection"
 
 
 # 外链视频源不允许同时传 file_hash

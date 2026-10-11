@@ -47,6 +47,10 @@ export default defineConfig(({ mode }) => {
               return 'chat-qface-data'
             }
 
+            if (id.includes('shaka-player')) {
+              return 'vendor-shaka'
+            }
+
             if (!id.includes('node_modules')) {
               return undefined
             }

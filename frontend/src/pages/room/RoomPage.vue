@@ -14,6 +14,8 @@ import {
   type Room,
 } from "@/infra/api/rooms.api";
 import BasePill from "@/ui/base/BasePill.vue";
+import BaseButton from "@/ui/base/BaseButton.vue";
+import BaseDialog from "@/ui/base/BaseDialog.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
 import RoomPlayerStage from "@/features/room/components/RoomPlayerStage.vue";
 import RoomPlaybackControls from "@/features/room/components/RoomPlaybackControls.vue";
@@ -49,6 +51,8 @@ import { useToastsStore } from "@/stores/toasts.store";
 import { resolveMediaUrl } from "@/infra/media";
 import { getBackendErrorMessage } from "@/infra/http/client";
 import type { MessageResponse } from "@/infra/api/messages.api";
+import { bilibiliDesktop, type BilibiliLocalMedia } from "@/infra/bilibili-desktop";
+import type { RoomRealtimeVideoSourceState } from "@/infra/realtime/roomRealtime";
 import { getQfaceLabel, getQfaceUrl } from "@/features/chat/emoji";
 import { stripChatTextCursorAnchors } from "@/features/chat/segments";
 import { useRoomDanmakuSettings } from "@/features/room/composables/useRoomDanmakuSettings";
@@ -76,6 +80,13 @@ const membersLoading = ref(false);
 const membersError = ref("");
 const mainGridRef = ref<HTMLElement | null>(null);
 const playerStageRef = ref<RoomPlayerStageHandle | null>(null);
+const localBilibiliMedia = ref<BilibiliLocalMedia | null>(null);
+const bilibiliSourceError = ref("");
+const bilibiliPanelOpenKey = ref(0);
+let lastBilibiliPanelPromptKey = "";
+let preparedBilibiliMedia: BilibiliLocalMedia | null = null;
+let bilibiliResolveRequest = 0;
+let loadedBilibiliSourceKey = "";
 const isWebFullscreen = ref(false);
 const danmakuItems = ref<ChatDanmakuItem[]>([]);
 let danmakuSequence = 0;
@@ -249,6 +260,7 @@ const playbackSync = useRoomPlaybackSync({
   roomSettings,
   routeRequiresSyncGate: () => route.meta.requiresSyncGate === true,
   realtime,
+  bilibiliMedia: localBilibiliMedia,
   playback: {
     playbackIsPlaying,
     playbackCurrentTime,
@@ -289,6 +301,71 @@ const {
   handleRealtimePlaybackEvent,
   resetPlaybackSyncState,
 } = playbackSync;
+
+function selectBilibili(media: BilibiliLocalMedia) {
+  preparedBilibiliMedia = media;
+  void handleApplyPlaybackSource({
+    sourceType: "bilibili",
+    bilibili: { bvid: media.bvid, cid: media.cid, page: media.page },
+    externalUrl: "",
+    localFile: null,
+  });
+}
+
+function clearLocalBilibili() {
+  bilibiliResolveRequest++;
+  loadedBilibiliSourceKey = "";
+  preparedBilibiliMedia = null;
+  localBilibiliMedia.value = null;
+  if (realtime.roomVideoSource.value?.source_type === "bilibili") {
+    bilibiliSourceError.value = t("room.sourcePanel.bilibiliNotLoggedIn");
+  }
+}
+
+async function resolveRoomBilibiliSource(source: RoomRealtimeVideoSourceState | null) {
+  const sourceKey = source?.source_type === "bilibili" && source.bilibili
+    ? `${source.room_id}:${source.source_revision}:${source.bilibili.bvid}:${source.bilibili.cid}`
+    : "";
+  if (sourceKey && sourceKey === loadedBilibiliSourceKey && localBilibiliMedia.value) return;
+  const request = ++bilibiliResolveRequest;
+  loadedBilibiliSourceKey = "";
+  localBilibiliMedia.value = null;
+  bilibiliSourceError.value = "";
+  if (source?.source_type !== "bilibili") {
+    preparedBilibiliMedia = null;
+    return;
+  }
+  if (!source.bilibili) {
+    bilibiliSourceError.value = t("room.playback.errors.playFailed");
+    return;
+  }
+  if (!bilibiliDesktop) {
+    bilibiliSourceError.value = t("room.sourcePanel.bilibiliDesktopOnly", { app: "iCinema" });
+    return;
+  }
+  const token = localStorage.getItem("access_token");
+  const userId = auth.me?.id;
+  if (!token || userId == null) {
+    bilibiliSourceError.value = t("room.sourcePanel.bilibiliNotLoggedIn");
+    return;
+  }
+  try {
+    const selection = source.bilibili;
+    const media = preparedBilibiliMedia?.bvid === selection.bvid &&
+      preparedBilibiliMedia.cid === selection.cid
+      ? preparedBilibiliMedia
+      : await bilibiliDesktop.resolve(token, selection.bvid, selection.cid);
+    if (request !== bilibiliResolveRequest || roomId.value !== source.room_id ||
+      auth.me?.id !== userId || realtime.roomVideoSource.value?.source_revision !== source.source_revision) return;
+    loadedBilibiliSourceKey = sourceKey;
+    localBilibiliMedia.value = media;
+  } catch (error) {
+    if (request !== bilibiliResolveRequest || roomId.value !== source.room_id) return;
+    bilibiliSourceError.value = error instanceof Error && error.message.includes("BILIBILI_LOGIN_REQUIRED")
+      ? t("room.sourcePanel.bilibiliNotLoggedIn")
+      : t("room.playback.errors.playFailed");
+  }
+}
 const presentUserIds = computed(() => new Set(realtime.presentUserIds.value));
 const displayResourceStatusByUserId = computed(() => {
   const statuses = new Map<number, DisplayResourceStatus>(
@@ -298,6 +375,19 @@ const displayResourceStatusByUserId = computed(() => {
     statuses.set(auth.me.id, localResourceStatus.value);
   }
   return statuses;
+});
+const bilibiliPlaybackBlocked = computed(() =>
+  playbackSourceType.value === "bilibili" && (
+    !localBilibiliMedia.value || localResourceStatus.value !== "ready" ||
+    !realtime.hasPresenceSnapshot.value ||
+    realtime.presentUserIds.value.some((userId) => displayResourceStatusByUserId.value.get(userId) !== "ready")
+  ));
+watch([() => realtime.roomVideoSource.value, bilibiliSourceError], ([source, error]) => {
+  if (source?.source_type !== "bilibili" || !error) return;
+  const key = `${source.room_id}:${source.source_revision}`;
+  if (key === lastBilibiliPanelPromptKey) return;
+  lastBilibiliPanelPromptKey = key;
+  bilibiliPanelOpenKey.value++;
 });
 const roomMemberItems = computed(() => entityRoomMembers.value.map((member) => {
   const user = entitiesStore.getUser(member.user_id);
@@ -656,6 +746,11 @@ function removeDanmaku(id: string) {
 }
 
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
+  if (payload.reason === "entered_elsewhere") {
+    playerStageRef.value?.pauseVideo();
+    return;
+  }
+
   if (payload.reason === "room_deleted") {
     messagesStore.clearRoom(roomId.value);
   }
@@ -679,11 +774,19 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  bilibiliResolveRequest++;
+  unsubscribeBilibiliLogin?.();
   document.removeEventListener("fullscreenchange", syncTheaterFullscreenState);
   document.removeEventListener("keydown", handleRoomKeydown);
   document.body.classList.remove("icinema-room-web-fullscreen-active");
 });
 watch(roomId, () => {
+  lastBilibiliPanelPromptKey = "";
+  bilibiliResolveRequest++;
+  loadedBilibiliSourceKey = "";
+  preparedBilibiliMedia = null;
+  localBilibiliMedia.value = null;
+  bilibiliSourceError.value = "";
   currentUserRole.value = "unknown";
   resetPlaybackSyncState();
   resetRoomRequestsState();
@@ -704,8 +807,20 @@ watch(panelOptions, (nextPanels) => {
   }
 });
 watch(() => auth.me?.id, () => {
+  preparedBilibiliMedia = null;
+  loadedBilibiliSourceKey = "";
+  void resolveRoomBilibiliSource(realtime.roomVideoSource.value);
   syncCurrentUserRole();
 });
+const unsubscribeBilibiliLogin = bilibiliDesktop?.onLoginComplete(({ userId }) => {
+  if (auth.me?.id === userId) {
+    loadedBilibiliSourceKey = "";
+    void resolveRoomBilibiliSource(realtime.roomVideoSource.value);
+  }
+});
+watch(() => realtime.roomVideoSource.value, (source) => {
+  void resolveRoomBilibiliSource(source);
+}, { immediate: true });
 watch([roomId, currentUserRole], () => {
   void fetchRoomRequests();
   void fetchRoomSettings();
@@ -795,6 +910,8 @@ watch(
                   :source-url="playbackSourceUrl"
                   :source-file="playbackSourceFile"
                   :source-revision="playbackSourceRevision"
+                  :local-bilibili="localBilibiliMedia"
+                  :source-error="bilibiliSourceError"
                   :volume="playbackVolume"
                   :video-fullscreen-label="t('room.playback.controls.videoFullscreen')"
                   :exit-video-fullscreen-label="t('room.playback.controls.exitVideoFullscreen')"
@@ -832,6 +949,8 @@ watch(
                   :buffered-progress="playbackBufferedProgress"
                   :buffered-ranges="playbackBufferedRanges"
                   :seek-disabled="!playbackCanSeek"
+                  :play-disabled="!playbackIsPlaying && bilibiliPlaybackBlocked"
+                  :play-disabled-label="t('room.playback.errors.bilibili_playback_members_not_ready')"
                   :volume="playbackVolume"
                   :source-type="playbackSourceType"
                   :source-url="playbackSourceUrl"
@@ -848,6 +967,7 @@ watch(
                   :source-revision="realtime.roomVideoSource.value?.source_revision ?? 0"
                   :source-attention="needsRoomLocalFileSelection"
                   :source-panel-open-key="sourcePanelOpenKey"
+                  :source-panel-bilibili-open-key="bilibiliPanelOpenKey"
                   :source-panel-close-key="sourcePanelCloseKey"
                   :local-room-target-set="Boolean(roomRuntimeLocalFileHash)"
                   :can-set-local-room-target="canControlRealtimePlayback"
@@ -862,6 +982,8 @@ watch(
                   @update:progress="handlePlaybackProgressChange"
                   @update:volume="handlePlaybackVolumeChange"
                   @apply-source="handleApplyPlaybackSource"
+                  @select-bilibili="selectBilibili"
+                  @clear-bilibili-local="clearLocalBilibili"
                 />
               </div>
 
@@ -986,9 +1108,51 @@ watch(
       </template>
     </div>
   </BaseLayout>
+  <BaseDialog
+    :model-value="realtime.isRoomSessionReplaced.value"
+    :close-on-overlay="false"
+    :close-on-esc="false"
+    :z-index="200"
+    :aria-label="t('room.realtime.replacedTitle')"
+  >
+    <BaseCard class="sessionReplacedCard">
+      <h2 class="sessionReplacedTitle">{{ t('room.realtime.replacedTitle') }}</h2>
+      <p class="sessionReplacedMessage">{{ t('room.realtime.sessionClosed.entered_elsewhere') }}</p>
+      <BaseButton class="sessionReplacedAction" variant="primary" @click="router.replace('/')">
+        {{ t('room.realtime.backHome') }}
+      </BaseButton>
+    </BaseCard>
+  </BaseDialog>
 </template>
 
 <style scoped>
+.sessionReplacedCard {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-lg, 0 10px 30px rgb(0 0 0 / 0.18));
+}
+
+.sessionReplacedTitle,
+.sessionReplacedMessage {
+  margin: 0;
+}
+
+.sessionReplacedTitle {
+  font-size: 18px;
+  color: var(--c-text);
+}
+
+.sessionReplacedMessage {
+  color: var(--c-text-muted);
+  line-height: 1.5;
+}
+
+.sessionReplacedAction {
+  justify-self: end;
+}
+
 .roomShell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

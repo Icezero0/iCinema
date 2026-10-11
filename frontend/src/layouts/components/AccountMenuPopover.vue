@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useI18n } from "vue-i18n";
 import { getTheme, setTheme, type Theme } from "@/infra/theme";
+import BaseConfirmDialog from "@/ui/base/BaseConfirmDialog.vue";
 import { CheckIcon } from "@heroicons/vue/24/outline";
 
 import {
@@ -25,6 +26,7 @@ const auth = useAuthStore();
 const router = useRouter();
 
 const open = ref(false);
+const logoutConfirmOpen = ref(false);
 let closeTimer: number | null = null;
 
 const themeOpen = ref(false);
@@ -61,6 +63,12 @@ function goProfile() {
   open.value = false;
   themeOpen.value = false;
   router.push("/profile");
+}
+
+function requestLogout() {
+  open.value = false;
+  themeOpen.value = false;
+  logoutConfirmOpen.value = true;
 }
 
 function logout() {
@@ -144,7 +152,7 @@ const hasEmail = computed(() => !!props.email);
             <BaseMenuItem
               danger
               :icon="ArrowRightOnRectangleIcon"
-              @click="logout"
+              @click="requestLogout"
             >
               {{ t("account.menu.logout") }}
             </BaseMenuItem>
@@ -152,6 +160,15 @@ const hasEmail = computed(() => !!props.email);
         </BaseCard>
       </div>
     </Transition>
+    <BaseConfirmDialog
+      v-model="logoutConfirmOpen"
+      :title="t('account.menu.logout')"
+      :message="t('account.menu.logoutConfirmMessage')"
+      :confirm-text="t('account.menu.logout')"
+      :cancel-text="t('common.cancel')"
+      variant="danger"
+      @confirm="logout"
+    />
   </div>
 </template>
 

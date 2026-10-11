@@ -35,6 +35,7 @@ class RoomVideoSourceType(StrEnum):
     EXTERNAL_URL = "external_url"
     LOCAL_FILE = "local_file"
     OMOFUN = "omofun"
+    BILIBILI = "bilibili"
 
 
 class RoomSyncPolicy(StrEnum):

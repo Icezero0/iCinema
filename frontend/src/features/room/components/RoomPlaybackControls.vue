@@ -11,6 +11,7 @@ import AppIcon from "@/ui/base/AppIcon.vue";
 import RoomSourcePanel from "@/features/room/components/RoomSourcePanel.vue";
 import type { OmofunSelection } from '@/infra/realtime/roomRealtime';
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import type { BilibiliLocalMedia } from "@/infra/bilibili-desktop";
 import type {
   LocalFileHandle,
   LocalFileSelection,
@@ -26,6 +27,8 @@ const props = defineProps<{
   bufferedRanges: Array<{ startPercent: number; endPercent: number }>;
   volume: number;
   seekDisabled?: boolean;
+  playDisabled?: boolean;
+  playDisabledLabel?: string;
   sourceType: RoomVideoSourceType;
   sourceUrl: string;
   omofun?: OmofunSelection | null;
@@ -41,6 +44,7 @@ const props = defineProps<{
   sourcePanelTitle: string;
   sourceAttention?: boolean;
   sourcePanelOpenKey?: number;
+  sourcePanelBilibiliOpenKey?: number;
   sourcePanelCloseKey?: number;
   localRoomTargetSet?: boolean;
   canSetLocalRoomTarget?: boolean;
@@ -66,6 +70,8 @@ const emit = defineEmits<{
     localFileHandle?: LocalFileHandle | null;
     localFileAction?: LocalFileSourceAction | null;
   }): void;
+  (e: "select-bilibili", value: BilibiliLocalMedia): void;
+  (e: "clear-bilibili-local"): void;
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -161,6 +167,11 @@ watch(
     openSourcePanel();
   },
 );
+watch(() => props.sourcePanelBilibiliOpenKey, () => {
+  sourceTabSelectedByUser.value = false;
+  sourceTypeDraft.value = "bilibili";
+  openSourcePanel();
+});
 watch(
   () => props.sourcePanelCloseKey,
   () => {
@@ -416,6 +427,7 @@ onBeforeUnmount(() => {
           >
             <RoomSourcePanel
               :room-id="roomId"
+              :active="sourceOpen"
               :title="sourcePanelTitle"
               :source-type="sourceTypeDraft"
               :external-url="sourceExternalUrlDraft"
@@ -428,7 +440,10 @@ onBeforeUnmount(() => {
               :hash-progress="sourceHashProgress"
               :applying="sourceApplying"
               :omofun="omofun" :source-revision="sourceRevision" :close-key="sourcePanelCloseKey"
+              :force-bilibili-key="sourcePanelBilibiliOpenKey"
               @dialog-change="sourceDialogOpen = $event"
+              @select-bilibili="emit('select-bilibili', $event)"
+              @clear-bilibili-local="emit('clear-bilibili-local')"
               @select-omofun="(selection, revision) => emit('apply-source', { sourceType: 'omofun', externalUrl: '', localFile: null, omofun: selection, expectedSourceRevision: revision })"
               @update:source-type="sourceTypeDraft = $event; sourceTabSelectedByUser = true"
               @update:external-url="sourceExternalUrlDraft = $event"
@@ -457,6 +472,8 @@ onBeforeUnmount(() => {
         class="iconControlBtn prominent"
         type="button"
         :aria-label="isPlaying ? pauseLabel : playLabel"
+        :disabled="playDisabled"
+        :title="playDisabled ? playDisabledLabel : undefined"
         @click="emit('toggle-play')"
       >
         <Transition name="playback-icon" mode="out-in">
@@ -585,14 +602,14 @@ onBeforeUnmount(() => {
   transform-origin: center;
 }
 
-.iconControlBtn:hover {
+.iconControlBtn:hover:not(:disabled) {
   transform: translateY(-1px);
   background: color-mix(in srgb, var(--c-surface) 88%, white);
   border-color: color-mix(in srgb, var(--c-primary) 16%, var(--c-border));
   box-shadow: 0 10px 18px rgb(0 0 0 / 0.06);
 }
 
-.iconControlBtn:active {
+.iconControlBtn:active:not(:disabled) {
   transform: translateY(0) scale(0.96);
   box-shadow: 0 4px 8px rgb(0 0 0 / 0.08);
 }
@@ -604,9 +621,14 @@ onBeforeUnmount(() => {
   border-color: color-mix(in srgb, var(--c-primary) 24%, var(--c-border));
 }
 
-.iconControlBtn.prominent:hover {
+.iconControlBtn.prominent:hover:not(:disabled) {
   background: color-mix(in srgb, var(--c-primary) 16%, var(--c-surface));
   border-color: color-mix(in srgb, var(--c-primary) 32%, var(--c-border));
+}
+
+.iconControlBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .iconControlBtn.attention {
@@ -744,7 +766,7 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   bottom: calc(100% + 12px);
-  width: 340px;
+  width: 440px;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--c-border);
@@ -931,7 +953,7 @@ onBeforeUnmount(() => {
   }
 
   .sourcePanel {
-    width: min(340px, calc(100vw - 64px));
+    width: min(440px, calc(100vw - 64px));
   }
 
   .iconControlBtn {

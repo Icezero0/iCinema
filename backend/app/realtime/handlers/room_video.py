@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,6 +25,7 @@ from app.realtime.constants import AutoPlaybackAction, ResourceHealthStatusType,
 from app.realtime.manager import RealtimeManager, WsConnection
 from app.realtime.protocol import WsCommandPayload
 from app.realtime.publisher import RealtimePublisher
+from app.realtime.room_presence import RoomPresenceService
 from app.realtime.room_video_runtime import RoomVideoRuntimeService, now_ms
 
 logger = logging.getLogger("app.realtime.video")
@@ -36,8 +38,10 @@ class RoomVideoRuntimePolicy:
 
 
 class RoomVideoCommandHandler:
-    def __init__(self, video_runtime_service: RoomVideoRuntimeService) -> None:
+    def __init__(self, video_runtime_service: RoomVideoRuntimeService,
+                 presence_service: RoomPresenceService | None = None) -> None:
         self.video_runtime_service = video_runtime_service
+        self.presence_service = presence_service
         self.room_service = RoomService()
         self.membership_service = RoomMembershipService()
         self.room_settings_service = RoomSettingsService()
@@ -142,6 +146,7 @@ class RoomVideoCommandHandler:
         external_url: str | None = None
         file_hash: str | None = None
         omofun = None
+        bilibili = None
         pinned_source = None
         if source_type == RoomVideoSourceType.OMOFUN:
             if data.get("external_url") is not None or data.get("file_hash") is not None:
@@ -164,6 +169,20 @@ class RoomVideoCommandHandler:
                       "episode_title": episode["title"], "line_label": line["source"][:2].upper() + "线路"}
             pinned_source = {"external_url": external_url, "omofun": omofun,
                              "source_revision": expected + 1}
+
+        if source_type == RoomVideoSourceType.BILIBILI:
+            if data.get("external_url") is not None or data.get("file_hash") is not None:
+                raise BadRequestError(reason="bilibili_invalid_selection")
+            bvid = data.get("bvid")
+            cid = data.get("cid")
+            page = data.get("page")
+            if not isinstance(bvid, str) or not re.fullmatch(r"BV[0-9A-Za-z]{10}", bvid) or \
+                    type(cid) is not int or not 0 < cid <= 9_007_199_254_740_991 or \
+                    type(page) is not int or not 0 < page <= 10_000:
+                raise BadRequestError(reason="bilibili_invalid_selection")
+            bilibili = {"bvid": bvid, "cid": cid, "page": page}
+            current = await self.video_runtime_service.get_room_video_source(room_id=room_id)
+            pinned_source = {**bilibili, "source_revision": (current.source_revision if current else 0) + 1}
 
         if source_type == RoomVideoSourceType.EXTERNAL_URL:
             external_url = self._parse_required_non_empty_string(
@@ -199,7 +218,11 @@ class RoomVideoCommandHandler:
             field_name="anchor_ts_ms",
         )
 
-        extra = {"omofun_source": pinned_source} if pinned_source else {}
+        extra = {}
+        if source_type == RoomVideoSourceType.OMOFUN:
+            extra["omofun_source"] = pinned_source
+        elif source_type == RoomVideoSourceType.BILIBILI:
+            extra["bilibili_source"] = pinned_source
         await self.room_settings_service.set_selected_room_video_source_type(
             db,
             room_id=room_id,
@@ -214,7 +237,9 @@ class RoomVideoCommandHandler:
                 external_url=external_url,
                 file_hash=file_hash,
                 anchor_ts_ms=now_ms(),
-                **({"omofun": omofun} if omofun else {}),
+                omofun=omofun,
+                bilibili=bilibili,
+                source_revision=pinned_source["source_revision"] if bilibili else None,
             )
         )
 
@@ -268,6 +293,8 @@ class RoomVideoCommandHandler:
             anchor_ts_ms=now_ms(),
             sync_policy=sync_policy,
             playback_rate=playback_rate,
+            present_user_ids=(await self.presence_service.get_presence_state(room_id=room_id)).present_user_ids
+                if self.presence_service else None,
         )
 
         logger.info(
@@ -366,6 +393,8 @@ class RoomVideoCommandHandler:
             anchor_ts_ms=now_ms(),
             sync_policy=sync_policy,
             resume_after_seek=resume_after_seek,
+            present_user_ids=(await self.presence_service.get_presence_state(room_id=room_id)).present_user_ids
+                if self.presence_service else None,
         )
 
         logger.info(
@@ -422,6 +451,9 @@ class RoomVideoCommandHandler:
             position_seconds=position_seconds,
             error_code=error_code,
             error_message=error_message,
+            source_revision=data.get("source_revision"),
+            present_user_ids=(await self.presence_service.get_presence_state(room_id=room_id)).present_user_ids
+                if self.presence_service else None,
         )
 
         logger.info(

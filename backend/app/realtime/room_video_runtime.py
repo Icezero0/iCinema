@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from time import time
 
 from app.core.error_reasons import ErrorReason
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, ConflictError
 from app.modules.rooms.constants import RoomSyncPolicy, RoomVideoSourceType
 from app.realtime.constants import (
     AutoPlaybackAction,
@@ -97,6 +97,38 @@ class RoomVideoRuntimeService:
             )
 
     @staticmethod
+    def _require_bilibili_members_ready_locked(
+        state: RoomVideoRuntimeState,
+        present_user_ids: list[int] | None,
+    ) -> None:
+        if state.room_video_source is None or state.room_video_source.source_type != RoomVideoSourceType.BILIBILI:
+            return
+        if not present_user_ids:
+            raise BadRequestError(
+                "Room presence is required for Bilibili playback",
+                reason=ErrorReason.BILIBILI_PLAYBACK_MEMBERS_NOT_READY,
+                details={"room_id": state.room_id, "user_ids": []},
+            )
+        not_ready = RoomVideoRuntimeService._bilibili_not_ready_user_ids_locked(state, present_user_ids)
+        if not_ready:
+            raise BadRequestError(
+                "All present members must be ready before Bilibili playback starts",
+                reason=ErrorReason.BILIBILI_PLAYBACK_MEMBERS_NOT_READY,
+                details={"room_id": state.room_id, "user_ids": sorted(not_ready)},
+            )
+
+    @staticmethod
+    def _bilibili_not_ready_user_ids_locked(
+        state: RoomVideoRuntimeState,
+        present_user_ids: list[int] | None,
+    ) -> list[int]:
+        if state.room_video_source is None or state.room_video_source.source_type != RoomVideoSourceType.BILIBILI:
+            return []
+        return [user_id for user_id in (present_user_ids or [])
+                if state.user_resource_states.get(user_id) is None or
+                state.user_resource_states[user_id].status != ResourceHealthStatusType.READY]
+
+    @staticmethod
     def _resolve_position_seconds_locked(
         playback: PlaybackState,
         *,
@@ -162,6 +194,7 @@ class RoomVideoRuntimeService:
         file_hash: str | None = None,
         anchor_ts_ms: int | None = None,
         omofun: dict | None = None,
+        bilibili: dict | None = None,
         source_revision: int | None = None,
     ) -> tuple[RoomVideoSourceState, PlaybackState, UserResourceStatesState]:
         async with self._lock:
@@ -173,6 +206,7 @@ class RoomVideoRuntimeService:
                 external_url=external_url,
                 file_hash=file_hash,
                 omofun=omofun,
+                bilibili=bilibili,
                 source_revision=source_revision if source_revision is not None else
                     ((state.room_video_source.source_revision if state.room_video_source else 0) + 1),
             )
@@ -204,10 +238,13 @@ class RoomVideoRuntimeService:
         anchor_ts_ms: int,
         sync_policy: RoomSyncPolicy,
         playback_rate: float = 1.0,
+        present_user_ids: list[int] | None = None,
     ) -> PlaybackState:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
             self._require_room_video_source_set_locked(state)
+
+            self._require_bilibili_members_ready_locked(state, present_user_ids)
 
             if sync_policy == RoomSyncPolicy.AUTO_SYNC and state.stalling_user_ids:
                 raise BadRequestError(
@@ -266,10 +303,13 @@ class RoomVideoRuntimeService:
         anchor_ts_ms: int,
         sync_policy: RoomSyncPolicy,
         resume_after_seek: bool = False,
+        present_user_ids: list[int] | None = None,
     ) -> PlaybackState:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
             self._require_room_video_source_set_locked(state)
+            if resume_after_seek:
+                self._require_bilibili_members_ready_locked(state, present_user_ids)
 
             current = state.playback
             playback_rate = current.playback_rate if current is not None else 1.0
@@ -315,9 +355,15 @@ class RoomVideoRuntimeService:
         position_seconds: float | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
+        present_user_ids: list[int] | None = None,
+        source_revision: int | None = None,
     ) -> UserResourceStatesUpdateResult:
         async with self._lock:
             state = self._get_or_create_room_state_locked(room_id)
+            if state.room_video_source is not None and \
+                    state.room_video_source.source_type == RoomVideoSourceType.BILIBILI and \
+                    source_revision != state.room_video_source.source_revision:
+                raise ConflictError(reason="bilibili_source_changed")
             previous_state = state.user_resource_states.get(user_id)
             previous_status = previous_state.status if previous_state is not None else None
 
@@ -341,9 +387,11 @@ class RoomVideoRuntimeService:
             auto_action: AutoPlaybackAction | None = None
 
             if sync_policy == RoomSyncPolicy.AUTO_SYNC:
+                bilibili_source = state.room_video_source is not None and state.room_video_source.source_type == RoomVideoSourceType.BILIBILI
                 entered_stalling = (
-                    status == ResourceHealthStatusType.STALLING
-                    and previous_status != ResourceHealthStatusType.STALLING
+                    (status == ResourceHealthStatusType.STALLING or
+                     (bilibili_source and status == ResourceHealthStatusType.ERROR))
+                    and previous_status != status
                 )
                 left_stalling = (
                     previous_status == ResourceHealthStatusType.STALLING
@@ -374,6 +422,7 @@ class RoomVideoRuntimeService:
                     left_stalling
                     and not state.stalling_user_ids
                     and state.playback_hold_reason == PlaybackHoldReason.STALL
+                    and not self._bilibili_not_ready_user_ids_locked(state, present_user_ids)
                 ):
                     if state.playback is not None:
                         anchor_ts_ms = now_ms()
@@ -488,3 +537,27 @@ class RoomVideoRuntimeService:
     ) -> None:
         async with self._lock:
             self._room_states.pop(room_id, None)
+
+    async def invalidate_bilibili_member(self, *, room_id: int, user_id: int) -> UserResourceStatesUpdateResult | None:
+        async with self._lock:
+            state = self._room_states.get(room_id)
+            if state is None or state.room_video_source is None or \
+                    state.room_video_source.source_type != RoomVideoSourceType.BILIBILI:
+                return None
+            state.user_resource_states.pop(user_id, None)
+            state.stalling_user_ids.discard(user_id)
+            auto_playback = None
+            if state.playback is not None and state.playback.status == PlaybackStatusType.PLAYING:
+                anchor_ts_ms = now_ms()
+                auto_playback = PlaybackState(
+                    room_id=room_id, status=PlaybackStatusType.PAUSED,
+                    position_seconds=self._resolve_position_seconds_locked(state.playback, at_ts_ms=anchor_ts_ms),
+                    anchor_ts_ms=anchor_ts_ms, playback_rate=state.playback.playback_rate,
+                )
+                state.playback = auto_playback
+                state.playback_hold_reason = PlaybackHoldReason.MANUAL
+            return UserResourceStatesUpdateResult(
+                user_resource_states=self._copy_user_resource_states(self._build_user_resource_states_locked(state)),
+                auto_playback=self._copy_playback(auto_playback),
+                auto_action=AutoPlaybackAction.PAUSE if auto_playback else None,
+            )

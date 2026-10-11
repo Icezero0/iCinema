@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob:; media-src 'self' blob:; img-src 'self' data:" />
+    <title>iCinema B 站桌面播放验证</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0d0e16; color: #eeeef7; }
+      body { max-width: 960px; margin: 0 auto; padding: 24px; }
+      h1 { font-size: 24px; margin: 0 0 12px; }
+      p { color: #b7b9cb; line-height: 1.55; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+      input { flex: 1 1 360px; min-width: 240px; }
+      input, select, button { padding: 10px 13px; border: 1px solid #3b3d51; border-radius: 9px; background: #181a28; color: #f6f6fb; font: inherit; }
+      button { cursor: pointer; }
+      button:hover { background: #282b40; }
+      button:disabled { cursor: wait; opacity: .55; }
+      #status { min-height: 2em; padding: 12px; border-radius: 9px; background: #181a28; white-space: pre-wrap; }
+      #status.error { color: #ff9c9c; }
+      video { display: block; width: 100%; max-height: 520px; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; }
+      #metrics { color: #aeb4d0; font-variant-numeric: tabular-nums; white-space: pre-wrap; line-height: 1.6; }
+      #benchmark-result { color: #aeb4d0; font-variant-numeric: tabular-nums; white-space: pre-wrap; line-height: 1.6; }
+      #media-traffic { color: #aeb4d0; font-variant-numeric: tabular-nums; white-space: pre-wrap; line-height: 1.6; overflow-wrap: anywhere; }
+      #source-overview { color: #aeb4d0; font-variant-numeric: tabular-nums; white-space: pre-wrap; line-height: 1.5; max-height: 160px; overflow-y: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>B 站桌面播放验证</h1>
+    <p>登录和媒体请求只发生在这台电脑上；B 站登录状态保存在本机独立会话中，可跨重启复用。点击“退出 B 站登录”可清除。本原型不连接 iCinema 后端。</p>
+    <div class="row">
+      <button id="login">打开 B 站登录窗口</button>
+      <button id="check">检查登录</button>
+      <button id="logout">退出 B 站登录</button>
+    </div>
+    <div class="row">
+      <input id="video-input" aria-label="BV 号或视频链接" value="BV1JneT6rEaG" placeholder="BV 号或 bilibili.com/video 链接" />
+      <select id="quality" aria-label="画质上限">
+        <option value="32">480P</option>
+        <option value="64" selected>720P</option>
+        <option value="80">1080P</option>
+      </select>
+      <button id="resolve">解析并加载</button>
+    </div>
+    <div id="status" role="status" aria-live="polite">正在检查登录状态…</div>
+    <div class="row"><span id="video-title"></span></div>
+    <div id="source-overview"></div>
+    <video id="video" controls playsinline></video>
+    <div class="row">
+      <button id="seek" disabled>跳转 +10 秒</button>
+      <button id="rate" disabled>切换 1× / 1.5×</button>
+      <button id="benchmark" disabled>对比测速</button>
+    </div>
+    <div id="benchmark-result" aria-live="polite"></div>
+    <div id="metrics" aria-live="off"></div>
+    <div id="media-traffic" aria-live="off"></div>
+    <script src="/shaka.js"></script>
+    <script src="/renderer.js"></script>
+  </body>
+</html>

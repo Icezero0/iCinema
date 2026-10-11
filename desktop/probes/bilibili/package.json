@@ -1,0 +1,16 @@
+{
+  "name": "icinema-desktop-bilibili-probe",
+  "private": true,
+  "version": "0.0.0",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "shaka-player": "5.2.12"
+  },
+  "devDependencies": {
+    "electron": "44.7.0"
+  }
+}

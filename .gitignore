@@ -17,6 +17,8 @@ docker-compose.override.yml
 
 # Node.js
 node_modules/
+desktop/renderer/
+desktop/release/
 
 # Database
 .db
