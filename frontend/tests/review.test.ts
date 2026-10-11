@@ -7,6 +7,23 @@ import { createI18n } from 'vue-i18n';
 import en from '../src/infra/i18n/locales/en';
 import zhCN from '../src/infra/i18n/locales/zh-CN';
 import { toMediaEngineLoadInput } from '../src/features/room/video/mediaEngineTypes';
+import { extractBilibiliBvid, extractBilibiliVideoInput } from '../src/features/room/video/bilibiliBvid';
+
+test('Bilibili BV input accepts IDs, links and copied share text without matching fragments', () => {
+  const bvid = 'BV1a5t264Em6';
+  assert.equal(extractBilibiliBvid(bvid), bvid);
+  assert.equal(extractBilibiliBvid(`https://www.bilibili.com/video/${bvid}/?share_source=copy_web`), bvid);
+  assert.equal(extractBilibiliBvid(`【笑出猪叫！AI重画动画名场景100次之后？猜得出的才是动漫高手！【动漫猜猜看09】】 https://www.bilibili.com/video/${bvid}/?share_source=copy_web&vd_source=8298296ae5d9167d4b8a01483caf9d27`), bvid);
+  assert.equal(extractBilibiliBvid('bv1a5t264Em6'), bvid);
+  assert.equal(extractBilibiliBvid('https://www.bilibili.com/video/'), null);
+  assert.equal(extractBilibiliBvid(`prefix${bvid}suffix`), null);
+  assert.equal(extractBilibiliBvid(`${bvid}Extra`), null);
+  assert.deepEqual(extractBilibiliVideoInput(`https://www.bilibili.com/video/${bvid}/?p=2&share_source=copy_web`),
+    { bvid, page: 2 });
+  assert.deepEqual(extractBilibiliVideoInput(`分享：https://www.bilibili.com/video/${bvid}/?p=3。`),
+    { bvid, page: 3 });
+  assert.deepEqual(extractBilibiliVideoInput(bvid), { bvid, page: 1 });
+});
 
 test('catalog translations have matching keys and change with the selected language', () => {
   function keys(value: Record<string, unknown>, prefix = ''): string[] {

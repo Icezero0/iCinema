@@ -22,6 +22,7 @@
     "hls.js": "^1.6.16",
     "idb": "^8.0.3",
     "pinia": "^3.0.4",
+    "shaka-player": "^5.2.12",
     "vue": "^3.5.24",
     "vue-advanced-cropper": "^2.8.9",
     "vue-i18n": "^11.2.8",

@@ -128,6 +128,7 @@ class RoomSettingsService:
         room_id: int,
         source_type: RoomVideoSourceType,
         omofun_source: dict | None = None,
+        bilibili_source: dict | None = None,
     ) -> RoomSettings:
         settings = await self.find_room_settings_by_room_id(db, room_id=room_id)
         if not settings:
@@ -135,6 +136,7 @@ class RoomSettingsService:
 
         settings.selected_room_video_source_type = source_type
         settings.omofun_source = omofun_source if source_type == RoomVideoSourceType.OMOFUN else None
+        settings.bilibili_source = bilibili_source if source_type == RoomVideoSourceType.BILIBILI else None
         settings = await self.repo.save_settings(db, settings)
         await db.commit()
         await db.refresh(settings)

@@ -38,6 +38,7 @@ export function useNativeVideoCore(options: {
   let stallingPlaybackTimeMark = 0;
   let bufferedSeekSettleTimer: number | null = null;
   let pendingBufferedSeek = false;
+  let stallingRecoveryHandler: (() => boolean) | null = null;
 
   const timelineLabel = computed(() =>
     `${formatTime(currentTime.value)} / ${formatTime(duration.value)}`);
@@ -74,7 +75,7 @@ export function useNativeVideoCore(options: {
 
   const canSeek = computed(() => {
     if (!Number.isFinite(duration.value) || duration.value <= 0) return false;
-    if (activeEngineKind.value === "hls" || activeEngineKind.value === "local_video") {
+    if (activeEngineKind.value === "hls" || activeEngineKind.value === "local_video" || activeEngineKind.value === "bilibili_dash") {
       return true;
     }
 
@@ -359,7 +360,7 @@ export function useNativeVideoCore(options: {
   function canSeekToTime(time: number) {
     if (!Number.isFinite(duration.value) || duration.value <= 0) return false;
 
-    if (activeEngineKind.value === "hls" || activeEngineKind.value === "local_video") {
+    if (activeEngineKind.value === "hls" || activeEngineKind.value === "local_video" || activeEngineKind.value === "bilibili_dash") {
       return true;
     }
 
@@ -531,6 +532,22 @@ export function useNativeVideoCore(options: {
         return;
       }
 
+      if (activeEngineKind.value === "bilibili_dash" && bufferAhead.value > 2 &&
+          (videoRef.value?.readyState ?? 0) >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+        markStallingProgressNow();
+        scheduleReadyConfirmation(`${reason}:bufferStillPlayable`);
+        armStallingErrorTimer(`${reason}:bufferStillPlayable`);
+        return;
+      }
+
+      if (stallingRecoveryHandler) {
+        if (stallingRecoveryHandler()) {
+          markStallingProgressNow();
+          armStallingErrorTimer(`${reason}:retryStreaming`);
+          return;
+        }
+      }
+
       errorMessage.value = `Media made no progress while stalling for ${Math.round(config.stallingToErrorMs / 1000)}s`;
       clearReadyConfirmation();
       setMediaHealthState("error", "stallingTimeout", {
@@ -661,7 +678,11 @@ export function useNativeVideoCore(options: {
     } else if (eventName === "pause") {
       setPlayerState(appliedUrl.value ? "paused" : "idle", "video:pause");
     } else if (eventName === "waiting" || eventName === "stalled") {
-      if (!pendingBufferedSeek) {
+      const playableBilibiliBuffer = activeEngineKind.value === "bilibili_dash" &&
+        bufferAhead.value > 2 && (videoRef.value?.readyState ?? 0) >= HTMLMediaElement.HAVE_FUTURE_DATA;
+      if (playableBilibiliBuffer) {
+        scheduleReadyConfirmation(`video:${eventName}:bufferStillPlayable`);
+      } else if (!pendingBufferedSeek) {
         setMediaHealthStalling(`video:${eventName}`);
       } else {
         scheduleReadyConfirmation(`video:${eventName}:bufferedSeek`);
@@ -744,6 +765,10 @@ export function useNativeVideoCore(options: {
     errorMessage.value = message;
   }
 
+  function setStallingRecoveryHandler(handler: (() => boolean) | null) {
+    stallingRecoveryHandler = handler;
+  }
+
   function canPlayNativeHls() {
     return Boolean(videoRef.value?.canPlayType("application/vnd.apple.mpegurl"));
   }
@@ -782,6 +807,7 @@ export function useNativeVideoCore(options: {
     handleProgress,
     handleBufferAppended,
     setFatalMediaError,
+    setStallingRecoveryHandler,
     canPlayNativeHls,
   };
 }

@@ -1,4 +1,21 @@
 const fs = require('node:fs')
+const path = require('node:path')
+
+function readDevelopmentApiOrigin(frontendDir, env = process.env) {
+  if (env.VITE_API_ORIGIN) return env.VITE_API_ORIGIN
+  let origin = null
+  for (const name of ['.env', '.env.local', '.env.development', '.env.development.local']) {
+    const file = path.join(frontendDir, name)
+    if (!fs.existsSync(file)) continue
+    for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const match = /^\s*(?:export\s+)?VITE_API_ORIGIN\s*=\s*(.*?)\s*$/.exec(line)
+      if (!match) continue
+      const value = match[1].trim()
+      origin = /^(['"]).*\1$/.test(value) ? value.slice(1, -1) : value.replace(/\s+#.*$/, '')
+    }
+  }
+  return origin
+}
 
 function readConnectionConfig(filePath) {
   if (!filePath) return {}
@@ -41,4 +58,4 @@ function desktopRuntimeConfig(env = process.env, saved = {}) {
   return { apiOrigin, wsOrigin }
 }
 
-module.exports = { desktopRuntimeConfig, readConnectionConfig }
+module.exports = { desktopRuntimeConfig, readConnectionConfig, readDevelopmentApiOrigin }

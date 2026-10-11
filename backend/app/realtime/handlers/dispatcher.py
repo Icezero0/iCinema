@@ -45,6 +45,7 @@ class RealtimeMessageHandler:
         )
         self.room_video_handler = RoomVideoCommandHandler(
             video_runtime_service=video_runtime_service,
+            presence_service=presence_service,
         )
 
     async def handle(

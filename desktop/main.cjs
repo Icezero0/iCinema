@@ -1,11 +1,15 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
-const { app, BrowserWindow, dialog, Menu, net, protocol, screen, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage, screen, session, shell } = require('electron')
 const { appUrlFromEnvironment, navigationTarget } = require('./navigation.cjs')
 const { APP_URL, assetPathForUrl } = require('./app-protocol.cjs')
-const { desktopRuntimeConfig, readConnectionConfig } = require('./runtime-config.cjs')
+const { desktopRuntimeConfig, readConnectionConfig, readDevelopmentApiOrigin } = require('./runtime-config.cjs')
 const { distributionMode, storageDirectory } = require('./storage-policy.cjs')
+const { setupBilibiliLogin } = require('./bilibili-login.cjs')
+const { createBilibiliSessionStore } = require('./bilibili-session-store.cjs')
+const { setupBilibiliPlayback } = require('./bilibili-playback.cjs')
+const { bilibiliVideoInfoFromView } = require('./bilibili-video.cjs')
 
 const bundled = app.isPackaged || process.argv.includes('--bundled')
 const distributionManifest = app.isPackaged
@@ -17,7 +21,8 @@ const appOrigin = bundled ? APP_URL : new URL(appUrl).origin
 const rendererDir = path.join(__dirname, 'renderer')
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'icinema', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
+  { scheme: 'icinema', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+  { scheme: 'icinema-bili', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
 ])
 
 app.setName('iCinema')
@@ -31,6 +36,10 @@ if (dataDir) {
 const storagePath = app.getPath('userData')
 let runtimeConfig = null
 let configurationError = null
+let bilibiliApiOrigin = null
+let credentialStore = null
+let quitAfterCredentialFlush = false
+let credentialFlushPending = false
 try {
   if (bundled) {
     const connection = readConnectionConfig(dataDir && path.join(dataDir, 'connection.json'))
@@ -40,6 +49,11 @@ try {
       storagePath
     }
   }
+  const developmentApiOrigin = bundled ? null : readDevelopmentApiOrigin(path.join(__dirname, '..', 'frontend'))
+  bilibiliApiOrigin = runtimeConfig?.apiOrigin || desktopRuntimeConfig({
+    ...process.env,
+    ICINEMA_API_ORIGIN: process.env.ICINEMA_API_ORIGIN || developmentApiOrigin
+  }).apiOrigin
 } catch (error) {
   configurationError = error
 }
@@ -66,10 +80,8 @@ function createWindow(url = appUrl, persistWindowState = true) {
       sandbox: true,
       webSecurity: true,
       webviewTag: false,
-      ...(bundled ? {
-        preload: path.join(__dirname, 'preload.cjs'),
-        additionalArguments: [configArgument]
-      } : {})
+      preload: path.join(__dirname, 'preload.cjs'),
+      ...(configArgument ? { additionalArguments: [configArgument] } : {})
     }
   })
 
@@ -112,6 +124,16 @@ app.whenReady().then(() => {
         : new Response('Not found', { status: 404 })
     })
   }
+  credentialStore = createBilibiliSessionStore({ session, safeStorage, storagePath })
+  let bilibiliPlayback
+  const bilibiliAuth = setupBilibiliLogin({
+    ipcMain, net, BrowserWindow, appOrigin, apiOrigin: bilibiliApiOrigin, credentialStore,
+    onLogout: userId => bilibiliPlayback?.clearUser(userId)
+  })
+  bilibiliPlayback = setupBilibiliPlayback({
+    ipcMain, session, net, protocol, appOrigin,
+    bilibiliVideoInfoFromView, ...bilibiliAuth
+  })
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -119,3 +141,15 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => app.quit())
+app.on('before-quit', event => {
+  if (!credentialStore || quitAfterCredentialFlush) return
+  event.preventDefault()
+  if (credentialFlushPending) return
+  credentialFlushPending = true
+  void credentialStore.flushAll().catch(error => {
+    console.error('Could not persist Bilibili login:', error.message)
+  }).finally(() => {
+    quitAfterCredentialFlush = true
+    app.quit()
+  })
+})

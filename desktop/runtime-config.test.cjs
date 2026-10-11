@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { desktopRuntimeConfig, readConnectionConfig } = require('./runtime-config.cjs')
+const { desktopRuntimeConfig, readConnectionConfig, readDevelopmentApiOrigin } = require('./runtime-config.cjs')
 
 test('backend and websocket origins are explicit and validated', () => {
   assert.deepEqual(desktopRuntimeConfig({}), {
@@ -28,6 +28,19 @@ test('saved connection works on double click while environment overrides it', ()
     apiOrigin: 'https://staging.example',
     wsOrigin: 'wss://staging.example'
   })
+})
+
+test('development login uses the same Vite backend origin', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icinema-vite-env-'))
+  try {
+    fs.writeFileSync(path.join(tempDir, '.env'), 'VITE_API_ORIGIN=http://localhost:8000\n')
+    fs.writeFileSync(path.join(tempDir, '.env.development'), 'VITE_API_ORIGIN=http://192.168.58.1:8000\n')
+    assert.equal(readDevelopmentApiOrigin(tempDir, {}), 'http://192.168.58.1:8000')
+    assert.equal(readDevelopmentApiOrigin(tempDir, { VITE_API_ORIGIN: 'https://override.example' }), 'https://override.example')
+  } finally {
+    if (path.dirname(tempDir) !== os.tmpdir()) throw new Error('Unexpected test directory')
+    fs.rmSync(tempDir, { recursive: true })
+  }
 })
 
 test('connection file is created once and later edits are read', () => {

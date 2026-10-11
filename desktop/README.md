@@ -8,11 +8,11 @@
 | `backend/` | 现有账号、房间、成员、消息与播放状态同步服务；不保存 B 站凭据、不转发 B 站媒体。 |
 | `desktop/` | Electron 窗口、受限的本机能力接口、用户设备上的第三方会话与必要的本机媒体协议、桌面打包。 |
 
-当前先按 [现有业务 Electron 化计划](../docs/architecture/electron-desktop-plan.md) 建立正式桌面客户端，复用已有前端，不加入 B 站功能。[`probes/bilibili`](probes/bilibili/README.md) 是保留的隔离验证原型；它的登录与媒体能力要等现有业务桌面化验收后才接入。不要把原型页面当成正式桌面客户端界面。
+现有业务已完成桌面化验收。播放源面板已接入 B 站账号登录、视频信息和本机播放预览：正式客户端按后端地址和 iCinema 用户分隔本机持久会话，B 站凭据不进入 iCinema 后端。点击分 P 后通过 Shaka 加载 DASH，Electron 本机媒体协议为 CDN 请求附加 Referer 并处理 Range；视频流不经过 iCinema 后端。本机预览不向房间广播播放操作，房间同步留待下一阶段。[`probes/bilibili`](probes/bilibili/README.md) 保留为播放技术验证资料，不是正式客户端界面。
 
 ## 开发版桌面壳
 
-开发模式下，`main.cjs` 打开现有 Vite 前端，默认地址为 `http://localhost:5173/`；后端仍由现有服务提供。窗口不启用 Node 集成，不加载 B 站原型的登录、解析或媒体协议。站内路由留在桌面窗口，外部 HTTP(S) 与邮件链接交由系统打开，其余导航被阻止。
+开发模式下，`main.cjs` 打开现有 Vite 前端，默认地址为 `http://localhost:5173/`；后端仍由现有服务提供。窗口不启用 Node 集成，B 站登录通过受限的 preload 接口打开隔离窗口。站内路由留在桌面窗口，外部 HTTP(S) 与邮件链接交由系统打开，其余导航被阻止。桌面端会读取前端开发环境的 `VITE_API_ORIGIN` 供 B 站账号隔离和用户校验使用；若用 `ICINEMA_API_ORIGIN` 临时覆盖，请与前端连接的后端保持一致。
 
 本目录声明的 Electron 版本为 `44.7.0`，与隔离验证原型一致。请先审阅依赖与命令，再自行在项目根目录运行安装：
 

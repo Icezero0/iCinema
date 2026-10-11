@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useI18n } from "vue-i18n";
+import { computed, ref, watch } from "vue";
+import { Translation, useI18n } from "vue-i18n";
 import {
   DocumentIcon,
   LinkIcon,
@@ -8,7 +8,12 @@ import {
   QuestionMarkCircleIcon,
 } from "@heroicons/vue/24/outline";
 import AppIcon from "@/ui/base/AppIcon.vue";
+import BaseCard from "@/ui/base/BaseCard.vue";
 import OmofunSourceControl from './OmofunSourceControl.vue';
+import BilibiliAccountControl from './BilibiliAccountControl.vue';
+import BilibiliTvIcon from './BilibiliTvIcon.vue';
+import { bilibiliDesktop } from '@/infra/bilibili-desktop';
+import type { BilibiliLocalMedia } from '@/infra/bilibili-desktop';
 import type { OmofunSelection } from '@/infra/realtime/roomRealtime';
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
 import {
@@ -33,6 +38,8 @@ const props = defineProps<{
   omofun?: OmofunSelection | null;
   sourceRevision?: number;
   closeKey?: number;
+  forceBilibiliKey?: number;
+  active?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -43,13 +50,32 @@ const emit = defineEmits<{
   (e: "apply"): void;
   (e: "select-omofun", selection: OmofunSelection, revision: number): void;
   (e: "dialog-change", open: boolean): void;
+  (e: "select-bilibili", value: BilibiliLocalMedia): void;
+  (e: "clear-bilibili-local"): void;
 }>();
 
 const { t } = useI18n();
+const desktopDownloadUrl = (() => {
+  try {
+    const url = new URL(import.meta.env.VITE_DESKTOP_DOWNLOAD_URL);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+  } catch {
+    return '';
+  }
+})();
 
 const matchFileInputRef = ref<HTMLInputElement | null>(null);
 const targetFileInputRef = ref<HTMLInputElement | null>(null);
 const targetHelpOpen = ref(false);
+const bilibiliSelected = ref(props.sourceType === 'bilibili');
+const activeSourceTab = computed(() => bilibiliSelected.value ? 'bilibili' : props.sourceType);
+watch(() => props.roomId, () => { bilibiliSelected.value = props.sourceType === 'bilibili'; });
+watch(() => props.forceBilibiliKey, () => { bilibiliSelected.value = true; });
+watch(() => props.sourceType, (sourceType, previous) => {
+  if (!props.active && (sourceType === 'bilibili' || previous === 'bilibili')) {
+    bilibiliSelected.value = sourceType === 'bilibili';
+  }
+});
 const videoUrlExtensions = [
   ".mp4",
   ".webm",
@@ -74,6 +100,7 @@ const supportedLocalFileTypes = [
 
 const sourceTypeOptions = computed(() => [
   { value: 'omofun' as const, label: 'Omofun', icon: FilmIcon },
+  { value: 'bilibili' as const, label: t('room.sourcePanel.bilibili'), icon: BilibiliTvIcon },
   {
     value: "external_url" as const,
     label: t("room.sourcePanel.externalUrl"),
@@ -85,6 +112,11 @@ const sourceTypeOptions = computed(() => [
     icon: DocumentIcon,
   },
 ]);
+
+function selectSourceTab(value: RoomVideoSourceType) {
+  bilibiliSelected.value = value === 'bilibili';
+  if (value !== 'bilibili') emit('update:sourceType', value);
+}
 
 const canApply = computed(() => {
   if (props.applying) return false;
@@ -235,16 +267,27 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
         class="sourceTypeOption"
         type="button"
         role="radio"
-        :aria-checked="sourceType === option.value"
-        :class="{ active: sourceType === option.value }"
-        @click="emit('update:sourceType', option.value)"
+        :aria-checked="activeSourceTab === option.value"
+        :class="{ active: activeSourceTab === option.value }"
+        @click="selectSourceTab(option.value)"
       >
         <AppIcon :icon="option.icon" :size="15" />
         <span>{{ option.label }}</span>
       </button>
     </div>
 
-    <div v-if="sourceType === 'external_url'" class="sourceModePanel">
+    <template v-if="bilibiliSelected">
+      <BaseCard v-if="!bilibiliDesktop" class="webBilibiliNotice">
+        <Translation keypath="room.sourcePanel.bilibiliDesktopOnly" scope="global" tag="p">
+          <template #app>
+            <a v-if="desktopDownloadUrl" :href="desktopDownloadUrl" target="_blank" rel="noopener noreferrer">iCinema</a>
+            <span v-else>iCinema</span>
+          </template>
+        </Translation>
+      </BaseCard>
+    </template>
+
+    <div v-else-if="sourceType === 'external_url'" class="sourceModePanel">
       <label class="sourceField">
         <span class="urlInputWrap">
           <input
@@ -334,11 +377,15 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
       </div>
     </div>
 
-    <OmofunSourceControl :key="roomId" :room-id="roomId" v-show="sourceType === 'omofun'" :active="sourceType === 'omofun'" :current="omofun"
+    <BilibiliAccountControl v-if="bilibiliDesktop" :key="roomId" v-show="bilibiliSelected"
+      :active="Boolean(active) && bilibiliSelected" :can-select="Boolean(canSetLocalRoomTarget) && !applying"
+      @select-bilibili="emit('select-bilibili', $event)" @clear-local="emit('clear-bilibili-local')" />
+
+    <OmofunSourceControl :key="roomId" :room-id="roomId" v-show="!bilibiliSelected && sourceType === 'omofun'" :active="Boolean(active) && !bilibiliSelected && sourceType === 'omofun'" :current="omofun"
       :source-revision="sourceRevision ?? 0" :can-apply="canSetLocalRoomTarget" :applying="applying" :close-key="closeKey"
       @select="(selection, revision) => emit('select-omofun', selection, revision)" @dialog-change="emit('dialog-change', $event)" />
 
-    <div v-if="sourceType !== 'omofun'" class="sourcePanelActions">
+    <div v-if="!bilibiliSelected && sourceType !== 'omofun'" class="sourcePanelActions">
       <span class="actionMessage" :class="{ error: actionMessageIsError }">
         {{ actionMessage }}
       </span>
@@ -353,7 +400,7 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
     </div>
 
     <div
-      v-if="shouldShowHashProgress"
+      v-if="!bilibiliSelected && shouldShowHashProgress"
       class="hashProgress"
       role="progressbar"
       :aria-valuemin="0"
@@ -426,7 +473,7 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
 
 .sourceTypeSwitch {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--c-border);
@@ -451,6 +498,35 @@ function selectLocalMode(value: "match_room_target" | "set_room_target") {
     background-color 160ms ease,
     color 160ms ease,
     box-shadow 180ms ease;
+}
+
+.sourceTypeOption span {
+  white-space: nowrap;
+}
+
+.webBilibiliNotice {
+  color: var(--c-text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.webBilibiliNotice p {
+  margin: 0;
+}
+
+.webBilibiliNotice a {
+  color: var(--c-primary);
+  text-underline-offset: 3px;
+}
+
+.webBilibiliNotice a:hover {
+  color: var(--c-primary-hover);
+}
+
+@media (max-width: 560px) {
+  .sourceTypeSwitch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .sourceTypeOption:hover {

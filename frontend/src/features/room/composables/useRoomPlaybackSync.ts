@@ -14,7 +14,9 @@ import {
   type RoomRealtimeResourceStatus,
   type RoomRealtimeVideoSourceState,
   type OmofunSelection,
+  type BilibiliSelection,
 } from "@/infra/realtime/roomRealtime";
+import type { BilibiliLocalMedia } from "@/infra/bilibili-desktop";
 import { useToastsStore } from "@/stores/toasts.store";
 import { computeFileSha256 } from "@/features/room/video/fileHash";
 import {
@@ -33,6 +35,7 @@ type LocalFileSourceAction = "match_room_target" | "set_room_target";
 
 type PlaybackSourcePayload = {
   omofun?: OmofunSelection;
+  bilibili?: BilibiliSelection;
   expectedSourceRevision?: number;
   sourceType: RoomVideoSourceType;
   externalUrl: string;
@@ -47,6 +50,7 @@ type UseRoomPlaybackSyncOptions = {
   roomSettings: Ref<RoomSettings | null>;
   routeRequiresSyncGate: () => boolean;
   realtime: ReturnType<typeof useRoomRealtimeSession>;
+  bilibiliMedia: Ref<BilibiliLocalMedia | null>;
   playback: {
     playbackIsPlaying: Ref<boolean>;
     playbackCurrentTime: Ref<number>;
@@ -249,6 +253,13 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
   function canUseRoomRuntimePlaybackCommands() {
     if (!options.realtime.isRealtimeActive.value) return false;
 
+    if (options.playback.playbackSourceType.value === "bilibili") {
+      const selected = options.realtime.roomVideoSource.value?.bilibili;
+      const media = options.bilibiliMedia.value;
+      return Boolean(selected && media && media.bvid === selected.bvid && media.cid === selected.cid &&
+        options.playback.playbackDuration.value > 0);
+    }
+
     if (options.playback.playbackSourceType.value === "local_file") {
       return hasMatchingRoomLocalFile.value;
     }
@@ -342,6 +353,13 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
     currentPlayback: RoomRealtimePlaybackState | null,
   ) {
     options.playback.applyRealtimeVideoSource(currentVideoSource);
+    if (currentVideoSource?.source_type === "bilibili") {
+      lastReportedResourceStatus = null;
+      const selection = currentVideoSource.bilibili;
+      const media = options.bilibiliMedia.value;
+      handleResourceStatusChange(selection && media?.bvid === selection.bvid && media.cid === selection.cid
+        ? latestResourceStatus.value : "stalling");
+    }
     if (currentVideoSource?.source_type === "local_file" && !syncRoomLocalFileRequirement()) {
       return;
     }
@@ -403,6 +421,21 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
 
   async function handleApplyPlaybackSource(payload: PlaybackSourcePayload) {
     localFileSourceIssue.value = "none";
+
+    if (payload.sourceType === "bilibili") {
+      if (!payload.bilibili || sourceApplying.value || !ensureRealtimePlaybackControlAllowed()) return;
+      sourceApplying.value = true;
+      try {
+        await setRoomRealtimeVideoSource({
+          source_type: "bilibili", ...payload.bilibili, anchor_ts_ms: Date.now(),
+        });
+      } catch (error) {
+        showRealtimePlaybackError(error);
+      } finally {
+        sourceApplying.value = false;
+      }
+      return;
+    }
 
     if (payload.sourceType === "omofun") {
       if (!payload.omofun || sourceApplying.value || !ensureRealtimePlaybackControlAllowed()) return;
@@ -566,6 +599,8 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
       return;
     }
 
+    if (options.playback.playbackSourceType.value === "bilibili" && !canUseRoomRuntimePlaybackCommands()) return;
+
     if (!canUseRoomRuntimePlaybackCommands()) {
       options.playback.toggleLocalPlayback();
       return;
@@ -612,6 +647,8 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
       return;
     }
 
+    if (options.playback.playbackSourceType.value === "bilibili" && !canUseRoomRuntimePlaybackCommands()) return;
+
     if (!canUseRoomRuntimePlaybackCommands() || options.playback.playbackDuration.value <= 0) {
       options.playback.handleLocalPlaybackProgressChange(value, {
         autoPause: options.roomSettings.value?.seek_auto_pause ?? true,
@@ -647,6 +684,7 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
     lastReportedResourceStatus = status;
     void sendRoomRealtimeUserResourceStatus({
       status,
+      source_revision: options.realtime.roomVideoSource.value?.source_revision,
       reported_at_ms: Date.now(),
       position_seconds: options.playback.playbackCurrentTime.value,
     }).catch(() => {
@@ -676,6 +714,8 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
 
     options.playback.applyRealtimeVideoSource(event.state);
     if (event.action !== "room_video_source_set" || !event.state) return;
+    lastReportedResourceStatus = null;
+    if (event.state.source_type === "bilibili") handleResourceStatusChange("stalling");
     if (event.state.source_type === "local_file" && !syncRoomLocalFileRequirement()) {
       return;
     }
@@ -707,7 +747,8 @@ export function useRoomPlaybackSync(options: UseRoomPlaybackSyncOptions) {
     }
 
     void options.playback.applyRealtimePlaybackState(event?.state ?? null, {
-      syncPosition: event?.action === "snapshot" || event?.action === "playback_seek",
+      syncPosition: event?.action === "snapshot" || event?.action === "playback_seek" ||
+        (options.playback.playbackSourceType.value === "bilibili" && options.playback.playbackDuration.value <= 0),
     });
   }
 

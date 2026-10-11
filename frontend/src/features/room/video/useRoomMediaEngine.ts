@@ -2,6 +2,8 @@ import { ref } from "vue";
 import { useDirectVideoEngine } from "./useDirectVideoEngine";
 import { useHlsEngine } from "./useHlsEngine";
 import { useLocalFileEngine } from "./useLocalFileEngine";
+import { useBilibiliDashEngine } from "./useBilibiliDashEngine";
+import type { BilibiliLocalMedia } from "@/infra/bilibili-desktop";
 import { useNativeVideoCore } from "./useNativeVideoCore";
 import {
   classifyMediaEngineSource,
@@ -28,12 +30,13 @@ export function useRoomMediaEngine(options: {
   });
   const directVideoEngine = useDirectVideoEngine(core);
   const localFileEngine = useLocalFileEngine(core);
+  const bilibiliDashEngine = useBilibiliDashEngine(core);
 
   async function loadSource(
     input: MediaEngineLoadInput | string,
     playback: PlaybackStateInput | null = null,
   ) {
-    unloadActiveEngines();
+    await unloadActiveEngines();
 
     const source = typeof input === "string"
       ? classifyMediaEngineSource({
@@ -67,10 +70,18 @@ export function useRoomMediaEngine(options: {
     await directVideoEngine.loadSource(source.url, playback);
   }
 
-  function unloadActiveEngines() {
+  async function loadBilibiliSource(media: BilibiliLocalMedia) {
+    await unloadActiveEngines();
+    sourceType.value = "bilibili_local";
+    engineKind.value = "bilibili_dash";
+    await bilibiliDashEngine.loadSource(media);
+  }
+
+  async function unloadActiveEngines() {
     hlsEngine.unload();
     directVideoEngine.unload();
     localFileEngine.unload();
+    await bilibiliDashEngine.unload();
   }
 
   return {
@@ -78,5 +89,6 @@ export function useRoomMediaEngine(options: {
     sourceType,
     engineKind,
     loadSource,
+    loadBilibiliSource,
   };
 }

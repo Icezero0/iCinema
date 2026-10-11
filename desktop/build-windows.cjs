@@ -1,5 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 
 if (process.platform !== 'win32') {
   throw new Error('The portable Windows build must run on Windows')
@@ -24,7 +25,16 @@ for (const requiredFile of [
 fs.mkdirSync(releaseDir, { recursive: true })
 const outputDir = fs.mkdtempSync(path.join(releaseDir, `iCinema-win32-${process.arch}-`))
 fs.cpSync(electronDist, outputDir, { recursive: true })
-fs.renameSync(path.join(outputDir, 'electron.exe'), path.join(outputDir, 'iCinema.exe'))
+const executable = path.join(outputDir, 'iCinema.exe')
+fs.renameSync(path.join(outputDir, 'electron.exe'), executable)
+const iconResult = spawnSync('powershell.exe', [
+  '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+  '-File', path.join(desktopDir, 'set-exe-icon.ps1'),
+  '-ExePath', executable,
+  '-IconPath', path.join(rendererDir, 'favicon.ico')
+], { stdio: 'inherit' })
+if (iconResult.error) throw iconResult.error
+if (iconResult.status !== 0) throw new Error('Failed to apply the iCinema executable icon')
 
 const appDir = path.join(outputDir, 'resources', 'app')
 fs.mkdirSync(appDir)
@@ -34,6 +44,12 @@ for (const file of [
   'app-protocol.cjs',
   'runtime-config.cjs',
   'storage-policy.cjs',
+  'bilibili-account.cjs',
+  'bilibili-session-store.cjs',
+  'bilibili-video.cjs',
+  'bilibili-login.cjs',
+  'bilibili-media.cjs',
+  'bilibili-playback.cjs',
   'preload.cjs'
 ]) {
   fs.copyFileSync(path.join(desktopDir, file), path.join(appDir, file))

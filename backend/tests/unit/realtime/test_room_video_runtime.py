@@ -1,6 +1,7 @@
 import pytest
 
 from app.core.exceptions import BadRequestError
+from app.core.error_reasons import ErrorReason
 from app.modules.rooms.constants import RoomSyncPolicy, RoomVideoSourceType
 from app.realtime.constants import (
     AutoPlaybackAction,
@@ -8,6 +9,75 @@ from app.realtime.constants import (
     ResourceHealthStatusType,
 )
 from app.realtime.room_video_runtime import RoomVideoRuntimeService
+
+
+async def test_bilibili_play_requires_every_present_member_ready() -> None:
+    service = RoomVideoRuntimeService()
+    await service.set_room_video_source(
+        room_id=88, source_type=RoomVideoSourceType.BILIBILI,
+        bilibili={"bvid": "BV1JneT6rEaG", "cid": 123, "page": 1},
+    )
+    await service.report_user_resource_status(
+        room_id=88, user_id=1, status=ResourceHealthStatusType.READY,
+        reported_at_ms=1000, sync_policy=RoomSyncPolicy.AUTO_SYNC, source_revision=1,
+    )
+    with pytest.raises(BadRequestError) as error:
+        await service.play(room_id=88, position_seconds=0, anchor_ts_ms=1000,
+                           sync_policy=RoomSyncPolicy.AUTO_SYNC, present_user_ids=[1, 2])
+    assert error.value.reason == ErrorReason.BILIBILI_PLAYBACK_MEMBERS_NOT_READY
+    with pytest.raises(BadRequestError):
+        await service.seek(room_id=88, position_seconds=10, anchor_ts_ms=1000,
+                           sync_policy=RoomSyncPolicy.AUTO_SYNC, resume_after_seek=True,
+                           present_user_ids=[1, 2])
+    await service.report_user_resource_status(
+        room_id=88, user_id=2, status=ResourceHealthStatusType.READY,
+        reported_at_ms=1001, sync_policy=RoomSyncPolicy.AUTO_SYNC, source_revision=1,
+    )
+    playback = await service.play(room_id=88, position_seconds=0, anchor_ts_ms=1002,
+                                  sync_policy=RoomSyncPolicy.AUTO_SYNC, present_user_ids=[1, 2])
+    assert playback.status == PlaybackStatusType.PLAYING
+
+
+async def test_bilibili_unavailable_member_pauses_current_playback() -> None:
+    service = RoomVideoRuntimeService()
+    await service.set_room_video_source(
+        room_id=89, source_type=RoomVideoSourceType.BILIBILI,
+        bilibili={"bvid": "BV1JneT6rEaG", "cid": 123, "page": 1},
+    )
+    await service.report_user_resource_status(
+        room_id=89, user_id=1, status=ResourceHealthStatusType.READY,
+        reported_at_ms=1000, sync_policy=RoomSyncPolicy.AUTO_SYNC, source_revision=1,
+    )
+    await service.play(room_id=89, position_seconds=0, anchor_ts_ms=1001,
+                       sync_policy=RoomSyncPolicy.AUTO_SYNC, present_user_ids=[1])
+    result = await service.report_user_resource_status(
+        room_id=89, user_id=2, status=ResourceHealthStatusType.ERROR,
+        reported_at_ms=1002, sync_policy=RoomSyncPolicy.AUTO_SYNC,
+        present_user_ids=[1, 2],
+        source_revision=1,
+    )
+    assert result.auto_action == AutoPlaybackAction.PAUSE
+
+
+async def test_bilibili_new_session_clears_stale_readiness_and_pauses() -> None:
+    service = RoomVideoRuntimeService()
+    await service.set_room_video_source(
+        room_id=90, source_type=RoomVideoSourceType.BILIBILI,
+        bilibili={"bvid": "BV1JneT6rEaG", "cid": 123, "page": 1},
+    )
+    await service.report_user_resource_status(
+        room_id=90, user_id=1, status=ResourceHealthStatusType.READY,
+        reported_at_ms=1000, sync_policy=RoomSyncPolicy.AUTO_SYNC, source_revision=1,
+    )
+    await service.play(room_id=90, position_seconds=0, anchor_ts_ms=1001,
+                       sync_policy=RoomSyncPolicy.AUTO_SYNC, present_user_ids=[1])
+    result = await service.invalidate_bilibili_member(room_id=90, user_id=1)
+    assert result is not None
+    assert result.user_resource_states.user_resource_states == []
+    assert result.auto_action == AutoPlaybackAction.PAUSE
+    with pytest.raises(BadRequestError):
+        await service.play(room_id=90, position_seconds=0, anchor_ts_ms=1002,
+                           sync_policy=RoomSyncPolicy.AUTO_SYNC, present_user_ids=[1])
 
 
 # 设置房间视频源后会重置播放状态和用户资源健康状态

@@ -1,5 +1,6 @@
 import type { ComputedRef, Ref } from "vue";
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
+import type { BilibiliLocalMedia } from "@/infra/bilibili-desktop";
 import { isHlsUrl } from "./mediaUtils";
 import type {
   BufferedRange,
@@ -8,7 +9,7 @@ import type {
   PlayerState,
 } from "./types";
 
-export type MediaEngineKind = "hls" | "direct_video" | "local_video";
+export type MediaEngineKind = "hls" | "direct_video" | "local_video" | "bilibili_dash";
 
 export type MediaEngineSource =
   | {
@@ -20,6 +21,11 @@ export type MediaEngineSource =
       sourceType: "local_file";
       engineKind: Extract<MediaEngineKind, "local_video">;
       file: File;
+    }
+  | {
+      sourceType: "bilibili_local";
+      engineKind: Extract<MediaEngineKind, "bilibili_dash">;
+      media: BilibiliLocalMedia;
     };
 
 export type MediaEngineLoadInput =
@@ -63,6 +69,7 @@ export type MediaEngine = {
     source: MediaEngineLoadInput | string,
     playback?: PlaybackStateInput | null,
   ) => Promise<void>;
+  loadBilibiliSource: (media: BilibiliLocalMedia) => Promise<void>;
   applyPlayback: (
     playback: PlaybackStateInput | null,
     options: { syncPosition: boolean },
@@ -77,7 +84,7 @@ export type MediaEngine = {
 
 export function classifyMediaEngineSource(
   input: MediaEngineLoadInput,
-): MediaEngineSource | null {
+): Exclude<MediaEngineSource, { sourceType: "bilibili_local" }> | null {
   if (input.sourceType === "local_file") {
     return {
       sourceType: "local_file",

@@ -133,15 +133,25 @@ class RoomCommandHandler:
             )
 
         settings = getattr(room, "settings", None)
-        if settings and settings.selected_room_video_source_type == RoomVideoSourceType.OMOFUN:
+        if settings and settings.selected_room_video_source_type in {
+            RoomVideoSourceType.OMOFUN, RoomVideoSourceType.BILIBILI,
+        }:
             async with self.video_runtime_service.source_change_lock:
                 if await self.video_runtime_service.get_room_video_source(room_id=room_id) is None:
                     await db.refresh(settings)
-                    pinned = settings.omofun_source
-                    if settings.selected_room_video_source_type == RoomVideoSourceType.OMOFUN and pinned:
+                    if settings.selected_room_video_source_type == RoomVideoSourceType.OMOFUN:
+                        pinned = settings.omofun_source
+                        if pinned:
+                            await self.video_runtime_service.set_room_video_source(
+                                room_id=room_id, source_type=RoomVideoSourceType.OMOFUN,
+                                external_url=pinned["external_url"], omofun=pinned["omofun"],
+                                source_revision=pinned["source_revision"],
+                            )
+                    elif settings.selected_room_video_source_type == RoomVideoSourceType.BILIBILI and settings.bilibili_source:
+                        pinned = settings.bilibili_source
                         await self.video_runtime_service.set_room_video_source(
-                            room_id=room_id, source_type=RoomVideoSourceType.OMOFUN,
-                            external_url=pinned["external_url"], omofun=pinned["omofun"],
+                            room_id=room_id, source_type=RoomVideoSourceType.BILIBILI,
+                            bilibili={key: pinned[key] for key in ("bvid", "cid", "page")},
                             source_revision=pinned["source_revision"],
                         )
 
@@ -158,6 +168,17 @@ class RoomCommandHandler:
             connection=connection,
             room_id=room_id,
         )
+
+        if previous_room_id != room_id or replaced_connection_id is not None:
+            readiness_update = await self.video_runtime_service.invalidate_bilibili_member(
+                room_id=room_id, user_id=connection.user_id,
+            )
+            if readiness_update is not None:
+                await publisher.publish_user_resource_states(
+                    user_resource_states=readiness_update.user_resource_states,
+                )
+                if readiness_update.auto_playback is not None:
+                    await publisher.publish_playback_pause(playback=readiness_update.auto_playback)
 
         room_video_source = await self.video_runtime_service.get_room_video_source(
             room_id=room_id

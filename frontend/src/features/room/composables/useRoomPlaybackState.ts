@@ -12,6 +12,7 @@ import { useToastsStore } from "@/stores/toasts.store";
 import { projectedPlaybackPosition } from "@/infra/realtime/playbackClock";
 
 export type RoomPlayerStageHandle = {
+  waitForSourceLoad: () => Promise<void>;
   playVideo: () => Promise<void>;
   togglePlayback: () => Promise<void>;
   pauseVideo: () => void;
@@ -68,6 +69,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   const playbackSourceFileName = ref("");
   const playbackSourceFileHash = ref("");
   const playbackSourceRevision = ref(0);
+  let activeBilibiliSourceKey = "";
   const pendingRealtimePlayback = ref<PendingRealtimePlayback | null>(null);
 
   const playbackTimelineLabel = computed(() =>
@@ -185,6 +187,9 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   }
 
   function applyRealtimeVideoSource(source: RoomRealtimeVideoSourceState | null) {
+    const nextBilibiliSourceKey = source?.source_type === "bilibili" && source.bilibili
+      ? `${source.room_id}:${source.source_revision}:${source.bilibili.bvid}:${source.bilibili.cid}`
+      : "";
     const nextSourceUrl = source && source.source_type !== "local_file"
       ? source.external_url?.trim() ?? ""
       : "";
@@ -192,7 +197,8 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
       source !== null &&
       source.source_type !== "local_file" &&
       playbackSourceType.value === source.source_type &&
-      playbackSourceUrl.value === nextSourceUrl;
+      playbackSourceUrl.value === nextSourceUrl &&
+      (source.source_type !== "bilibili" || nextBilibiliSourceKey === activeBilibiliSourceKey);
     const nextFileHash = source?.source_type === "local_file"
       ? source.file_hash ?? ""
       : "";
@@ -224,6 +230,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
     pendingSeekProgress.value = null;
     pendingRealtimePlayback.value = null;
     playbackIsPlaying.value = false;
+    activeBilibiliSourceKey = nextBilibiliSourceKey;
 
     if (!source) {
       playbackSourceType.value = "external_url";
@@ -338,6 +345,7 @@ export function useRoomPlaybackState(options: UseRoomPlaybackStateOptions) {
   }
 
   function resetPlaybackState() {
+    activeBilibiliSourceKey = "";
     playbackIsPlaying.value = false;
     playbackProgress.value = 0;
     pendingSeekProgress.value = null;
