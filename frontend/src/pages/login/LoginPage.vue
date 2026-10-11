@@ -3,8 +3,12 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useI18n } from "vue-i18n";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/vue/24/outline";
 import LocaleMenuButton from "@/components/LocaleMenuButton.vue";
 import { login } from "@/infra/api/auth.api";
+import { getBackendErrorReason } from "@/infra/http/client";
+import AppIcon from "@/ui/base/AppIcon.vue";
+import BaseIconButton from "@/ui/base/BaseIconButton.vue";
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -13,6 +17,7 @@ const { t } = useI18n();
 
 const email = ref("");
 const password = ref("");
+const passwordVisible = ref(false);
 
 const isSubmitting = ref(false);
 const errorMsg = ref("");
@@ -24,6 +29,9 @@ function setError(msg: string) {
 }
 
 function extractErrorMessage(err: any) {
+  if (getBackendErrorReason(err) === "invalid_credentials") {
+    return t("auth.login.invalid");
+  }
   const detail = err?.response?.data?.detail;
 
   if (typeof detail === "string") return detail;
@@ -93,13 +101,30 @@ async function submit() {
         :disabled="isSubmitting"
       />
 
-      <BaseInput
-        v-model="password"
-        type="password"
-        autocomplete="current-password"
-        :placeholder="t('auth.login.password')"
-        :disabled="isSubmitting"
-      />
+      <div class="passwordField">
+        <BaseInput
+          v-model="password"
+          :type="passwordVisible ? 'text' : 'password'"
+          autocomplete="current-password"
+          :placeholder="t('auth.login.password')"
+          :disabled="isSubmitting"
+        />
+        <BaseIconButton
+          class="passwordToggle"
+          :aria-label="t(passwordVisible ? 'auth.login.hidePassword' : 'auth.login.showPassword')"
+          :aria-pressed="passwordVisible"
+          :disabled="isSubmitting"
+          @click="passwordVisible = !passwordVisible"
+        >
+          <Transition name="passwordIcon" mode="out-in">
+            <AppIcon
+              :key="passwordVisible ? 'visible' : 'hidden'"
+              :icon="passwordVisible ? EyeSlashIcon : EyeIcon"
+              :size="20"
+            />
+          </Transition>
+        </BaseIconButton>
+      </div>
 
       <p v-if="errorMsg" class="error" role="alert">
         {{ errorMsg }}
@@ -200,6 +225,50 @@ async function submit() {
   flex-direction: column;
   gap: 10px;
   margin-top: 10px;
+}
+
+.passwordField {
+  position: relative;
+}
+
+.passwordField :deep(.inp) {
+  box-sizing: border-box;
+  width: 100%;
+  padding-right: 48px;
+}
+
+.passwordField .passwordToggle {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 34px;
+  height: 34px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  color: var(--c-text-muted);
+}
+
+.passwordToggle:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: -2px;
+}
+
+.passwordIcon-enter-active,
+.passwordIcon-leave-active {
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.passwordIcon-enter-from,
+.passwordIcon-leave-to {
+  opacity: 0;
+  transform: scale(0.75);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .passwordIcon-enter-active,
+  .passwordIcon-leave-active {
+    transition: none;
+  }
 }
 
 .error {

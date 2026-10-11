@@ -1,6 +1,7 @@
 import { observeServerTime } from "./playbackClock";
 import axios from "axios";
 import { refreshAccessTokenOnce, expireAuthSession, onSessionReset } from "@/infra/auth/session";
+import { desktopConfig } from "@/infra/runtime-config";
 
 type WSMessageType = "auth" | "heartbeat" | "command" | "event" | "error" | "ack";
 
@@ -132,7 +133,7 @@ function deriveApiOriginFromLocation() {
 }
 
 function deriveWSOrigin() {
-  const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? deriveApiOriginFromLocation();
+  const apiOrigin = desktopConfig?.apiOrigin ?? import.meta.env.VITE_API_ORIGIN ?? deriveApiOriginFromLocation();
 
   if (apiOrigin.startsWith("https://")) {
     return apiOrigin.replace("https://", "wss://");
@@ -146,7 +147,7 @@ function deriveWSOrigin() {
 }
 
 function buildWSUrl() {
-  const wsOrigin = import.meta.env.VITE_WS_ORIGIN ?? deriveWSOrigin();
+  const wsOrigin = desktopConfig?.wsOrigin ?? import.meta.env.VITE_WS_ORIGIN ?? deriveWSOrigin();
   const endpoint = import.meta.env.VITE_WS_ENDPOINT ?? "/ws";
   return `${wsOrigin}${endpoint}`;
 }

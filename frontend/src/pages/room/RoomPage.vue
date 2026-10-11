@@ -14,6 +14,8 @@ import {
   type Room,
 } from "@/infra/api/rooms.api";
 import BasePill from "@/ui/base/BasePill.vue";
+import BaseButton from "@/ui/base/BaseButton.vue";
+import BaseDialog from "@/ui/base/BaseDialog.vue";
 import AppTabs from "@/ui/layout/AppTabs.vue";
 import RoomPlayerStage from "@/features/room/components/RoomPlayerStage.vue";
 import RoomPlaybackControls from "@/features/room/components/RoomPlaybackControls.vue";
@@ -656,6 +658,11 @@ function removeDanmaku(id: string) {
 }
 
 function handleRealtimeSessionClosed(payload: RoomRealtimeSessionClosed) {
+  if (payload.reason === "entered_elsewhere") {
+    playerStageRef.value?.pauseVideo();
+    return;
+  }
+
   if (payload.reason === "room_deleted") {
     messagesStore.clearRoom(roomId.value);
   }
@@ -986,9 +993,51 @@ watch(
       </template>
     </div>
   </BaseLayout>
+  <BaseDialog
+    :model-value="realtime.isRoomSessionReplaced.value"
+    :close-on-overlay="false"
+    :close-on-esc="false"
+    :z-index="200"
+    :aria-label="t('room.realtime.replacedTitle')"
+  >
+    <BaseCard class="sessionReplacedCard">
+      <h2 class="sessionReplacedTitle">{{ t('room.realtime.replacedTitle') }}</h2>
+      <p class="sessionReplacedMessage">{{ t('room.realtime.sessionClosed.entered_elsewhere') }}</p>
+      <BaseButton class="sessionReplacedAction" variant="primary" @click="router.replace('/')">
+        {{ t('room.realtime.backHome') }}
+      </BaseButton>
+    </BaseCard>
+  </BaseDialog>
 </template>
 
 <style scoped>
+.sessionReplacedCard {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-lg, 0 10px 30px rgb(0 0 0 / 0.18));
+}
+
+.sessionReplacedTitle,
+.sessionReplacedMessage {
+  margin: 0;
+}
+
+.sessionReplacedTitle {
+  font-size: 18px;
+  color: var(--c-text);
+}
+
+.sessionReplacedMessage {
+  color: var(--c-text-muted);
+  line-height: 1.5;
+}
+
+.sessionReplacedAction {
+  justify-self: end;
+}
+
 .roomShell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

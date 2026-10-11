@@ -11,12 +11,16 @@ function appUrlFromEnvironment(value) {
 
 function navigationTarget(value, appOrigin) {
   let url
+  let appUrl
   try {
     url = new URL(value)
+    appUrl = new URL(appOrigin)
   } catch {
     return 'blocked'
   }
-  if (url.origin === appOrigin && ['http:', 'https:'].includes(url.protocol)) {
+  if (url.protocol === appUrl.protocol && url.host === appUrl.host &&
+      !url.username && !url.password &&
+      ['http:', 'https:', 'icinema:'].includes(url.protocol)) {
     return 'internal'
   }
   if (['http:', 'https:', 'mailto:'].includes(url.protocol)) {

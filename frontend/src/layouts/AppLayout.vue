@@ -94,7 +94,7 @@ onBeforeUnmount(() => {
       />
     </Transition>
 
-    <div class="body" :class="{ mobile: isMobileSidebar }">
+    <div class="body">
       <AppSidebar :open="sidebarOpen" :mobile="isMobileSidebar" />
       <main class="content">
         <router-view />
@@ -113,13 +113,9 @@ onBeforeUnmount(() => {
 
 .body {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(0, 1fr);
   min-height: calc(100dvh - 56px);
   position: relative;
-}
-
-.body.mobile {
-  grid-template-columns: 1fr;
 }
 
 .content {

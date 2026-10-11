@@ -35,5 +35,13 @@
 }
 
 html {
+  overflow-y: scroll;
   scrollbar-gutter: stable;
+  background: var(--c-bg);
+}
+
+html:has(body.icinema-room-theater-active),
+html:has(body.icinema-room-web-fullscreen-active) {
+  overflow-y: hidden;
+  scrollbar-gutter: auto;
 }

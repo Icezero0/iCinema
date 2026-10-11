@@ -21,3 +21,14 @@ test('only app-origin navigation stays in Electron', () => {
     assert.notEqual(navigationTarget(value, origin), 'internal')
   }
 })
+
+test('bundled app navigation stays on the fixed custom origin', () => {
+  const origin = 'icinema://app/'
+  assert.equal(navigationTarget('icinema://app/room/1', origin), 'internal')
+  assert.equal(navigationTarget('icinema://app/auth/login', origin), 'internal')
+  assert.equal(navigationTarget('https://example.com/', origin), 'external')
+  for (const value of ['icinema://other/room/1', 'icinema://user@app/',
+    'icinema://app.evil.test/', 'file:///C:/secret']) {
+    assert.equal(navigationTarget(value, origin), 'blocked')
+  }
+})

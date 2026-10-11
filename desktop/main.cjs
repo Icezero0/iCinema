@@ -1,25 +1,75 @@
-const { app, BrowserWindow, shell } = require('electron')
+const fs = require('node:fs')
+const path = require('node:path')
+const { pathToFileURL } = require('node:url')
+const { app, BrowserWindow, dialog, Menu, net, protocol, screen, shell } = require('electron')
 const { appUrlFromEnvironment, navigationTarget } = require('./navigation.cjs')
+const { APP_URL, assetPathForUrl } = require('./app-protocol.cjs')
+const { desktopRuntimeConfig, readConnectionConfig } = require('./runtime-config.cjs')
+const { distributionMode, storageDirectory } = require('./storage-policy.cjs')
 
-const appUrl = appUrlFromEnvironment(process.env.ICINEMA_DESKTOP_URL)
-const appOrigin = new URL(appUrl).origin
+const bundled = app.isPackaged || process.argv.includes('--bundled')
+const distributionManifest = app.isPackaged
+  ? JSON.parse(fs.readFileSync(path.join(__dirname, 'distribution.json'), 'utf8'))
+  : null
+const mode = distributionMode(app.isPackaged, distributionManifest)
+const appUrl = bundled ? APP_URL : appUrlFromEnvironment(process.env.ICINEMA_DESKTOP_URL)
+const appOrigin = bundled ? APP_URL : new URL(appUrl).origin
+const rendererDir = path.join(__dirname, 'renderer')
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'icinema', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
+])
 
 app.setName('iCinema')
 if (process.platform === 'win32') app.setAppUserModelId('icinema.desktop')
+const dataDir = storageDirectory(mode, app.getPath('exe'), process.env.LOCALAPPDATA)
+if (dataDir) {
+  fs.mkdirSync(dataDir, { recursive: true })
+  app.setPath('userData', dataDir)
+  app.setPath('sessionData', dataDir)
+}
+const storagePath = app.getPath('userData')
+let runtimeConfig = null
+let configurationError = null
+try {
+  if (bundled) {
+    const connection = readConnectionConfig(dataDir && path.join(dataDir, 'connection.json'))
+    runtimeConfig = {
+      ...desktopRuntimeConfig(process.env, connection),
+      storageMode: mode,
+      storagePath
+    }
+  }
+} catch (error) {
+  configurationError = error
+}
+const configArgument = runtimeConfig
+  ? `--icinema-config=${encodeURIComponent(JSON.stringify(runtimeConfig))}`
+  : null
 
-function createWindow(url = appUrl) {
+function createWindow(url = appUrl, persistWindowState = true) {
+  const workArea = screen.getPrimaryDisplay().workAreaSize
   const window = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    ...(persistWindowState ? {
+      name: 'main-window',
+      windowStatePersistence: { bounds: true, displayMode: false }
+    } : {}),
+    width: Math.min(1360, workArea.width),
+    height: Math.min(960, workArea.height),
     minWidth: 800,
     minHeight: 600,
     title: 'iCinema',
+    ...(bundled ? { icon: path.join(rendererDir, 'favicon.ico') } : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
-      webviewTag: false
+      webviewTag: false,
+      ...(bundled ? {
+        preload: path.join(__dirname, 'preload.cjs'),
+        additionalArguments: [configArgument]
+      } : {})
     }
   })
 
@@ -32,7 +82,7 @@ function createWindow(url = appUrl) {
 
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     const action = navigationTarget(target, appOrigin)
-    if (action === 'internal') createWindow(target)
+    if (action === 'internal') createWindow(target, false)
     if (action === 'external') void shell.openExternal(target)
     return { action: 'deny' }
   })
@@ -44,6 +94,24 @@ function createWindow(url = appUrl) {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null)
+  if (configurationError) {
+    dialog.showErrorBox('iCinema connection configuration', configurationError.message)
+    app.quit()
+    return
+  }
+  if (bundled) {
+    if (!assetPathForUrl(APP_URL, rendererDir)) {
+      throw new Error('Desktop renderer is missing. Run npm --prefix .\\desktop run build:renderer first.')
+    }
+    protocol.handle('icinema', request => {
+      if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 })
+      const asset = assetPathForUrl(request.url, rendererDir)
+      return asset
+        ? net.fetch(pathToFileURL(asset).toString())
+        : new Response('Not found', { status: 404 })
+    })
+  }
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
