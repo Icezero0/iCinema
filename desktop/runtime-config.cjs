@@ -17,10 +17,10 @@ function readDevelopmentApiOrigin(frontendDir, env = process.env) {
   return origin
 }
 
-function readConnectionConfig(filePath) {
+function readConnectionConfig(filePath, defaultApiOrigin = 'http://localhost:8000') {
   if (!filePath) return {}
   if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, '{\n  "apiOrigin": "http://localhost:8000"\n}\n', { flag: 'wx' })
+    fs.writeFileSync(filePath, JSON.stringify({ apiOrigin: defaultApiOrigin }, null, 2) + '\n', { flag: 'wx' })
   }
   const config = JSON.parse(fs.readFileSync(filePath, 'utf8'))
   if (!config || typeof config !== 'object' || Array.isArray(config)) {

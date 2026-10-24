@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+contextBridge.exposeInMainWorld('icinemaDesktop', {
+  getInfo: () => ipcRenderer.invoke('desktop:info'),
+  checkForUpdates: () => ipcRenderer.invoke('desktop:check-updates'),
+  openDataFolder: () => ipcRenderer.invoke('desktop:open-data')
+})
+
 const prefix = '--icinema-config='
 const argument = process.argv.filter(value => value.startsWith(prefix)).at(-1)
 if (argument) {

@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   BellIcon,
+  ComputerDesktopIcon,
   ClipboardDocumentCheckIcon,
   InboxStackIcon,
   HomeIcon,
@@ -13,6 +14,7 @@ import {
 import AppIcon from "@/ui/base/AppIcon.vue";
 import { useAuthStore } from "@/stores/auth.store";
 import { useNotificationsStore } from "@/stores/notifications.store";
+import { desktop } from "@/infra/desktop";
 
 defineProps<{ open: boolean; mobile?: boolean }>();
 
@@ -45,6 +47,7 @@ const items = computed(() => [
     badge: badgeText.value,
   },
   { to: "/profile", label: t("sidebar.profile"), icon: UserCircleIcon },
+  { to: "/desktop", label: t(desktop ? "desktopApp.about" : "desktopApp.title"), icon: desktop ? InformationCircleIcon : ComputerDesktopIcon },
   ...(auth.canManageCatalog
     ? [{ to: "/admin/videos", label: t("catalogAdmin.title"), icon: PlayCircleIcon }]
     : []),

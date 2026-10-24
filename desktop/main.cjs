@@ -5,7 +5,10 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage, s
 const { appUrlFromEnvironment, navigationTarget } = require('./navigation.cjs')
 const { APP_URL, assetPathForUrl } = require('./app-protocol.cjs')
 const { desktopRuntimeConfig, readConnectionConfig, readDevelopmentApiOrigin } = require('./runtime-config.cjs')
-const { distributionMode, storageDirectory } = require('./storage-policy.cjs')
+const { distributionMode, storageDirectory, migrateLegacyData } = require('./storage-policy.cjs')
+const { setupDesktopInfo } = require('./desktop-info.cjs')
+const { apiOrigin: defaultApiOrigin } = require('./release-config.json')
+const { version } = require('./package.json')
 const { setupBilibiliLogin } = require('./bilibili-login.cjs')
 const { createBilibiliSessionStore } = require('./bilibili-session-store.cjs')
 const { setupBilibiliPlayback } = require('./bilibili-playback.cjs')
@@ -27,22 +30,28 @@ protocol.registerSchemesAsPrivileged([
 
 app.setName('iCinema')
 if (process.platform === 'win32') app.setAppUserModelId('icinema.desktop')
-const dataDir = storageDirectory(mode, app.getPath('exe'), process.env.LOCALAPPDATA)
-if (dataDir) {
-  fs.mkdirSync(dataDir, { recursive: true })
-  app.setPath('userData', dataDir)
-  app.setPath('sessionData', dataDir)
+let dataDir = null
+let configurationError = null
+try {
+  dataDir = storageDirectory(mode, app.getPath('exe'), process.env.LOCALAPPDATA)
+  if (dataDir) {
+    migrateLegacyData(path.join(path.dirname(app.getPath('exe')), 'data'), dataDir)
+    fs.mkdirSync(dataDir, { recursive: true })
+    app.setPath('userData', dataDir)
+    app.setPath('sessionData', dataDir)
+  }
+} catch (error) {
+  configurationError = new Error(`Could not prepare user data. Close other iCinema windows and retry.\n${error.message}`)
 }
 const storagePath = app.getPath('userData')
 let runtimeConfig = null
-let configurationError = null
 let bilibiliApiOrigin = null
 let credentialStore = null
 let quitAfterCredentialFlush = false
 let credentialFlushPending = false
 try {
-  if (bundled) {
-    const connection = readConnectionConfig(dataDir && path.join(dataDir, 'connection.json'))
+  if (bundled && !configurationError) {
+    const connection = readConnectionConfig(dataDir && path.join(dataDir, 'connection.json'), defaultApiOrigin)
     runtimeConfig = {
       ...desktopRuntimeConfig(process.env, connection),
       storageMode: mode,
@@ -60,6 +69,15 @@ try {
 const configArgument = runtimeConfig
   ? `--icinema-config=${encodeURIComponent(JSON.stringify(runtimeConfig))}`
   : null
+let mainWindow = null
+// All release folders now share one profile. Prevent simultaneous writers to that profile.
+const ownsInstance = app.requestSingleInstanceLock()
+if (!ownsInstance) app.quit()
+app.on('second-instance', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
+})
 
 function createWindow(url = appUrl, persistWindowState = true) {
   const workArea = screen.getPrimaryDisplay().workAreaSize
@@ -106,12 +124,14 @@ function createWindow(url = appUrl, persistWindowState = true) {
 }
 
 app.whenReady().then(() => {
+  if (!ownsInstance) return
   Menu.setApplicationMenu(null)
   if (configurationError) {
-    dialog.showErrorBox('iCinema connection configuration', configurationError.message)
+    dialog.showErrorBox('iCinema configuration', configurationError.message)
     app.quit()
     return
   }
+  setupDesktopInfo({ ipcMain, net, shell, appOrigin, version, storagePath, mode })
   if (bundled) {
     if (!assetPathForUrl(APP_URL, rendererDir)) {
       throw new Error('Desktop renderer is missing. Run npm --prefix .\\desktop run build:renderer first.')
@@ -134,9 +154,9 @@ app.whenReady().then(() => {
     ipcMain, session, net, protocol, appOrigin,
     bilibiliVideoInfoFromView, ...bilibiliAuth
   })
-  createWindow()
+  mainWindow = createWindow()
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
 })
 

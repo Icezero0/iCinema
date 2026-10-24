@@ -13,6 +13,7 @@ import OmofunSourceControl from './OmofunSourceControl.vue';
 import BilibiliAccountControl from './BilibiliAccountControl.vue';
 import BilibiliTvIcon from './BilibiliTvIcon.vue';
 import { bilibiliDesktop } from '@/infra/bilibili-desktop';
+import { desktopDownloadUrl } from '@/config/desktop';
 import type { BilibiliLocalMedia } from '@/infra/bilibili-desktop';
 import type { OmofunSelection } from '@/infra/realtime/roomRealtime';
 import type { RoomVideoSourceType } from "@/infra/api/rooms.api";
@@ -55,14 +56,6 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const desktopDownloadUrl = (() => {
-  try {
-    const url = new URL(import.meta.env.VITE_DESKTOP_DOWNLOAD_URL);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
-  } catch {
-    return '';
-  }
-})();
 
 const matchFileInputRef = ref<HTMLInputElement | null>(null);
 const targetFileInputRef = ref<HTMLInputElement | null>(null);

@@ -5,7 +5,6 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { patchMe, patchMyAvatar } from "@/infra/api/users.api";
 import { resolveMediaUrl } from "@/infra/media";
-import { desktopConfig } from "@/infra/runtime-config";
 
 import BaseCard from "@/ui/base/BaseCard.vue";
 import BaseButton from "@/ui/base/BaseButton.vue";
@@ -345,13 +344,6 @@ const displayAvatarSrc = computed(() => avatarPreviewSrc.value || avatarUrl.valu
       </div>
     </BaseCard>
 
-    <BaseCard v-if="desktopConfig?.storagePath" class="card storageCard">
-      <div class="storageHeading">
-        <h2>{{ t("profile.storage.title") }}</h2>
-        <span>{{ t(`profile.storage.${desktopConfig.storageMode}`) }}</span>
-      </div>
-      <div class="storagePath">{{ desktopConfig.storagePath }}</div>
-    </BaseCard>
   </AppPageShell>
 </template>
 
@@ -364,37 +356,6 @@ const displayAvatarSrc = computed(() => avatarPreviewSrc.value || avatarUrl.valu
   background: var(--c-surface);
   border-radius: 16px;
   box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.06));
-}
-
-.storageCard {
-  margin-top: 16px;
-  padding: 20px 28px;
-}
-
-.storageHeading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.storageHeading h2 {
-  margin: 0;
-  font-size: 15px;
-  color: var(--c-text);
-}
-
-.storageHeading span {
-  font-size: 12px;
-  color: var(--c-text-muted);
-}
-
-.storagePath {
-  margin-top: 12px;
-  overflow-wrap: anywhere;
-  font-size: 13px;
-  color: var(--c-text-muted);
-  user-select: text;
 }
 
 .avatarBlock {

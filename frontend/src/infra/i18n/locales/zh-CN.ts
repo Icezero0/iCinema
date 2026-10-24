@@ -1,4 +1,15 @@
 export default {
+  desktopApp: {
+    title: '客户端下载', about: '关于',
+    installer: '安装版', portable: '便携版', notReleased: '暂未发布', inDevelopment: '正在开发中',
+    downloadUnavailable: '下载暂不可用',
+    version: '当前版本', check: '检查更新', checking: '正在检查更新…',
+    available: '发现新版本 v{version}', current: '当前已是最新版本',
+    unpublished: '暂无已发布的版本', notChecked: '尚未检查更新',
+    checkedAt: '上次检查：{time}', getUpdate: '下载新版本',
+    checkFailed: '检查更新失败，请稍后重试',
+    dataLocation: '本机数据位置', openFolder: '打开文件夹', openFolderFailed: '无法打开数据文件夹',
+  },
   omofun: {
     details: { director: '导演：', cast: '主演：', updated_text: '更新：', remarks: '备注：' },
     episodes: '选集', lines: '线路', selectEpisode: '请选择集数',

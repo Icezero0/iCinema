@@ -47,9 +47,9 @@ test('connection file is created once and later edits are read', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icinema-connection-'))
   try {
     const file = path.join(tempDir, 'connection.json')
-    assert.equal(readConnectionConfig(file).apiOrigin, 'http://localhost:8000')
+    assert.equal(readConnectionConfig(file, 'https://icinema.site').apiOrigin, 'https://icinema.site')
     fs.writeFileSync(file, '{"apiOrigin":"https://cinema.example"}')
-    assert.equal(readConnectionConfig(file).apiOrigin, 'https://cinema.example')
+    assert.equal(readConnectionConfig(file, 'https://icinema.site').apiOrigin, 'https://cinema.example')
   } finally {
     if (path.dirname(tempDir) !== os.tmpdir()) throw new Error('Unexpected test directory')
     fs.rmSync(tempDir, { recursive: true })

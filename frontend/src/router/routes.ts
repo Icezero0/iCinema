@@ -79,6 +79,11 @@ export default [
           import("@/pages/notifications/NotificationsPage.vue"),
       },
       {
+        path: "desktop",
+        name: "desktop",
+        component: () => import("@/pages/desktop/DesktopPage.vue"),
+      },
+      {
         path: "contact",
         name: "contact",
         component: () => import("@/pages/contact/ContactPage.vue"),

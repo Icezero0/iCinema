@@ -1,4 +1,15 @@
 export default {
+  desktopApp: {
+    title: 'Client downloads', about: 'About',
+    installer: 'Installer', portable: 'Portable', notReleased: 'Not yet released', inDevelopment: 'In development',
+    downloadUnavailable: 'Download unavailable',
+    version: 'Current version', check: 'Check for updates', checking: 'Checking for updates…',
+    available: 'Version v{version} is available', current: 'Your app is up to date',
+    unpublished: 'No published releases yet', notChecked: 'Updates not checked yet',
+    checkedAt: 'Last checked: {time}', getUpdate: 'Download update',
+    checkFailed: 'Could not check for updates. Please try again later.',
+    dataLocation: 'Local data location', openFolder: 'Open folder', openFolderFailed: 'Could not open the data folder.',
+  },
   omofun: {
     details: { director: 'Director:', cast: 'Cast:', updated_text: 'Updated:', remarks: 'Notes:' },
     episodes: 'Episodes', lines: 'Lines', selectEpisode: 'Select an episode',

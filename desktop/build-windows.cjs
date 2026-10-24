@@ -44,6 +44,8 @@ for (const file of [
   'app-protocol.cjs',
   'runtime-config.cjs',
   'storage-policy.cjs',
+  'desktop-info.cjs',
+  'release-config.json',
   'bilibili-account.cjs',
   'bilibili-session-store.cjs',
   'bilibili-video.cjs',
