@@ -39,6 +39,7 @@ export function useNativeVideoCore(options: {
   let bufferedSeekSettleTimer: number | null = null;
   let pendingBufferedSeek = false;
   let stallingRecoveryHandler: (() => boolean) | null = null;
+  let stallingTimedOut = false;
 
   const timelineLabel = computed(() =>
     `${formatTime(currentTime.value)} / ${formatTime(duration.value)}`);
@@ -120,9 +121,20 @@ export function useNativeVideoCore(options: {
 
   function updateMediaMetrics() {
     const video = videoRef.value;
+    const ranges = readBufferedRanges(video);
+    if (video && !video.seeking && !video.error && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      const alignedTime = normalizeHlsStartTime(video.currentTime, ranges);
+      if (alignedTime !== video.currentTime) {
+        const previousTime = video.currentTime;
+        video.currentTime = alignedTime;
+        // A tiny initial timestamp gap is not a download/decode failure. Give the seek time to settle.
+        if (mediaHealthState.value === "stalling") markStallingProgressNow();
+        options.writeLog("hls:startupGapAligned", { from: previousTime, to: alignedTime });
+      }
+    }
     currentTime.value = video?.currentTime ?? 0;
     duration.value = video?.duration && Number.isFinite(video.duration) ? video.duration : 0;
-    bufferedRanges.value = readBufferedRanges(video);
+    bufferedRanges.value = ranges;
     seekableRanges.value = readSeekableRanges(video);
     if (video && Math.abs(video.volume - volume.value / 100) > 0.005) {
       volume.value = Math.round(video.volume * 100);
@@ -151,6 +163,7 @@ export function useNativeVideoCore(options: {
     loadOptions: { attachMediaSource?: boolean } = {},
   ) {
     cleanupPlayer();
+    stallingTimedOut = false;
     updateMediaMetrics();
     errorMessage.value = "";
     appliedUrl.value = url;
@@ -213,10 +226,10 @@ export function useNativeVideoCore(options: {
     }
 
     if (optionsForApply.syncPosition && playback.position_seconds >= 0) {
-      const nextTime = Math.min(
+      const nextTime = normalizeHlsStartTime(Math.min(
         playback.position_seconds,
         Math.max(0, video.duration - 0.25),
-      );
+      ));
       if (!canSeekToTime(nextTime)) {
         pendingPlayback = playback;
         seekRestrictionMessage.value = "该视频源暂不支持跳转到目标位置";
@@ -257,7 +270,7 @@ export function useNativeVideoCore(options: {
     const video = videoRef.value;
     if (!video || duration.value <= 0 || !Number.isFinite(value)) return null;
 
-    const nextTime = duration.value * (Math.min(100, Math.max(0, value)) / 100);
+    const nextTime = normalizeHlsStartTime(duration.value * (Math.min(100, Math.max(0, value)) / 100));
     if (!canSeekToTime(nextTime)) {
       seekRestrictionMessage.value = "该视频源暂不支持跳转到目标位置";
       return null;
@@ -298,6 +311,24 @@ export function useNativeVideoCore(options: {
     return ranges.find((item) =>
       time >= item.start - config.bufferRangeEpsilonSeconds &&
       time <= item.end + config.bufferRangeEpsilonSeconds);
+  }
+
+  function normalizeHlsStartTime(time: number, ranges = readBufferedRanges(videoRef.value)) {
+    if (activeEngineKind.value !== "hls") return time;
+    const first = ranges[0];
+    // MPEG-TS audio/video may begin slightly after zero. Align only this initial gap,
+    // never a missing segment further along the timeline or another playback engine.
+    if (!first || time < 0 || time >= first.start ||
+        first.start <= config.bufferRangeEpsilonSeconds ||
+        first.start > config.hlsStartupGapToleranceSeconds) return time;
+    return first.start;
+  }
+
+  function hasPlayableCurrentBuffer() {
+    const video = videoRef.value;
+    return Boolean(video && !video.error && !video.seeking &&
+      video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
+      bufferAhead.value > config.bufferRangeEpsilonSeconds);
   }
 
   function readStallingBufferedEnd(
@@ -385,7 +416,7 @@ export function useNativeVideoCore(options: {
       };
     }
 
-    if (video.error || mediaHealthState.value === "error") {
+    if (video.error || (mediaHealthState.value === "error" && !stallingTimedOut)) {
       return {
         ready: false,
         reason: "error",
@@ -532,8 +563,7 @@ export function useNativeVideoCore(options: {
         return;
       }
 
-      if (activeEngineKind.value === "bilibili_dash" && bufferAhead.value > 2 &&
-          (videoRef.value?.readyState ?? 0) >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      if (evaluateReadyCandidate().ready) {
         markStallingProgressNow();
         scheduleReadyConfirmation(`${reason}:bufferStillPlayable`);
         armStallingErrorTimer(`${reason}:bufferStillPlayable`);
@@ -549,6 +579,7 @@ export function useNativeVideoCore(options: {
       }
 
       errorMessage.value = `Media made no progress while stalling for ${Math.round(config.stallingToErrorMs / 1000)}s`;
+      stallingTimedOut = true;
       clearReadyConfirmation();
       setMediaHealthState("error", "stallingTimeout", {
         triggerReason: reason,
@@ -620,7 +651,7 @@ export function useNativeVideoCore(options: {
   }
 
   function scheduleReadyConfirmation(reason: string) {
-    if (!appliedUrl.value || mediaHealthState.value === "error") return;
+    if (!appliedUrl.value || (mediaHealthState.value === "error" && !stallingTimedOut)) return;
 
     const initialEvaluation = evaluateReadyCandidate();
     if (!initialEvaluation.ready) {
@@ -641,6 +672,8 @@ export function useNativeVideoCore(options: {
         return;
       }
 
+      stallingTimedOut = false;
+      errorMessage.value = "";
       setMediaHealthState("ready", `${reason}:readyConfirmationAccepted`, {
         evaluation: finalEvaluation,
       });
@@ -665,6 +698,7 @@ export function useNativeVideoCore(options: {
       }
       scheduleReadyConfirmation("loadedmetadata");
     } else if (
+      eventName === "loadeddata" ||
       eventName === "canplay" ||
       eventName === "canplaythrough"
     ) {
@@ -678,9 +712,10 @@ export function useNativeVideoCore(options: {
     } else if (eventName === "pause") {
       setPlayerState(appliedUrl.value ? "paused" : "idle", "video:pause");
     } else if (eventName === "waiting" || eventName === "stalled") {
-      const playableBilibiliBuffer = activeEngineKind.value === "bilibili_dash" &&
-        bufferAhead.value > 2 && (videoRef.value?.readyState ?? 0) >= HTMLMediaElement.HAVE_FUTURE_DATA;
-      if (playableBilibiliBuffer) {
+      // stalled describes the network request, which may stop while buffered playback is healthy.
+      const playableBuffer = evaluateReadyCandidate().ready ||
+        (eventName === "stalled" && hasPlayableCurrentBuffer());
+      if (playableBuffer) {
         scheduleReadyConfirmation(`video:${eventName}:bufferStillPlayable`);
       } else if (!pendingBufferedSeek) {
         setMediaHealthStalling(`video:${eventName}`);
@@ -706,6 +741,7 @@ export function useNativeVideoCore(options: {
 
   function handleVideoError() {
     updateMediaMetrics();
+    stallingTimedOut = false;
     clearReadyConfirmation();
     setMediaHealthState("error", "video:error", {
       code: videoRef.value?.error?.code ?? null,
@@ -760,6 +796,7 @@ export function useNativeVideoCore(options: {
     message: string,
     data: Record<string, unknown> = {},
   ) {
+    stallingTimedOut = false;
     clearReadyConfirmation();
     setMediaHealthState("error", reason, data);
     errorMessage.value = message;

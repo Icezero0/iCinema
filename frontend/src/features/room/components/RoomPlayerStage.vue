@@ -372,6 +372,7 @@ defineExpose({
         preload="auto"
         @loadstart="player.handleVideoEvent('loadstart')"
         @loadedmetadata="player.handleVideoEvent('loadedmetadata')"
+        @loadeddata="player.handleVideoEvent('loadeddata')"
         @durationchange="player.handleVideoEvent('durationchange')"
         @timeupdate="player.handleTimeUpdate"
         @play="player.handleVideoEvent('play')"

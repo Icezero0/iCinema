@@ -8,6 +8,7 @@ import en from '../src/infra/i18n/locales/en';
 import zhCN from '../src/infra/i18n/locales/zh-CN';
 import { toMediaEngineLoadInput } from '../src/features/room/video/mediaEngineTypes';
 import { extractBilibiliBvid, extractBilibiliVideoInput } from '../src/features/room/video/bilibiliBvid';
+import './media-health.test';
 
 test('Bilibili BV input accepts IDs, links and copied share text without matching fragments', () => {
   const bvid = 'BV1a5t264Em6';

@@ -6,7 +6,6 @@ const {
   mediaToken,
   benchmarkRanges,
   fastestMediaProbe,
-  nextMediaCandidate,
   buildMpd
 } = require('./bilibili-media.cjs')
 
@@ -15,6 +14,8 @@ const REFERER = 'https://www.bilibili.com/'
 const MEDIA_LIFETIME_MS = 2 * 60 * 60 * 1000
 const MEDIA_CHUNK_BYTES = 512 * 1024
 const MEDIA_ATTEMPT_TIMEOUT_MS = 15000
+const MEDIA_HEDGE_DELAY_MS = 1500
+const MEDIA_CHUNK_PREFETCH = 2
 
 function setupBilibiliPlayback({ ipcMain, net, protocol, session, appOrigin, accountForToken,
   requestBilibiliJson, fetchBilibiliStatus, bilibiliVideoInfoFromView }) {
@@ -214,50 +215,100 @@ function setupBilibiliPlayback({ ipcMain, net, protocol, session, appOrigin, acc
     await entry.refreshPromise
   }
 
-  async function fetchMediaChunk(entry, token, start, end, signal) {
-    let candidate = entry.url
-    let failedAttempts = 0
+  async function fetchCandidateChunk(entry, candidate, start, end, signal, cache) {
     const expectedBytes = end - start + 1
-    while (!signal.aborted && mediaEntries.get(token) === entry && Date.now() < entry.expiresAt) {
-      const controller = new AbortController()
-      const onAbort = () => controller.abort()
-      signal.addEventListener('abort', onAbort, { once: true })
-      const timer = setTimeout(() => controller.abort(), MEDIA_ATTEMPT_TIMEOUT_MS)
-      try {
-        const upstream = await net.fetch(candidate, {
-          method: 'GET',
-          headers: { Referer: REFERER, Range: `bytes=${start}-${end}` },
-          credentials: 'omit',
-          cache: failedAttempts ? 'no-store' : 'default',
-          redirect: 'error',
-          signal: controller.signal
+    const controller = new AbortController()
+    const onAbort = () => controller.abort()
+    signal.addEventListener('abort', onAbort, { once: true })
+    if (signal.aborted) controller.abort()
+    const timer = setTimeout(() => controller.abort(), MEDIA_ATTEMPT_TIMEOUT_MS)
+    try {
+      const upstream = await net.fetch(candidate, {
+        method: 'GET',
+        headers: { Referer: REFERER, Range: `bytes=${start}-${end}` },
+        credentials: 'omit',
+        cache,
+        redirect: 'error',
+        signal: controller.signal
+      })
+      const delivered = /^bytes (\d+)-(\d+)\/(\d+)$/i.exec(upstream.headers.get('content-range') ?? '')
+      if (upstream.status !== 206 || !delivered || Number(delivered[1]) !== start ||
+          Number(delivered[2]) !== end || Number(delivered[3]) !== entry.totalBytes) {
+        await upstream.body?.cancel()
+        throw new Error('BILIBILI_CDN_INVALID_RANGE')
+      }
+      const chunk = new Uint8Array(await upstream.arrayBuffer())
+      if (controller.signal.aborted) throw new Error('MEDIA_REQUEST_CANCELLED')
+      if (chunk.byteLength !== expectedBytes) throw new Error('BILIBILI_CDN_TRUNCATED')
+      return chunk
+    } finally {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+    }
+  }
+
+  function raceMediaCandidates(entry, start, end, signal, cache) {
+    const candidates = [...new Set([entry.url, ...entry.usableCandidates])]
+    const group = new AbortController()
+    return new Promise((resolve, reject) => {
+      let settled = false
+      let next = 0
+      let active = 0
+      let hedgeTimer = null
+      const cleanup = () => {
+        clearTimeout(hedgeTimer)
+        signal.removeEventListener('abort', onAbort)
+        group.abort()
+      }
+      const onAbort = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(new Error('MEDIA_REQUEST_CANCELLED'))
+      }
+      const launch = () => {
+        if (settled || next >= candidates.length) return
+        const candidate = candidates[next++]
+        active++
+        fetchCandidateChunk(entry, candidate, start, end, group.signal, cache).then(chunk => {
+          if (settled) return
+          settled = true
+          entry.url = candidate
+          cleanup()
+          resolve(chunk)
+        }, error => {
+          active--
+          if (settled) return
+          if (next < candidates.length) launch()
+          else if (!active) {
+            settled = true
+            cleanup()
+            reject(error)
+          }
         })
-        const delivered = /^bytes (\d+)-(\d+)\/(\d+)$/i.exec(upstream.headers.get('content-range') ?? '')
-        if (upstream.status !== 206 || !delivered || Number(delivered[1]) !== start ||
-            Number(delivered[2]) !== end || Number(delivered[3]) !== entry.totalBytes) {
-          await upstream.body?.cancel()
-          throw new Error('BILIBILI_CDN_INVALID_RANGE')
-        }
-        const chunk = new Uint8Array(await upstream.arrayBuffer())
-        if (chunk.byteLength !== expectedBytes) throw new Error('BILIBILI_CDN_TRUNCATED')
-        entry.url = candidate
-        return chunk
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) return onAbort()
+      launch()
+      if (candidates.length > 1) {
+        // A successful but slow CDN is also unusable. Let a backup compete for this
+        // same bounded chunk, and only keep the first fully validated response.
+        hedgeTimer = setTimeout(launch, MEDIA_HEDGE_DELAY_MS)
+      }
+    })
+  }
+
+  async function fetchMediaChunk(entry, token, start, end, signal) {
+    let failedRounds = 0
+    while (!signal.aborted && mediaEntries.get(token) === entry && Date.now() < entry.expiresAt) {
+      try {
+        return await raceMediaCandidates(entry, start, end, signal, failedRounds ? 'no-store' : 'default')
       } catch (error) {
         if (signal.aborted) throw new Error('MEDIA_REQUEST_CANCELLED')
-        failedAttempts++
-        const next = nextMediaCandidate(entry.usableCandidates, candidate)
-        if (next) candidate = next
-        if (entry.url !== candidate) entry.url = candidate
-        if (failedAttempts % entry.usableCandidates.length === 0) {
-          await refreshMediaCandidates(entry, token)
-          candidate = entry.url
-          entry.expiresAt = Date.now() + MEDIA_LIFETIME_MS
-          const rounds = Math.floor(failedAttempts / entry.usableCandidates.length)
-          await waitForRetry(Math.min(10000, 1000 * 2 ** Math.min(rounds - 1, 4)), signal)
-        }
-      } finally {
-        clearTimeout(timer)
-        signal.removeEventListener('abort', onAbort)
+        failedRounds++
+        await refreshMediaCandidates(entry, token)
+        entry.expiresAt = Date.now() + MEDIA_LIFETIME_MS
+        await waitForRetry(Math.min(10000, 1000 * 2 ** Math.min(failedRounds - 1, 4)), signal)
       }
     }
     throw new Error('MEDIA_REQUEST_CANCELLED')
@@ -296,8 +347,20 @@ function setupBilibiliPlayback({ ipcMain, net, protocol, session, appOrigin, acc
     const onRequestAbort = () => lifecycle.abort()
     request.signal?.addEventListener('abort', onRequestAbort, { once: true })
     if (request.signal?.aborted) lifecycle.abort()
-    let offset = start
+    let nextOffset = start
+    const pendingChunks = []
     const cleanup = () => request.signal?.removeEventListener('abort', onRequestAbort)
+    function prefetchChunks() {
+      while (!lifecycle.signal.aborted && pendingChunks.length < MEDIA_CHUNK_PREFETCH && nextOffset <= end) {
+        const chunkStart = nextOffset
+        const chunkEnd = Math.min(end, chunkStart + MEDIA_CHUNK_BYTES - 1)
+        // Handle rejection immediately, even while an earlier chunk is still being read.
+        const result = fetchMediaChunk(entry, match[1], chunkStart, chunkEnd, lifecycle.signal)
+          .then(chunk => ({ chunk }), error => ({ error }))
+        pendingChunks.push({ end: chunkEnd, result })
+        nextOffset = chunkEnd + 1
+      }
+    }
     const body = new ReadableStream({
       async pull(controller) {
         if (lifecycle.signal.aborted) {
@@ -306,22 +369,29 @@ function setupBilibiliPlayback({ ipcMain, net, protocol, session, appOrigin, acc
           return
         }
         try {
-          const chunkEnd = Math.min(end, offset + MEDIA_CHUNK_BYTES - 1)
-          const chunk = await fetchMediaChunk(entry, match[1], offset, chunkEnd, lifecycle.signal)
-          if (lifecycle.signal.aborted) return
-          controller.enqueue(chunk)
-          offset = chunkEnd + 1
-          if (offset > end) {
+          prefetchChunks()
+          const next = pendingChunks[0]
+          const result = await next.result
+          if (result.error) throw result.error
+          if (lifecycle.signal.aborted) throw new Error('MEDIA_REQUEST_CANCELLED')
+          pendingChunks.shift()
+          controller.enqueue(result.chunk)
+          if (next.end === end) {
             cleanup()
             controller.close()
+          } else {
+            prefetchChunks()
           }
         } catch (error) {
+          lifecycle.abort()
+          pendingChunks.length = 0
           cleanup()
-          if (!lifecycle.signal.aborted) controller.error(error)
+          controller.error(error)
         }
       },
       cancel() {
         lifecycle.abort()
+        pendingChunks.length = 0
         cleanup()
       }
     })
